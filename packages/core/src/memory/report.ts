@@ -1,10 +1,17 @@
-// Agents end their answer with <puff-report>{...}</puff-report>. This is how decisions and notes
-// come back from every harness, including Codex, which cannot call MCP tools in headless mode.
+// Agents end their answer with <puff-report>{...}</puff-report>. This is how decisions, notes,
+// handoffs and new tasks come back from every harness, including Codex, which cannot call MCP
+// tools in headless mode.
 import type { Graph } from 'falkordb';
-import type { PuffReport } from '@puff/shared';
+import type { PuffReport, Task } from '@puff/shared';
 import { z } from 'zod';
+import type { PuffConfig } from '../config';
 import { resolveSymbols } from '../queries/code';
-import { recordDecision } from './memory';
+import { recordDecision, recordHandoff } from './memory';
+import { spawnTasks } from './plan';
+
+// Models are loose about JSON: a bad `type` or a string where a list belongs must not throw away a
+// whole plan, so optional fields fall back to "not given" instead of failing the report.
+const list = z.union([z.string().transform((s) => [s]), z.array(z.string())]);
 
 const reportSchema = z.object({
   decisions: z
@@ -17,6 +24,20 @@ const reportSchema = z.object({
     )
     .optional(),
   notes: z.string().optional(),
+  tasks: z
+    .array(
+      z.object({
+        title: z.string().min(1),
+        type: z.enum(['plan', 'implement', 'verify', 'chore']).optional().catch(undefined),
+        complexity: z.enum(['low', 'medium', 'high']).optional().catch(undefined),
+        targets: list.optional().catch(undefined),
+        dependsOn: z.array(z.coerce.number().int()).optional().catch(undefined),
+      }),
+    )
+    .optional(),
+  handoffs: z
+    .array(z.object({ toRole: z.string().optional(), summary: z.string().min(1) }))
+    .optional(),
 });
 
 export interface ParsedReport {
@@ -45,12 +66,38 @@ export interface AppliedReport {
   /** Decisions that could not be anchored to a known symbol, with the reason */
   skipped: { symbol: string; reason: string }[];
   notes?: string;
+  /** Tasks the report created (only when a context was given) */
+  tasks: Task[];
+  skippedTasks: { title: string; reason: string }[];
+  handoffIds: string[];
 }
 
-/** Turn a report's decisions into Decision memory. Unanchorable decisions are skipped, not guessed. */
-export async function applyReport(graph: Graph, report: PuffReport): Promise<AppliedReport> {
-  const decisionIds: string[] = [];
-  const skipped: AppliedReport['skipped'] = [];
+/** Where the report came from, so tasks and handoffs can be attributed. */
+export interface ApplyContext {
+  projectId: string;
+  config: PuffConfig;
+  sessionId: string;
+  /** The task the reporting session worked on */
+  parent: Task;
+}
+
+/**
+ * Turn a report into memory: decisions (unanchorable ones are skipped, not guessed), handoff notes
+ * and, when a context is given, the tasks it asks for.
+ */
+export async function applyReport(
+  graph: Graph,
+  report: PuffReport,
+  ctx?: ApplyContext,
+): Promise<AppliedReport> {
+  const out: AppliedReport = {
+    decisionIds: [],
+    skipped: [],
+    notes: report.notes,
+    tasks: [],
+    skippedTasks: [],
+    handoffIds: [],
+  };
   for (const d of report.decisions ?? []) {
     try {
       const [symbolId] = await resolveSymbols(graph, [d.symbol]);
@@ -59,10 +106,26 @@ export async function applyReport(graph: Graph, report: PuffReport): Promise<App
         text: d.text,
         supersedes: d.supersedes,
       });
-      decisionIds.push(id);
+      out.decisionIds.push(id);
     } catch (err) {
-      skipped.push({ symbol: d.symbol, reason: (err as Error).message });
+      out.skipped.push({ symbol: d.symbol, reason: (err as Error).message });
     }
   }
-  return { decisionIds, skipped, notes: report.notes };
+  if (ctx) {
+    for (const h of report.handoffs ?? []) {
+      out.handoffIds.push(
+        await recordHandoff(graph, {
+          fromSessionId: ctx.sessionId,
+          toRole: h.toRole,
+          payload: { summary: h.summary },
+        }),
+      );
+    }
+    if (report.tasks?.length) {
+      const spawned = await spawnTasks(graph, ctx, report.tasks);
+      out.tasks = spawned.created;
+      out.skippedTasks = spawned.skipped;
+    }
+  }
+  return out;
 }

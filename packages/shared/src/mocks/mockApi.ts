@@ -13,6 +13,7 @@ import {
   mockWhy,
 } from './fixtures';
 import { mockGraph, neighbourhood } from './graph';
+import { mockTeamTimeline } from './team';
 
 /** Next status in the happy path, used by the live simulation after `start()` */
 const NEXT_STATUS: Partial<Record<TaskStatus, TaskStatus>> = {
@@ -146,6 +147,9 @@ export function createMockApi(opts: MockApiOptions = {}): PuffApi {
     },
     async getMemoryFeed(_projectId, limit = 50) {
       return clone(feed.slice(0, limit));
+    },
+    async getTeamTimeline(_projectId, limit = 60) {
+      return clone(mockTeamTimeline.slice(0, limit));
     },
     async listAgents() {
       return clone(mockAgents);

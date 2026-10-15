@@ -323,17 +323,19 @@ describe.skipIf(!ready)('the run loop (fake agents, real git, real FalkorDB)', (
     expect(readdirSync(join(f.repoPath, '.puff', 'worktrees'))).toEqual([]);
   }, 60_000);
 
-  it('read-only roles (the planner) produce text: no worktree changes, no merge', async () => {
+  it('read-only roles (the planner) produce a plan: no worktree changes, no merge', async () => {
     const claude = fakeAgent('claude-code', () => ({
-      output: 'Plan: 1) audit failed logins 2) lock accounts.',
+      output:
+        'Plan: audit failed logins.\n<puff-report>{"tasks":[{"title":"Audit failed logins","targets":["login"]}]}</puff-report>',
     }));
     const f = await fixture(FAST, { 'claude-code': claude });
-    const t = await f.task('Plan: harden login', { type: 'plan', complexity: 'high' });
+    const t = await f.task('Plan: harden login', { type: 'plan', complexity: 'high', targets: [] });
     const head = gitIn(f.repoPath, 'rev-parse', 'HEAD');
 
     const result = await runTask(f.deps, t.id);
 
     expect(result.status).toBe('done');
+    expect((await listTasks(f.graph)).map((x) => x.title)).toContain('Audit failed logins');
     expect(claude.calls[0]).toMatchObject({ role: 'planner' });
     expect(claude.calls[0]!.prompt).toContain('You are the planner');
     expect(gitIn(f.repoPath, 'rev-parse', 'HEAD')).toBe(head);

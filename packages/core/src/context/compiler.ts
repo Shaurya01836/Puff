@@ -5,7 +5,7 @@ import type { Graph } from 'falkordb';
 import type { ContextItem, ContextPack, MemoryKind, Role } from '@puff/shared';
 import { read, run } from '../db/client';
 import { newId } from '../ids';
-import { getTask } from '../memory/tasks';
+import { getTask, listTasks } from '../memory/tasks';
 import { pendingHandoffs } from '../memory/memory';
 import { symbolInfos, type SymbolRow } from '../queries/code';
 import { estimateTokens, renderPrompt, type PromptInput } from './prompt';
@@ -19,6 +19,8 @@ export interface CompileOptions {
   budgetTokens?: number;
   /** Build the context without writing a ContextPack or marking handoffs delivered */
   preview?: boolean;
+  /** Planner only: how many tasks a plan may contain */
+  maxTasks?: number;
   /** Verifier only: the diff under review and the command that runs the tests */
   diff?: string;
   testCommand?: string;
@@ -61,7 +63,7 @@ const POLICY: Record<Role, Policy> = {
     failures: true,
     decisions: true,
     procedures: true,
-    handoffs: false,
+    handoffs: true,
     callers: false,
     projectWide: false,
   },
@@ -69,7 +71,7 @@ const POLICY: Record<Role, Policy> = {
     failures: false,
     decisions: true,
     procedures: true,
-    handoffs: false,
+    handoffs: true,
     callers: false,
     projectWide: false,
   },
@@ -283,6 +285,28 @@ export async function compileContext(
           : [],
       ),
   ];
+  // The planner cannot target what it cannot see: show it the files and the functions in them.
+  const codeMap =
+    opts.role === 'planner'
+      ? (
+          await read<{ file: string; symbols: string[] }>(
+            graph,
+            `MATCH (f:File)-[:DEFINES]->(s:Symbol)
+             WHERE coalesce(f.removed, false) = false AND coalesce(s.removed, false) = false
+               AND coalesce(f.isTest, false) = false
+               AND NOT s.name ENDS WITH '.constructor'
+             RETURN f.path AS file, collect(s.name) AS symbols ORDER BY file LIMIT 60`,
+          )
+        ).map((f) => ({ file: f.file, symbols: f.symbols.slice(0, 12) }))
+      : undefined;
+  const boardTitles =
+    opts.role === 'planner'
+      ? (await listTasks(graph))
+          .filter((t) => t.id !== taskId && t.status !== 'failed')
+          .slice(-15)
+          .map((t) => t.title)
+      : undefined;
+
   const base: PromptInput = {
     role: opts.role,
     title: task.title,
@@ -299,6 +323,10 @@ export async function compileContext(
     procedures: [],
     handoffs: [],
     technologies: opts.role === 'planner' ? technologies : [],
+    codeMap,
+    boardTitles,
+    maxTasks: opts.maxTasks,
+    hints: task.hints,
     diff: opts.diff,
     testCommand: opts.testCommand,
   };

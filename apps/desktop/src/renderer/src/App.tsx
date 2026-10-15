@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { BackendInfo, GraphData } from '@puff/shared';
+import type { BackendInfo, GraphData, Task } from '@puff/shared';
 import { MOCK_PROJECT_ID } from '@puff/shared/mocks';
 import type { MascotState } from '@/components/Mascot';
 import { Sidebar, type Screen } from '@/components/Sidebar';
@@ -7,14 +7,17 @@ import { TopBar } from '@/components/TopBar';
 import { Notice } from '@/components/ui';
 import { puff } from '@/lib/api';
 import { useLoad, useTasks } from '@/lib/hooks';
+import { NewTaskDialog, type SymbolOption } from '@/components/NewTaskDialog';
 import { Agents } from '@/screens/Agents';
 import { Board } from '@/screens/Board';
 import { MemoryGraph } from '@/screens/MemoryGraph';
+import { Team } from '@/screens/Team';
 import { TaskDetail } from '@/screens/TaskDetail';
 
 const TITLES: Record<Screen, { title: string; subtitle: string }> = {
   graph: { title: 'Memory graph', subtitle: 'Code and what the team learned about it' },
   board: { title: 'Board', subtitle: 'Tasks, owners and what they wait on' },
+  team: { title: 'Team', subtitle: 'Who did what, and who handed what to whom' },
   agents: { title: 'Agents', subtitle: 'Strengths, results and savings' },
 };
 
@@ -36,6 +39,7 @@ export function App() {
   const [running, setRunning] = useState(false);
   const [graph, setGraph] = useState<GraphData>();
   const [notice, setNotice] = useState<NoticeState>();
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
   /** Bumped when agents finish a session, so the agent pool and stats reload */
   const [agentsTick, setAgentsTick] = useState(0);
 
@@ -47,6 +51,18 @@ export function App() {
   const tasks = useTasks(projectId);
   const agents = useLoad(() => puff.listAgents(projectId), [projectId, agentsTick]);
   const savings = useLoad(() => puff.getSavings(projectId), [projectId]);
+  const timeline = useLoad(() => puff.getTeamTimeline(projectId), [projectId, agentsTick]);
+  const symbols: SymbolOption[] = useMemo(
+    () =>
+      (graph?.nodes ?? [])
+        .filter((n) => n.kind === 'Symbol')
+        .map((n) => ({
+          id: n.id,
+          name: n.label,
+          file: String(n.props?.file ?? n.id.split('::')[0]),
+        })),
+    [graph],
+  );
 
   const loadGraph = useCallback(() => puff.getGraph(projectId).then(setGraph), [projectId]);
   useEffect(() => {
@@ -58,7 +74,9 @@ export function App() {
   const graphTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => {
     const off = puff.onEvent((e) => {
-      if (e.type === 'session:update') setAgentsTick((t) => t + 1);
+      if (e.type === 'session:update' || (e.type === 'task:update' && e.task.depth)) {
+        setAgentsTick((t) => t + 1);
+      }
       if (e.type === 'memory') {
         clearTimeout(graphTimer.current);
         graphTimer.current = setTimeout(() => void loadGraph(), 1200);
@@ -105,6 +123,12 @@ export function App() {
     setScreen('board');
   };
 
+  const createTask = async (task: Partial<Task>, run: boolean) => {
+    await puff.createTask(projectId, task);
+    setScreen('board');
+    if (run && !running) await toggleRun();
+  };
+
   const reindex = async () => {
     const s = await puff.indexProject(projectId);
     await loadGraph();
@@ -130,6 +154,7 @@ export function App() {
           running={running}
           onToggleRun={toggleRun}
           onGoal={createGoal}
+          onNewTask={() => setNewTaskOpen(true)}
           badge={badgeFor(info)}
           runBlockedReason={live ? info.runBlocked : undefined}
         />
@@ -142,9 +167,17 @@ export function App() {
             />
           )}
           {screen === 'board' && <Board tasks={tasks} onOpen={setOpenTask} />}
+          {screen === 'team' && <Team events={timeline} onOpenTask={setOpenTask} />}
           {screen === 'agents' && <Agents agents={agents} savings={savings} mock={savingsMocked} />}
         </div>
       </main>
+      {newTaskOpen && (
+        <NewTaskDialog
+          symbols={symbols}
+          onClose={() => setNewTaskOpen(false)}
+          onCreate={createTask}
+        />
+      )}
       {openTask && <TaskDetail taskId={openTask} onClose={closeTask} />}
       {notice && (
         <Notice tone={notice.tone} onClose={() => setNotice(undefined)}>

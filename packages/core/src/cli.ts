@@ -21,7 +21,7 @@ import {
 import { finishSession, listSessions, startSession } from './memory/sessions';
 import { createTask, listTasks } from './memory/tasks';
 import { findSymbols, impactOf, resolveSymbols } from './queries/code';
-import { getMemoryFeed, getWhy } from './queries/explain';
+import { getMemoryFeed, getTeamTimeline, getWhy } from './queries/explain';
 import { clearMemory, seedDemoMemory } from './seed/demo';
 import { createAdapters } from './agents/adapters';
 import { setupDemoWorkspace } from './git/demo';
@@ -537,10 +537,52 @@ function printRun(results: TaskRunResult[]): void {
 }
 
 program
+  .command('goal')
+  .description(
+    'give the team a goal: creates a planning task; `run` then has the planner split it into tasks',
+  )
+  .argument('<goal>', 'what you want, in plain words')
+  .action(async (goal: string) => {
+    await withProject(undefined, async ({ graph, project, config }) => {
+      const t = await createTask(graph, project.slug, config, {
+        title: `Plan: ${goal}`,
+        type: 'plan',
+        complexity: 'high',
+      });
+      console.log(`✔ ${t.id}  ${t.title}
+  Next: npm run puff -- run   (the planner splits it, then the team works through the tasks)`);
+    });
+  });
+
+program
+  .command('team')
+  .description('who did what, who handed what to whom, newest first')
+  .option('--limit <n>', 'how many events', '40')
+  .action(async (o: { limit: string }) => {
+    await withProject(undefined, async ({ graph }) => {
+      const events = await getTeamTimeline(graph, Number(o.limit));
+      if (!events.length) console.log('(nothing has happened yet)');
+      for (const e of events) {
+        const when = new Date(e.at).toLocaleTimeString();
+        const who = e.agent ?? '-';
+        const line =
+          e.kind === 'session'
+            ? `${who} (${e.role}) ${e.outcome}: ${e.taskTitle}`
+            : e.kind === 'handoff'
+              ? `${who} → ${e.toAgent ?? e.toRole ?? 'next'}: ${e.text}`
+              : e.kind === 'spawned'
+                ? `${who} asked for a task: ${e.toTaskTitle}`
+                : e.text;
+        console.log(`${when}  ${e.kind.padEnd(9)} ${line.slice(0, 120)}`);
+      }
+    });
+  });
+
+program
   .command('run')
   .description('run agents on tasks: one task, or every ready task in dependency order')
   .argument('[taskId]', 'a single task (default: all ready tasks)')
-  .option('--agent <name>', 'start with this agent instead of routing')
+  .option('--agent <name>', 'start every task with this agent instead of routing')
   .action(async (taskId: string | undefined, o: { agent?: string }) => {
     await withProject(undefined, async ({ graph, project, config }) => {
       const log = (line: string) => console.log(`  ${line}`);
@@ -557,7 +599,9 @@ program
       }
       const orchestrator = new Orchestrator(deps);
       stop.signal.addEventListener('abort', () => void orchestrator.stop());
-      const results = await orchestrator.start();
+      const results = await orchestrator.start({
+        agent: o.agent ? agentOf(o.agent) : undefined,
+      });
       if (!results.length)
         console.log(
           'Nothing to run: no ready tasks. Create one with: npm run puff -- task add "…" -t <symbol>',

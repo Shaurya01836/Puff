@@ -8,6 +8,7 @@ import type {
   Savings,
   SessionInfo,
   Task,
+  TeamEvent,
   WhyPath,
 } from './types';
 
@@ -30,6 +31,8 @@ export interface PuffApi {
   getGraph(projectId: string, focusId?: string, depth?: number): Promise<GraphData>;
   getMemoryFeed(projectId: string, limit?: number): Promise<MemoryEvent[]>;
   listAgents(projectId: string): Promise<AgentProfile[]>;
+  /** Who worked on what, who handed what to whom, which agent asked for which task. Newest first. */
+  getTeamTimeline(projectId: string, limit?: number): Promise<TeamEvent[]>;
   getSavings(projectId: string): Promise<Savings>;
   start(projectId: string): Promise<void>;
   stop(projectId: string): Promise<void>;
@@ -54,6 +57,7 @@ export const PUFF_INVOKE_METHODS = [
   'getGraph',
   'getMemoryFeed',
   'listAgents',
+  'getTeamTimeline',
   'getSavings',
   'start',
   'stop',

@@ -13,6 +13,7 @@ import {
   getContextPack,
   getMemoryFeed,
   getTask,
+  getTeamTimeline,
   getWhy,
   graphName,
   indexRepo,
@@ -168,11 +169,13 @@ export async function createBackend(appDir: string): Promise<PuffApi> {
         complexity: t.complexity,
         targets: t.targets,
         dependsOn: t.dependsOn,
+        preferredAgent: t.preferredAgent,
+        model: t.model,
       });
       emit({ type: 'task:update', task });
       return task;
     },
-    /** Until the planner agent exists (P4), a goal becomes one planning task. */
+    /** A goal becomes a planning task; when the team runs, the planner agent splits it into tasks. */
     async createGoal(_projectId, goal) {
       const task = await createTask(graph, project.slug, config, {
         title: `Plan: ${goal}`,
@@ -200,6 +203,9 @@ export async function createBackend(appDir: string): Promise<PuffApi> {
     },
     async listAgents() {
       return agentProfiles(graph, config);
+    },
+    async getTeamTimeline(_projectId, limit) {
+      return getTeamTimeline(graph, limit);
     },
 
     /** Run the ready tasks. Returns at once; progress arrives as events, and a `run` event says how it ended. */

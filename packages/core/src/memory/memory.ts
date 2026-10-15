@@ -304,8 +304,18 @@ export async function pendingHandoffs(graph: Graph, taskId: string): Promise<Pen
      RETURN ${cols} ORDER BY h.createdAt`,
     { taskId },
   );
+  // Notes left by the session that asked for this task (a follow-up request or a plan).
+  const spawner = await read<Row>(
+    graph,
+    `MATCH (se:Session)-[:SPAWNED]->(:Task {id: $taskId})
+     MATCH (se)-[:HANDED_OFF]->(h:Handoff)
+     WHERE NOT (h)-[:TO]->()
+     MATCH (a:Agent)-[:RAN]->(se)
+     RETURN ${cols} ORDER BY h.createdAt`,
+    { taskId },
+  );
   const seen = new Set<string>();
-  return [...same, ...deps]
+  return [...same, ...deps, ...spawner]
     .filter((r) => !seen.has(r.id) && seen.add(r.id))
     .map((r) => ({
       id: r.id,

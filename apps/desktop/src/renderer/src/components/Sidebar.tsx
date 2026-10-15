@@ -1,12 +1,12 @@
 import { useState, type ComponentType } from 'react';
-import { Bot, Columns3, Database, Network, RefreshCw } from 'lucide-react';
+import { Bot, Columns3, Database, Network, RefreshCw, Users } from 'lucide-react';
 import type { AgentProfile, BackendInfo } from '@puff/shared';
 import { cn } from '@/lib/cn';
 import { AGENT_META } from '@/lib/theme';
 import { Mascot, MASCOT_LINES, type MascotState } from './Mascot';
 import { AgentAvatar } from './ui';
 
-export type Screen = 'graph' | 'board' | 'agents';
+export type Screen = 'graph' | 'board' | 'team' | 'agents';
 
 const NAV: {
   id: Screen;
@@ -16,6 +16,7 @@ const NAV: {
 }[] = [
   { id: 'graph', label: 'Memory graph', hint: 'Code + what the team learned', icon: Network },
   { id: 'board', label: 'Board', hint: 'Tasks across agents', icon: Columns3 },
+  { id: 'team', label: 'Team', hint: 'Who handed what to whom', icon: Users },
   { id: 'agents', label: 'Agents', hint: 'Pool, routing, savings', icon: Bot },
 ];
 

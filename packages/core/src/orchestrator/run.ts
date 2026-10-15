@@ -19,6 +19,7 @@ import { applyReport } from '../memory/report';
 import { finishSession, listSessions, startSession } from '../memory/sessions';
 import { getTask, updateTask } from '../memory/tasks';
 import { candidateAgents } from './routing';
+import type { SlotPool } from './schedule';
 import { runVerification } from './verify';
 
 export interface RunDeps {
@@ -30,6 +31,8 @@ export interface RunDeps {
   emit?: (e: PuffEvent) => void;
   log?: (line: string) => void;
   signal?: AbortSignal;
+  /** Limits how many runs each agent has at once; without it there is no limit */
+  slots?: SlotPool;
   /** Agents that proved unusable during this run (not signed in, not installed), with the reason */
   unavailable?: Map<AgentName, string>;
 }
@@ -102,16 +105,21 @@ async function emitSession(deps: RunDeps, taskId: string, sessionId: string): Pr
   if (session) deps.emit?.({ type: 'session:update', session });
 }
 
-/** Which agents to try, in order: the first choice, then up the escalation chain. */
+/**
+ * Which agents to try, in order: the person's choice (or the best routed agent), then up the
+ * escalation chain, then any other agent that is installed, so one agent that is not signed in does
+ * not leave a task stuck.
+ */
 async function plan(deps: RunDeps, task: Task, forced?: AgentName): Promise<AgentName[]> {
   const usable = (a: AgentName) => deps.adapters[a] !== undefined && !deps.unavailable?.has(a);
-  const first = forced ?? (await candidateAgents(deps.graph, deps.config, task.id)).find(usable);
+  const candidates = await candidateAgents(deps.graph, deps.config, task.id);
+  const first = forced ?? task.preferredAgent ?? candidates.find(usable);
   if (!first) return [];
   const chain = deps.config.escalation as AgentName[];
   const after = chain.includes(first)
     ? chain.slice(chain.indexOf(first) + 1)
     : [...chain].reverse();
-  return [...new Set([first, ...after])].filter((a) => a === first || usable(a));
+  return [...new Set([first, ...after, ...candidates])].filter((a) => a === first || usable(a));
 }
 
 export async function runTask(
@@ -271,22 +279,39 @@ async function runAttempt(
   const cleanup = (deleteBranch: boolean) =>
     repo.remove(wt, { deleteBranch }).catch((e) => log(`cleanup: ${(e as Error).message}`));
 
+  // A planner also gets the code map, so it is allowed a bigger prompt.
   const pack = await compileContext(graph, task.id, {
     role,
     sessionId,
-    budgetTokens: config.limits.contextTokenBudget,
+    budgetTokens: config.limits.contextTokenBudget * (role === 'planner' ? 2 : 1),
     testCommand: config.verify.testCommand,
+    maxTasks: config.limits.maxTasksPerPlan,
   });
   await emitSession(deps, task.id, sessionId);
 
-  const res: HarnessResult = await adapter.run({
-    prompt: pack.prompt,
-    cwd: wt.path,
-    role,
-    timeoutMs: config.limits.timeoutMs,
-    model: config.harnesses[agent]?.model,
-    signal: deps.signal,
-  });
+  // Wait for one of this agent's slots (its configured instances), then run. Waiting can be aborted.
+  let release: (() => void) | undefined;
+  try {
+    release = await deps.slots?.acquire(agent, deps.signal);
+  } catch {
+    await finishSession(graph, sessionId, {
+      outcome: 'error',
+      summary: 'Stopped while waiting for a free agent slot',
+    });
+    await emitSession(deps, task.id, sessionId);
+    await cleanup(true);
+    return { summary: summary('error', 'Stopped by the user'), tokens: none, aborted: true };
+  }
+  const res: HarnessResult = await adapter
+    .run({
+      prompt: pack.prompt,
+      cwd: wt.path,
+      role,
+      timeoutMs: config.limits.timeoutMs,
+      model: task.model ?? config.harnesses[agent]?.model,
+      signal: deps.signal,
+    })
+    .finally(() => release?.());
   const tokens = { in: res.tokensIn ?? 0, out: res.tokensOut ?? 0 };
   const facts = { tokensIn: res.tokensIn, tokensOut: res.tokensOut, durationMs: res.durationMs };
 
@@ -313,13 +338,39 @@ async function runAttempt(
 
   // 2. Read-only roles produce text, not code: nothing to verify or merge.
   if (!writes) {
+    const applied = res.report
+      ? await applyReport(graph, res.report, {
+          projectId: deps.project.slug,
+          config,
+          sessionId,
+          parent: task,
+        })
+      : undefined;
+    for (const t of applied?.skippedTasks ?? []) log(`task skipped (${t.title}): ${t.reason}`);
+    // A plan that creates no tasks achieved nothing, even if the agent answered politely.
+    if (role === 'planner' && !applied?.tasks.length) {
+      const why =
+        res.reportError ??
+        applied?.skippedTasks[0]?.reason ??
+        'the answer had no tasks in a <puff-report> block';
+      await finishSession(graph, sessionId, {
+        outcome: 'failure',
+        ...facts,
+        summary: `Planned nothing: ${why}`,
+      });
+      await emitSession(deps, task.id, sessionId);
+      await cleanup(true);
+      log(`✖ ${agent} produced no plan: ${why}`);
+      return { summary: summary('failure', `no plan: ${why}`), tokens, skipRetry: true };
+    }
     await finishSession(graph, sessionId, {
       outcome: 'success',
       ...facts,
       summary: summarize(res.output),
     });
-    if (res.report) await applyReport(graph, res.report);
+    if (applied?.tasks.length) log(`plan created ${applied.tasks.length} task(s)`);
     await emitSession(deps, task.id, sessionId);
+    for (const t of applied?.tasks ?? []) await emitTask(deps, t);
     await cleanup(true);
     return { summary: summary('success', summarize(res.output, 160)), tokens };
   }
@@ -353,7 +404,13 @@ async function runAttempt(
 
   if (verdict.ok) {
     await repo.commit(wt, `puff: ${task.title}`);
-    const merge = await repo.merge(wt, `Merge puff task ${task.id}: ${task.title}`);
+    // Merge and re-index together under the repository lock, so parallel tasks never read the main
+    // checkout halfway through each other's merge. The re-index flags memory about changed code as stale.
+    const merge = await repo.serial(async () => {
+      const m = await repo.mergeNow(wt, `Merge puff task ${task.id}: ${task.title}`);
+      if (m.merged) await indexRepo(graph, deps.project);
+      return m;
+    });
     if (!merge.merged) {
       await finishSession(graph, sessionId, {
         outcome: 'error',
@@ -377,11 +434,18 @@ async function runAttempt(
       changedFiles: files,
       summary: summarize(res.output),
     });
-    // Re-index the merged code, so memory about changed functions is flagged stale.
-    await indexRepo(graph, deps.project);
     if (res.report) {
-      const applied = await applyReport(graph, res.report);
+      // Decisions, handoff notes, and any follow-up tasks the agent asked for.
+      const applied = await applyReport(graph, res.report, {
+        projectId: deps.project.slug,
+        config,
+        sessionId,
+        parent: task,
+      });
       for (const s of applied.skipped) log(`decision skipped (${s.symbol}): ${s.reason}`);
+      for (const t of applied.skippedTasks) log(`task skipped (${t.title}): ${t.reason}`);
+      if (applied.tasks.length) log(`${agent} asked for ${applied.tasks.length} follow-up task(s)`);
+      for (const t of applied.tasks) await emitTask(deps, t);
     }
     await emitSession(deps, task.id, sessionId);
     await cleanup(true);

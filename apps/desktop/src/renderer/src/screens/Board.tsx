@@ -101,7 +101,10 @@ function TaskCard({ task, onOpen }: { task: Task; onOpen: () => void }) {
       )}
     >
       <div className="mb-2.5">
-        <AgentChip agent={task.assignedAgent} sub={task.role} />
+        <AgentChip
+          agent={task.assignedAgent ?? task.preferredAgent}
+          sub={task.assignedAgent ? task.role : task.preferredAgent ? 'your choice' : undefined}
+        />
       </div>
       <div className="text-[13px] leading-snug font-medium text-ink">{task.title}</div>
       <div className="mt-2">

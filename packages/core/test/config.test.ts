@@ -31,6 +31,8 @@ routing:
       timeoutMs: 600_000,
       retriesBeforeEscalate: 1,
       maxAttempts: 3,
+      maxTasksPerPlan: 8,
+      maxSpawnDepth: 2,
       contextTokenBudget: 2000,
     });
     expect(config.worktrees.linkDirs).toEqual(['node_modules']);

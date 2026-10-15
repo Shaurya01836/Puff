@@ -154,7 +154,10 @@ describe('running programs without a shell', () => {
   it('kills a process that runs too long, and one that is aborted', async () => {
     const hang = ['-e', 'setInterval(()=>{},1000)'];
     const slow = await runProcess({ command: node, args: hang, cwd: tmpdir(), timeoutMs: 700 });
-    expect(slow).toMatchObject({ timedOut: true, exitCode: expect.anything() });
+    // The exit code differs by platform (null when a signal kills it on Linux, a number from
+    // taskkill on Windows), so assert what matters: it was flagged as timed out and stopped promptly.
+    expect(slow.timedOut).toBe(true);
+    expect(slow.durationMs).toBeLessThan(10_000);
     const ctl = new AbortController();
     setTimeout(() => ctl.abort(), 300);
     const stopped = await runProcess({

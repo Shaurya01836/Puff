@@ -35,6 +35,14 @@ export interface Task {
   targets: string[];
   /** Task ids this task waits for */
   dependsOn: string[];
+  /** How many agent-created steps sit between a person and this task (0 = created by a person) */
+  depth?: number;
+  /** The agent the person chose for this task; Auto-routing when absent */
+  preferredAgent?: AgentName;
+  /** Provider model override for this task */
+  model?: string;
+  /** Names the planner gave that are not in the graph yet (new code), kept as a hint for the agent */
+  hints?: string[];
   worktree?: string;
   /** Running task ids whose code overlaps with this one (scheduler Q8) */
   blockedBy?: string[];
@@ -119,6 +127,38 @@ export interface MemoryEvent {
   refs: string[];
 }
 
+export type TeamEventKind =
+  /** An agent worked on a task */
+  | 'session'
+  /** An agent left a note for whoever works next */
+  | 'handoff'
+  /** An agent created follow-up work */
+  | 'spawned'
+  /** The same task moved up to a different agent after a failure */
+  | 'escalated'
+  /** The same agent tried again, now with what the failure taught */
+  | 'retried';
+
+/** One step in the story of who did what and who passed what to whom. */
+export interface TeamEvent {
+  id: string;
+  at: number;
+  kind: TeamEventKind;
+  agent?: AgentName;
+  role?: Role;
+  taskId: string;
+  taskTitle: string;
+  outcome?: SessionOutcome;
+  /** Handoffs and escalations: who it went to */
+  toAgent?: AgentName;
+  /** Handoffs: the role it was addressed to */
+  toRole?: string;
+  /** Spawned work: the new task */
+  toTaskId?: string;
+  toTaskTitle?: string;
+  text: string;
+}
+
 export interface AgentProfile {
   name: AgentName;
   instances: number;
@@ -164,8 +204,24 @@ export interface BackendInfo {
   error?: string;
 }
 
+/** A task proposed by the planner, or requested by any agent that noticed more work is needed. */
+export interface PlannedTask {
+  title: string;
+  /** Defaults to implement */
+  type?: TaskType;
+  complexity?: Complexity;
+  /** Function names from the code map, or `path::name` symbol ids */
+  targets?: string[];
+  /** 0-based positions of EARLIER tasks in the same list that must finish first */
+  dependsOn?: number[];
+}
+
 /** Structured block agents append to their final answer: <puff-report>{...}</puff-report> */
 export interface PuffReport {
   decisions?: { symbol: string; text: string; supersedes?: string }[];
   notes?: string;
+  /** A plan (from the planner) or follow-up work (from any agent). Puff creates the tasks. */
+  tasks?: PlannedTask[];
+  /** Notes for whoever works next on this task or the tasks that depend on it */
+  handoffs?: { toRole?: string; summary: string }[];
 }

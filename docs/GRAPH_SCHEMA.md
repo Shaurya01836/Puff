@@ -64,7 +64,7 @@ Puff stores **references, not code**: path, line range, signature and hash. The 
 | `Technology` | `name` | TypeScript, Express, Vitest, Node.js… (from imports + `package.json`) |
 | `Capability` | `name` | `reasoning`, `planning`, `implementation`, `verification`, `simple-edit`, `docs`, `refactor` |
 | `Agent` | `name` (`claude-code` / `codex` / `opencode`), `instances` | A harness type in the pool |
-| `Task` | `id`, `title`, `type`, `complexity`, `status`, `assignedAgent?`, `role?`, `worktree?`, `tokensIn?`, `tokensOut?`, `testsPassed?`, `testsTotal?`, `claimedBy?`, `createdAt`, `updatedAt` | A unit of work |
+| `Task` | `id`, `title`, `type`, `complexity`, `status`, `assignedAgent?`, `role?`, `worktree?`, `preferredAgent?`, `model?`, `depth`, `hints?`, `blockedBy?`, `tokensIn?`, `tokensOut?`, `testsPassed?`, `testsTotal?`, `claimedBy?`, `createdAt`, `updatedAt` | A unit of work. `depth` is how many agent-created steps sit between a person and the task; `hints` are names a plan gave that are not in the graph yet; `blockedBy` is set while it waits on overlapping tasks |
 | `Session` | `id`, `role`, `outcome` (`running` / `success` / `failure` / `error`), `tokensIn?`, `tokensOut?`, `durationMs?`, `filesRead?`, `summary?`, `startedAt`, `endedAt?` | One agent run (**episodic memory**) |
 | `Handoff` | `id`, `payload` (JSON string), `toRole?`, `createdAt` | Structured state passed between sessions |
 | `Failure` | `id`, `message`, `kind` (`test` / `type` / `lint` / `runtime` / `review`), `stale`, `staleAt?`, `staleBecause?`, `count`, `anchoredBy`, `createdAt`, `embedding?` | What went wrong |
@@ -88,6 +88,7 @@ WORK
 (Task)-[:TARGETS]->(Symbol)
 (Task)-[:DEPENDS_ON]->(Task)
 (Task)-[:REQUIRES]->(Capability)
+(Session)-[:SPAWNED]->(Task)               ← which session asked for this task (a plan, or a follow-up request)
 
 AGENTS
 (Agent)-[:HAS_STRENGTH {declared: true}]->(Capability)
@@ -448,7 +449,7 @@ RETURN DISTINCT f.path AS file, collect(DISTINCT c.id) AS callers
 
 ### Q7: Promote tasks whose dependencies are done
 
-A task moves from `planned` to `ready` only when **every** task it depends on is `done`. Dependencies in any other state (including `ready` and `escalated`) block it.
+A task moves from `planned` to `ready` only when **every** task it depends on is `done`. A dependency in any other state (including `ready`, `running` and `escalated`) blocks it. A task whose dependency failed stays `planned`, and the team loop reports it as waiting. (Implemented in `promoteReady`.)
 
 ```cypher
 MATCH (:Project {id: $projectId})-[:HAS_TASK]->(t:Task {status: 'planned'})
@@ -461,38 +462,47 @@ RETURN t.id AS id, t.title AS title
 
 ### Q8: Overlap check (safe to run in parallel?)
 
-A task is blocked if any **active** task targets the same symbols, or symbols one `CALLS` hop away in either direction.
+Two tasks conflict when they target the **same function**, or functions **one `CALLS` hop apart in either direction**, because an edit to one can break the other. The check only looks at *in-flight* tasks (`running`, `verifying`, `retrying`, `escalated`) that write code.
 
 ```cypher
-MATCH (b:Task {id: $taskId})-[:TARGETS]->(s:Symbol)
-OPTIONAL MATCH (s)-[:CALLS*0..1]-(near:Symbol)<-[r:TARGETS]-(other:Task)
-WHERE other.status IN ['running', 'verifying', 'retrying'] AND other.id <> $taskId
-RETURN count(r) = 0 AS safeToRun, collect(DISTINCT other.id) AS blockedBy
+MATCH (:Task {id: $id})-[:TARGETS]->(s:Symbol)
+MATCH (s)-[:CALLS*0..1]-(near:Symbol)<-[:TARGETS]-(other:Task)
+WHERE other.id <> $id AND other.status IN $statuses
+RETURN DISTINCT other.id AS id
 ```
+
+Two rules are applied on top of the query, in code:
+
+- A task that **writes code but names no targets** has an unknown footprint, so it conflicts with every other writer (and every writer conflicts with it).
+- **Read-only tasks** (plans, reviews) never conflict, so a planner can run next to anything.
+
+While a task waits, the loop stores what it waits for in `Task.blockedBy`, and the board shows "Waiting on task_x (overlapping code)". It is cleared when the task starts.
 
 ### Q9: Atomic claim
 
-FalkorDB runs each query atomically, so two schedulers can't both claim the same task. An empty result means another one got there first.
+FalkorDB runs each query atomically, so when several schedulers race for the same task, **exactly one** gets a row back. This is tested with 8 concurrent claims.
 
 ```cypher
-MATCH (t:Task {id: $taskId, status: 'ready'})
-SET t.status = 'running', t.claimedBy = $sessionId, t.updatedAt = timestamp()
+MATCH (t:Task {id: $id, status: 'ready'})
+SET t.status = 'running', t.claimedBy = $owner, t.updatedAt = timestamp(), t.blockedBy = null
 RETURN t.id AS id
 ```
 
+An empty result means someone else claimed it, or it is no longer ready.
+
 ### Q10: Route: best agent for this task
 
-Candidates are agents with a declared strength that matches a capability the task requires. They are ranked by their **past success rate on that same capability**. An agent with no history scores a neutral 0.5. The orchestrator then takes the best agent with a free instance.
+Candidates are agents with a declared strength matching a capability the task requires, counted per capability. They are ranked by (1) how many of the required capabilities they declare, (2) their past success rate **on those capabilities** (finished sessions only; errors do not count against them), and (3) experience. An agent with no history scores a neutral 0.5.
 
 ```cypher
-MATCH (t:Task {id: $taskId})-[:REQUIRES]->(c:Capability)<-[:HAS_STRENGTH]-(a:Agent)
+MATCH (:Task {id: $id})-[:REQUIRES]->(c:Capability)<-[:HAS_STRENGTH]-(a:Agent)
 OPTIONAL MATCH (a)-[:RAN]->(s:Session)-[:WORKED_ON]->(:Task)-[:REQUIRES]->(c)
-WITH a, collect(DISTINCT s) AS ss
-WITH a, size(ss) AS runs, size([x IN ss WHERE x.outcome = 'success']) AS wins
-RETURN a.name AS agent, a.instances AS instances, runs, wins,
-       CASE WHEN runs = 0 THEN 0.5 ELSE toFloat(wins) / runs END AS successRate
-ORDER BY successRate DESC, runs DESC
+WHERE s.outcome IN ['success', 'failure']
+WITH a, c, collect(DISTINCT s) AS ss
+RETURN a.name AS agent, size(ss) AS runs, size([x IN ss WHERE x.outcome = 'success']) AS wins
 ```
+
+The order to try agents in is: the person's choice if the task has a `preferredAgent`, otherwise the best-ranked agent; then up the `escalation` chain; then any other installed agent, so one agent that is not signed in never leaves a task stuck. An agent's slots (`instances` in the config) are enforced separately, by an in-process `SlotPool`.
 
 ### Q11: Record a session (written by Puff)
 

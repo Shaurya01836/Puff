@@ -14,6 +14,16 @@ export interface NewTask {
   targets?: string[];
   /** Existing task ids this task waits for */
   dependsOn?: string[];
+  /** Names that did not resolve to symbols (new code the planner has in mind), kept as a hint */
+  hints?: string[];
+  /** 0 for tasks a person creates; each agent-created step adds one */
+  depth?: number;
+  /** The session whose report created this task (who asked for it) */
+  spawnedBy?: string;
+  /** Run this task with this agent instead of routing */
+  preferredAgent?: AgentName;
+  /** Provider model override for this task */
+  model?: string;
   /** Override the creation time (seeding and tests) */
   at?: number;
   /** Marks data created by `puff seed`, so the UI can say it is sample data */
@@ -49,6 +59,12 @@ function toTask({ p, targets, dependsOn }: TaskRow): Task {
     role: (p.role as Role | undefined) ?? undefined,
     targets: [...targets].sort(),
     dependsOn: [...dependsOn].sort(),
+    depth: num(p.depth) ?? 0,
+    preferredAgent: (p.preferredAgent as AgentName | undefined) ?? undefined,
+    model: (p.model as string | undefined) ?? undefined,
+    hints: Array.isArray(p.hints) && p.hints.length ? (p.hints as string[]) : undefined,
+    blockedBy:
+      Array.isArray(p.blockedBy) && p.blockedBy.length ? (p.blockedBy as string[]) : undefined,
     worktree: (p.worktree as string | undefined) ?? undefined,
     tokens: tokensIn === undefined ? undefined : { in: tokensIn, out: num(p.tokensOut) ?? 0 },
     testSummary:
@@ -95,6 +111,7 @@ export async function createTask(
     `MATCH (p:Project {id: $projectId})
      CREATE (t:Task {id: $id, title: $title, type: $type, complexity: $complexity, status: 'planned',
                      createdAt: coalesce($at, timestamp()), updatedAt: coalesce($at, timestamp()),
+                     depth: $depth, hints: $hints, preferredAgent: $preferredAgent, model: $model,
                      seeded: $seeded})
      CREATE (p)-[:HAS_TASK]->(t)`,
     {
@@ -104,9 +121,20 @@ export async function createTask(
       type,
       complexity: input.complexity ?? 'medium',
       at: input.at ?? null,
+      depth: input.depth ?? 0,
+      hints: input.hints ?? [],
+      preferredAgent: input.preferredAgent ?? null,
+      model: input.model ?? null,
       seeded: input.seeded ?? false,
     },
   );
+  if (input.spawnedBy) {
+    await run(
+      graph,
+      `MATCH (se:Session {id: $sid}), (t:Task {id: $id}) MERGE (se)-[:SPAWNED]->(t)`,
+      { sid: input.spawnedBy, id },
+    );
+  }
   if (targets.length) {
     await run(
       graph,
@@ -139,6 +167,8 @@ export interface TaskPatch {
   worktree?: string;
   tokens?: { in: number; out: number };
   testSummary?: { passed: number; total: number };
+  /** Running tasks whose code overlaps this one (set while it waits); `null` clears it */
+  blockedBy?: string[] | null;
   /** Override the update time (seeding and tests) */
   at?: number;
 }
@@ -163,6 +193,8 @@ export async function updateTask(graph: Graph, id: string, patch: TaskPatch): Pr
     set('testsPassed', patch.testSummary.passed);
     set('testsTotal', patch.testSummary.total);
   }
+  if (patch.blockedBy !== undefined)
+    set('blockedBy', patch.blockedBy?.length ? patch.blockedBy : null);
   const rows = await run<{ id: string }>(
     graph,
     `MATCH (t:Task {id: $id}) SET ${sets.join(', ')} RETURN t.id AS id`,
@@ -200,4 +232,19 @@ export async function recoverInterrupted(graph: Graph): Promise<number> {
      SET se.outcome = 'error', se.summary = 'Interrupted before it finished', se.endedAt = timestamp()`,
   );
   return stuck.length;
+}
+
+/**
+ * Q9: atomically move a task from ready to running. FalkorDB runs each query atomically, so when two
+ * schedulers race for the same task exactly one gets a row back. Returns false when someone else won.
+ */
+export async function claimTask(graph: Graph, id: string, owner: string): Promise<boolean> {
+  const rows = await run<{ id: string }>(
+    graph,
+    `MATCH (t:Task {id: $id, status: 'ready'})
+     SET t.status = 'running', t.claimedBy = $owner, t.updatedAt = timestamp(), t.blockedBy = null
+     RETURN t.id AS id`,
+    { id, owner },
+  );
+  return rows.length > 0;
 }

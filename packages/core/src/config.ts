@@ -23,6 +23,10 @@ export const configSchema = z.object({
       timeoutMs: z.number().int().positive().default(600_000),
       retriesBeforeEscalate: z.number().int().nonnegative().default(1),
       maxAttempts: z.number().int().positive().default(3),
+      /** How many tasks one plan may create */
+      maxTasksPerPlan: z.number().int().positive().default(8),
+      /** Tasks created by tasks created by tasks… stop here, so agents cannot spawn work forever */
+      maxSpawnDepth: z.number().int().nonnegative().default(2),
       contextTokenBudget: z.number().int().positive().default(2000),
     })
     .prefault({}),

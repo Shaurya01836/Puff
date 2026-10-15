@@ -29,3 +29,5 @@ export * from './orchestrator/routing';
 export * from './orchestrator/run';
 export * from './orchestrator/orchestrator';
 export * from './git/demo';
+export * from './memory/plan';
+export * from './orchestrator/schedule';

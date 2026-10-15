@@ -225,7 +225,7 @@ Puff is built in **phases**. Each phase ends with a checkpoint: a working build 
 | **P1 Code graph** ✅ | Indexer, impact query, demo repo, live graph view | Demo repo visible as a graph |
 | **P2 Memory + context** ✅ | Memory writes, stack trace → symbol mapping, context compiler, ContextPack | A recorded failure lands on the right function |
 | **P3 Three agents, one loop** ✅ | Claude Code + Codex + OpenCode adapters, worktrees, verify, retry | Session 2 avoids session 1's mistake |
-| **P4 Team coordination** | Planner, routing, scheduling, escalation, live board | 3 agents in parallel, one waits on overlap |
+| **P4 Team coordination** ✅ | Goal-to-tasks planner, overlap-aware parallel runs, Team timeline, New task dialog | 3 agents in parallel, one waits on overlap |
 | **P5 Correctness + Why** | Stale flags, supersede, Why view, MCP server | Editing code marks memory stale |
 | **P6 Benchmark** | Benchmark runner, savings screen | Real numbers on screen |
 | **P7 Stretch** | PageRank, vector search, generic adapter, Electron packaging | Each one ships independently |
@@ -236,7 +236,7 @@ Details: [docs/ARCHITECTURE.md → Build phases](docs/ARCHITECTURE.md#build-phas
 
 ## Quick start
 
-> 🚧 Puff is being built during Graph Hacks (15–18 Oct 2026). **Phases P0 to P3 are in:** the code graph, shared memory (failures tied to the function they happened in, fixes, decisions, procedures, handoffs), the context compiler with its "why" trail, **and real agents**. Claude Code, Codex and OpenCode run tasks in isolated git worktrees, Puff verifies with the project's own tests, records what went wrong, retries with the lesson and escalates. Tasks that were really run by agents were verified on the demo repo (OpenCode and Codex, both merged with tests passing). Not yet: parallel runs and the goal-to-tasks planner (P4), the benchmark numbers (P6), and the sample data below is seeded, not real.
+> 🚧 Puff is being built during Graph Hacks (15–18 Oct 2026). **Phases P0 to P4 are in:** the code graph, shared memory (failures tied to the function they happened in, fixes, decisions, procedures, handoffs), the context compiler with its "why" trail, real agents, **and team coordination**. Claude Code, Codex and OpenCode run tasks in isolated git worktrees, Puff verifies with the project's own tests, records what went wrong, retries with the lesson and escalates. Give it a goal and a planner agent splits it into tasks; independent tasks run in parallel and a task that touches the same code as one already running waits. Tasks that were really run by agents were verified on the demo repo (OpenCode and Codex, both merged with tests passing; a real OpenCode planner turned a goal into three linked tasks). Not yet: stale flags and the MCP server (P5), the benchmark numbers (P6), and the sample data below is seeded, not real.
 
 **Prerequisites:** Node 22.12+, Docker (or [falkordblite](docs/ARCHITECTURE.md#option-b-no-docker-falkordblite)), git. Agent CLIs (`claude`, `codex`, `opencode`) are needed from phase P3.
 
@@ -308,6 +308,22 @@ npm run puff -- task add "Add a helper that returns all product names, with a te
 npm run puff -- run <taskId>
 ```
 
+Or give the team a **goal** and let a planner agent split it into tasks (with dependencies and the functions each one touches), then run the whole queue. Tasks that do not overlap run at the same time:
+
+```bash
+npm run puff -- goal "Add a GET /products/count endpoint and document it"
+```
+
+```bash
+npm run puff -- run --agent opencode
+```
+
+```bash
+npm run puff -- team
+```
+
+`team` prints the timeline: who worked on what, who handed what to whom, who asked for which follow-up task, and every escalation and retry. The same story is on the **Team** screen of the app. In the app, **New task** lets you choose the work, the functions it touches, the agent and the model (or leave it on Auto).
+
 Prerequisites: `codex` (`npm install -g @openai/codex`, then `codex login`), `opencode` (`npm install -g opencode-ai`), and `claude` signed in (`claude` then `/login`). Each run spends real tokens: even a tiny task used about 100k input tokens on Codex and OpenCode, because every tool call re-sends the conversation.
 
 Open the desktop app:
@@ -331,7 +347,8 @@ npm run dev
 | `npm run puff -- fix add` · `decision add` · `procedure add` · `handoff` | Record fixes, decisions (with `--supersedes`), procedures and handoff notes |
 | `npm run puff -- why <taskId>` · `memory` | Why a task went to its agent and why each context item was included · the memory feed |
 | `npm run puff -- demo setup` · `agents` | Make the demo its own git repo for agent runs · check the agent CLIs |
-| `npm run puff -- run [taskId] [--agent x]` | Run one task, or every ready task in dependency order. Ctrl+C stops it cleanly |
+| `npm run puff -- run [taskId] [--agent x]` | Run one task, or every ready task in dependency order, in parallel when the code does not overlap. `--agent` applies to the whole queue. Ctrl+C stops it cleanly |
+| `npm run puff -- goal "…"` · `team` | Add a planning task for a goal · print the team timeline |
 | `npm run puff -- seed [--force]` · `reset-memory` | Sample data for the demo · clear tasks and memory (keeps the code graph) |
 | `npm run puff -- <init|status|graphs>` | Graph setup and inspection |
 | `npm run mcp` | Puff MCP server over stdio (needs `PUFF_PROJECT`) |

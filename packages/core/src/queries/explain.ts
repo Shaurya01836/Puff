@@ -8,6 +8,9 @@ import type {
   GraphNode,
   MemoryEvent,
   MemoryEventType,
+  Role,
+  SessionOutcome,
+  TeamEvent,
   WhyPath,
 } from '@puff/shared';
 import type { PuffConfig } from '../config';
@@ -281,4 +284,142 @@ export async function agentProfiles(graph: Graph, config: PuffConfig): Promise<A
       },
     };
   });
+}
+
+/**
+ * The team's story, newest first: which agent worked on what, which notes were handed to whom,
+ * which agent asked for which follow-up task, and when a task moved to another agent or got a
+ * second try. Everything is derived from sessions, handoffs and spawn edges already in the graph.
+ */
+export async function getTeamTimeline(graph: Graph, limit = 60): Promise<TeamEvent[]> {
+  const events: TeamEvent[] = [];
+  const num = (v: unknown) => Number(v ?? 0);
+
+  type SessionRow = {
+    id: string;
+    agent: AgentName;
+    role: Role;
+    outcome: SessionOutcome;
+    at: number;
+    summary: string | null;
+    taskId: string;
+    title: string;
+  };
+  const sessions = await read<SessionRow>(
+    graph,
+    `MATCH (a:Agent)-[:RAN]->(se:Session)-[:WORKED_ON]->(t:Task)
+     RETURN se.id AS id, a.name AS agent, se.role AS role, se.outcome AS outcome,
+            se.startedAt AS at, se.summary AS summary, t.id AS taskId, t.title AS title
+     ORDER BY at`,
+  );
+  const byTask = new Map<string, SessionRow[]>();
+  for (const s of sessions) {
+    byTask.set(s.taskId, [...(byTask.get(s.taskId) ?? []), s]);
+    events.push({
+      id: `session:${s.id}`,
+      at: num(s.at),
+      kind: 'session',
+      agent: s.agent,
+      role: s.role,
+      taskId: s.taskId,
+      taskTitle: s.title,
+      outcome: s.outcome,
+      text: s.summary ?? (s.outcome === 'running' ? 'Working on it…' : ''),
+    });
+  }
+  // A later session on the same task is a retry (same agent) or an escalation (a different one).
+  for (const list of byTask.values()) {
+    list.forEach((s, i) => {
+      const prev = list[i - 1];
+      if (!prev || prev.outcome === 'running') return;
+      const escalated = prev.agent !== s.agent;
+      events.push({
+        id: `${escalated ? 'escalated' : 'retried'}:${s.id}`,
+        // just before the new session, so it reads in order
+        at: num(s.at) - 1,
+        kind: escalated ? 'escalated' : 'retried',
+        agent: prev.agent,
+        toAgent: s.agent,
+        role: s.role,
+        taskId: s.taskId,
+        taskTitle: s.title,
+        text: escalated
+          ? `${prev.agent} could not finish it (${prev.outcome}), so it moved to ${s.agent}`
+          : `${s.agent} tries again, this time knowing what the last attempt taught`,
+      });
+    });
+  }
+
+  type HandoffRow = {
+    id: string;
+    at: number;
+    payload: string;
+    toRole: string | null;
+    agent: AgentName;
+    role: Role;
+    taskId: string;
+    title: string;
+    toAgent: AgentName | null;
+  };
+  const handoffs = await read<HandoffRow>(
+    graph,
+    `MATCH (a:Agent)-[:RAN]->(se:Session)-[:HANDED_OFF]->(h:Handoff)
+     MATCH (se)-[:WORKED_ON]->(t:Task)
+     OPTIONAL MATCH (h)-[:TO]->(:Session)<-[:RAN]-(a2:Agent)
+     RETURN h.id AS id, h.createdAt AS at, h.payload AS payload, h.toRole AS toRole,
+            a.name AS agent, se.role AS role, t.id AS taskId, t.title AS title, a2.name AS toAgent`,
+  );
+  for (const h of handoffs) {
+    let text = '';
+    try {
+      text = String((JSON.parse(h.payload) as { summary?: unknown }).summary ?? h.payload);
+    } catch {
+      text = h.payload;
+    }
+    events.push({
+      id: `handoff:${h.id}`,
+      at: num(h.at),
+      kind: 'handoff',
+      agent: h.agent,
+      role: h.role,
+      taskId: h.taskId,
+      taskTitle: h.title,
+      toAgent: h.toAgent ?? undefined,
+      toRole: h.toRole ?? undefined,
+      text,
+    });
+  }
+
+  type SpawnRow = {
+    at: number;
+    agent: AgentName;
+    role: Role;
+    taskId: string;
+    title: string;
+    newId: string;
+    newTitle: string;
+  };
+  const spawns = await read<SpawnRow>(
+    graph,
+    `MATCH (a:Agent)-[:RAN]->(se:Session)-[:SPAWNED]->(n:Task)
+     MATCH (se)-[:WORKED_ON]->(t:Task)
+     RETURN n.createdAt AS at, a.name AS agent, se.role AS role, t.id AS taskId, t.title AS title,
+            n.id AS newId, n.title AS newTitle`,
+  );
+  for (const s of spawns) {
+    events.push({
+      id: `spawned:${s.newId}`,
+      at: num(s.at),
+      kind: 'spawned',
+      agent: s.agent,
+      role: s.role,
+      taskId: s.taskId,
+      taskTitle: s.title,
+      toTaskId: s.newId,
+      toTaskTitle: s.newTitle,
+      text: s.newTitle,
+    });
+  }
+
+  return events.sort((a, b) => b.at - a.at).slice(0, limit);
 }

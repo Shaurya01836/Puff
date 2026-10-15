@@ -182,24 +182,36 @@ export class GitRepo {
     return this.headSha(wt.path);
   }
 
-  /** Merge a task branch into the checked-out branch. One at a time. */
-  merge(wt: Worktree, message: string): Promise<MergeResult> {
-    const run = async (): Promise<MergeResult> => {
-      const dirty = (await must(['status', '--porcelain'], this.root)).trim();
-      if (dirty)
-        return {
-          merged: false,
-          reason: 'the main checkout has uncommitted changes; commit or stash them first',
-        };
-      const r = await git(['merge', '--no-ff', '-m', message, wt.branch], this.root, this.identity);
-      if (r.code === 0) return { merged: true, sha: await this.headSha() };
-      await git(['merge', '--abort'], this.root);
-      const conflict = /conflict/i.test(r.out + r.err);
-      return { merged: false, conflict, reason: (r.out + r.err).trim().slice(0, 400) };
-    };
-    const result = this.mergeLock.then(run, run);
+  /**
+   * Run `fn` while holding the repository lock, so no two tasks change or read the main checkout at
+   * once. Merging and the re-index that follows it must happen together, or a re-index could read the
+   * checkout halfway through another task's merge.
+   */
+  serial<T>(fn: () => Promise<T>): Promise<T> {
+    const result = this.mergeLock.then(fn, fn);
     this.mergeLock = result.catch(() => {});
     return result;
+  }
+
+  /** Merge a task branch into the checked-out branch. One at a time. */
+  merge(wt: Worktree, message: string): Promise<MergeResult> {
+    return this.serial(() => this.mergeNow(wt, message));
+  }
+
+  /** The merge itself, for callers that already hold the lock through serial(). */
+  async mergeNow(wt: Worktree, message: string): Promise<MergeResult> {
+    const dirty = (await must(['status', '--porcelain'], this.root)).trim();
+    if (dirty) {
+      return {
+        merged: false,
+        reason: 'the main checkout has uncommitted changes; commit or stash them first',
+      };
+    }
+    const r = await git(['merge', '--no-ff', '-m', message, wt.branch], this.root, this.identity);
+    if (r.code === 0) return { merged: true, sha: await this.headSha() };
+    await git(['merge', '--abort'], this.root);
+    const conflict = /conflict/i.test(r.out + r.err);
+    return { merged: false, conflict, reason: (r.out + r.err).trim().slice(0, 400) };
   }
 
   /** Remove the worktree. The branch is kept unless asked otherwise, so a failed attempt can be inspected. */

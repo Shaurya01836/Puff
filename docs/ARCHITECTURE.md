@@ -229,6 +229,59 @@ What it guarantees:
 
 The team loop (`orchestrator/orchestrator.ts`) promotes planned tasks whose dependencies are done (Q7) and runs ready tasks one at a time, oldest first. Overlap-aware parallel runs and the goal-to-tasks planner arrive in P4.
 
+### Planning: from a goal to tasks (`memory/plan.ts`, `memory/report.ts`)
+
+A goal becomes a task of type `plan`. When the team runs, the planner agent (read-only) is given:
+
+- the goal, the project's technologies, procedures and recent failures,
+- a **code map**: every source file and the functions in it (read from the graph), so it can name real targets instead of guessing,
+- the **tasks already on the board**, so it does not repeat them,
+- the exact output format and the rules for a safe plan.
+
+It answers with one JSON block, the same `<puff-report>` every agent uses, so it works for Codex too (which cannot call MCP tools headlessly):
+
+```json
+{"tasks":[
+  {"title":"Add a /products/count route","type":"implement","complexity":"low","targets":["productsRouter"],"dependsOn":[]},
+  {"title":"Document the route in docs/API.md","type":"chore","dependsOn":[0]}
+]}
+```
+
+Any agent can also include `tasks` in its report to **ask for follow-up work** (for example a coder noticing the docs need updating), and `handoffs` to leave a note for whoever works next. Because agents can create work, Puff keeps it under control:
+
+| Safeguard | Rule |
+|---|---|
+| Size | A plan creates at most `limits.maxTasksPerPlan` tasks (8) |
+| Depth | Agent-created work may nest at most `limits.maxSpawnDepth` levels (2): a planner's task may ask for follow-ups, but those cannot ask for more forever |
+| Cycles | `dependsOn` may only point at **earlier** tasks in the same list, so a plan can never contain a cycle |
+| Duplicates | A task with the same title as one already on the board is skipped |
+| Unknown code | A name that is not in the graph (new code) is kept as a **hint** shown to the agent, never guessed into a symbol |
+| Empty plans | A plan that creates no tasks counts as a **failure**, not a success |
+| Attribution | Each created task is linked to the session that asked for it (`(Session)-[:SPAWNED]->(Task)`) |
+
+Models are loose about JSON, so the report parser is forgiving where it can be (a single string where a list belongs, numbers as strings, an unknown `type` falls back to `implement`) and strict where it matters (a task without a title invalidates the report, and the reason is returned).
+
+### Scheduling: what runs at the same time (`orchestrator/schedule.ts`, `orchestrator.ts`)
+
+The team loop keeps up to `limits.maxParallel` tasks running, and for every ready task, oldest first:
+
+1. **Overlap (Q8).** If its code overlaps a task already in flight, it waits and `blockedBy` says for what.
+2. **Claim (Q9).** Otherwise it is claimed atomically and started in its own worktree.
+3. **Slots.** The agent chosen for it may only have as many simultaneous runs as its configured `instances`; extra runs wait for a free slot.
+4. **Merge, one at a time.** Merging and the re-index that follows it run under one repository lock, so parallel tasks never read the main checkout halfway through each other's merge.
+
+When any task finishes, the loop promotes tasks whose dependencies are now done (Q7) and looks again. This is tested with fake agents: independent tasks overlap in time, a task overlapping a running one starts only after it ends, and an agent with 2 slots never runs 3 tasks at once.
+
+Not done: if two tasks edit different functions of the same file, git merges them, but a real textual conflict aborts the merge and fails that task cleanly. After a merge, the combined result is not re-tested.
+
+### The Team timeline (`getTeamTimeline`)
+
+The **Team** screen tells the story in order: which agent worked on which task and how it ended, which note was handed to whom, which agent asked for which task, and when a task moved up to another agent (**escalated**) or got a second try (**retried**). It is derived entirely from sessions, handoffs and `SPAWNED` edges already in the graph, so there is nothing extra to keep in sync. `npm run puff -- team` prints the same.
+
+### Delegating a task by hand
+
+The desktop app's **New task** dialog (and `puff task add`) lets a person choose what to do, which functions it touches (searched from the graph), the type and complexity, and **which agent and model** (Auto lets Puff route it). The choice is stored on the task (`preferredAgent`, `model`) and honoured by the run loop; escalation still applies if that agent fails.
+
 ### The demo needs its own git repository
 
 Agents work in git worktrees, so a project must be the root of its own repository. `demo/shop-api` lives inside Puff's repository, so `npm run puff -- demo setup` copies it to `~/.puff/demo/shop-api` (a fresh repository with one commit, `node_modules` linked), and writes `PUFF_REPO` to your local `.env`. It is deliberately **outside the Puff checkout**: an agent working there cannot wander up into Puff's own files, such as `demo/TRAPS.md`, which lists the seeded traps. `--force` recreates it from scratch.
@@ -311,10 +364,10 @@ Input: `taskId`, `role`. Output: a prompt string and a stored `ContextPack`.
 
 | Role | Includes |
 |---|---|
-| **planner** | goal, project technologies, procedures, active decisions, recent project-wide failures (top 5) |
+| **planner** | goal, project technologies, a **code map** (files and their functions), the tasks already on the board, procedures, active decisions, recent project-wide failures, the plan format and rules |
 | **coder** | task, target symbols with file + line ranges, callers (impact), failures + fixes on those symbols, active decisions, procedures, pending handoffs |
-| **verifier** | task, diff, tests to run, decisions the change must respect, previous failures on these symbols |
-| **chore** | task, target files, procedures |
+| **verifier** | task, diff, tests to run, decisions the change must respect, previous failures on these symbols, pending handoffs |
+| **chore** | task, target files, active decisions, procedures, pending handoffs |
 
 **Rules:**
 - Budget of about **2k tokens**. Items are ranked: unresolved failures → fixed failures → decisions → callers → procedures.
@@ -615,7 +668,7 @@ Every phase ends with a **checkpoint**: a working build, committed. The next pha
 | **P1 Code graph** ✅ | Thu night | Indexer (Q1), impact (Q6), technologies, demo repo skeleton | Memory graph screen on real data | Demo repo visible as a graph; impact query returns files |
 | **P2 Memory + context** ✅ | Fri morning | Memory writes (Q11–Q15), stack trace → symbol, context compiler + ContextPack (Q3–Q5), `<puff-report>` parsing | Task detail on mocks | A recorded failure lands on the right function |
 | **P3 Three agents, one loop** ✅ | Fri afternoon | Claude Code + Codex + OpenCode adapters, worktrees, verify, retry once | Task detail on real data | **Session 2 avoids session 1's mistake** |
-| **P4 Team coordination** | Fri night | Planner goal split, routing (Q10), scheduling (Q7–Q9), escalation, event bus | Board live, mascot states wired | A goal runs across 3 agents; one task waits on overlap |
+| **P4 Team coordination** ✅ | Fri night | Planner goal split, routing (Q10), scheduling (Q7–Q9), escalation, event bus | Board live, mascot states wired | A goal runs across 3 agents; one task waits on overlap |
 | **P5 Correctness + Why** | Sat morning | Stale on hash change, supersede, MCP server | Why view, memory feed | Editing code marks memory stale; Why shows the path |
 | **P6 Benchmark** | Sat afternoon | Benchmark runner (sessions recorded since P3), `results.json` | Savings meter | Real numbers on screen |
 | **P7 Stretch** | Sat evening, until the 22:00 freeze | PageRank routing (Q18), vector failures (Q17), generic CLI adapter | Electron packaging, polish | Each item ships independently |
