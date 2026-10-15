@@ -171,3 +171,33 @@ export async function updateTask(graph: Graph, id: string, patch: TaskPatch): Pr
   if (!rows.length) throw new Error(`Unknown task ${id}`);
   return (await getTask(graph, id))!;
 }
+
+/** Q7: a planned task becomes ready once every task it depends on is done. Returns the promoted tasks. */
+export async function promoteReady(graph: Graph): Promise<Task[]> {
+  const tasks = await listTasks(graph);
+  const done = new Set(tasks.filter((t) => t.status === 'done').map((t) => t.id));
+  const promoted: Task[] = [];
+  for (const t of tasks) {
+    if (t.status === 'planned' && t.dependsOn.every((d) => done.has(d))) {
+      promoted.push(await updateTask(graph, t.id, { status: 'ready' }));
+    }
+  }
+  return promoted;
+}
+
+/**
+ * After a crash or a force-quit, tasks can be stuck mid-run with a session that will never finish.
+ * Put them back in the queue and close their sessions as errors. Returns how many tasks were reset.
+ */
+export async function recoverInterrupted(graph: Graph): Promise<number> {
+  const stuck = (await listTasks(graph)).filter((t) =>
+    ['running', 'verifying', 'retrying'].includes(t.status),
+  );
+  for (const t of stuck) await updateTask(graph, t.id, { status: 'planned' });
+  await run(
+    graph,
+    `MATCH (se:Session {outcome: 'running'})
+     SET se.outcome = 'error', se.summary = 'Interrupted before it finished', se.endedAt = timestamp()`,
+  );
+  return stuck.length;
+}

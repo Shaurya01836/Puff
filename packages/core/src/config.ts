@@ -10,6 +10,8 @@ const harnessSchema = z.object({
   promptVia: z.enum(['stdin', 'arg']).default('stdin'),
   instances: z.number().int().positive().default(1),
   strengths: z.array(z.string()).default([]),
+  /** Provider model override; omit to use the CLI's own configuration */
+  model: z.string().optional(),
 });
 
 export const configSchema = z.object({
@@ -20,6 +22,7 @@ export const configSchema = z.object({
       maxParallel: z.number().int().positive().default(3),
       timeoutMs: z.number().int().positive().default(600_000),
       retriesBeforeEscalate: z.number().int().nonnegative().default(1),
+      maxAttempts: z.number().int().positive().default(3),
       contextTokenBudget: z.number().int().positive().default(2000),
     })
     .prefault({}),
@@ -30,6 +33,7 @@ export const configSchema = z.object({
       verifierAgent: z.string().optional(),
     })
     .prefault({}),
+  worktrees: z.object({ linkDirs: z.array(z.string()).default(['node_modules']) }).prefault({}),
 });
 
 export type PuffConfig = z.infer<typeof configSchema>;

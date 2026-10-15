@@ -142,7 +142,9 @@ export interface Savings {
 export type PuffEvent =
   | { type: 'task:update'; task: Task }
   | { type: 'session:update'; session: SessionInfo }
-  | { type: 'memory'; event: MemoryEvent };
+  | { type: 'memory'; event: MemoryEvent }
+  /** The team started or stopped working; `message` summarises how a run ended or why it could not start */
+  | { type: 'run'; running: boolean; message?: string; tone?: 'good' | 'warn' | 'bad' };
 
 /** Where the API gets its data. Lets the UI say honestly what is live and what is mock. */
 export interface BackendInfo {
@@ -154,6 +156,8 @@ export interface BackendInfo {
   graphName?: string;
   /** Parts of the API that still return mock data in live mode */
   mockParts: string[];
+  /** Why agents cannot be run yet (e.g. the project is not a git repository). Absent when Run team works. */
+  runBlocked?: string;
   /** True when the graph holds sample tasks and memory written by `puff seed`, not real agent runs */
   seeded?: boolean;
   /** Why live mode is unavailable, when mode is mock */

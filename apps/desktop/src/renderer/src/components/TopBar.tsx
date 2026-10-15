@@ -66,7 +66,7 @@ export function TopBar({
         <button
           onClick={onToggleRun}
           disabled={!!runBlockedReason}
-          title={runBlockedReason ? `Not available yet: ${runBlockedReason}` : undefined}
+          title={runBlockedReason ? `Can't run yet: ${runBlockedReason}` : undefined}
           className={cn(
             'disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none',
             'inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold transition-all',

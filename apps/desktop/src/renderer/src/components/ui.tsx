@@ -152,3 +152,34 @@ export function MockBadge({ label = 'Mock data' }: { label?: string }) {
     </span>
   );
 }
+
+const NOTICE_TONE = {
+  good: { color: 'var(--color-good)', Icon: CircleCheck },
+  warn: { color: 'var(--color-warn)', Icon: TriangleAlert },
+  bad: { color: 'var(--color-bad)', Icon: TriangleAlert },
+} as const;
+
+/** A short message about what just happened (a run finished, Run team could not start). */
+export function Notice({
+  tone,
+  children,
+  onClose,
+}: {
+  tone: keyof typeof NOTICE_TONE;
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  const { color, Icon } = NOTICE_TONE[tone];
+  return (
+    <div
+      role="status"
+      className="fixed right-6 bottom-6 z-30 flex max-w-md animate-fade-in items-start gap-3 rounded-xl border border-line-strong bg-surface-2 px-4 py-3 text-sm shadow-[0_20px_40px_-12px_rgb(0_0_0/0.8)]"
+    >
+      <Icon className="mt-0.5 size-4 shrink-0" style={{ color }} />
+      <div className="text-ink-2">{children}</div>
+      <button onClick={onClose} className="ml-2 text-ink-3 hover:text-ink" aria-label="Dismiss">
+        ×
+      </button>
+    </div>
+  );
+}

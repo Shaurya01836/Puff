@@ -23,6 +23,10 @@ import { createTask, listTasks } from './memory/tasks';
 import { findSymbols, impactOf, resolveSymbols } from './queries/code';
 import { getMemoryFeed, getWhy } from './queries/explain';
 import { clearMemory, seedDemoMemory } from './seed/demo';
+import { createAdapters } from './agents/adapters';
+import { setupDemoWorkspace } from './git/demo';
+import { Orchestrator, createRunDeps } from './orchestrator/orchestrator';
+import { runTask, type TaskRunResult } from './orchestrator/run';
 
 loadDotEnv();
 
@@ -502,6 +506,98 @@ program
       await clearMemory(graph);
       console.log('✔ memory cleared; the code graph is untouched');
     });
+  });
+
+// ---------------------------------------------------------------------------------------------
+// Running agents
+// ---------------------------------------------------------------------------------------------
+
+program
+  .command('agents')
+  .description('check which agent CLIs are installed and runnable (does not call any model)')
+  .action(async () => {
+    const config = await loadConfig(program.opts<{ config: string }>().config);
+    for (const [name, adapter] of Object.entries(createAdapters(config))) {
+      const r = await adapter!.available();
+      console.log(`${r.ok ? '✔' : '✖'} ${name.padEnd(12)} ${r.detail}`);
+    }
+  });
+
+function printRun(results: TaskRunResult[]): void {
+  for (const r of results) {
+    console.log(
+      `\n${r.status === 'done' ? '✔' : r.status === 'aborted' ? '■' : '✖'} ${r.taskId}  ${r.status}${r.reason ? `: ${r.reason}` : ''}`,
+    );
+    for (const a of r.attempts) {
+      console.log(
+        `    attempt ${a.n}  ${a.agent.padEnd(11)} ${a.outcome.padEnd(8)} ${a.detail.slice(0, 110)}`,
+      );
+    }
+  }
+}
+
+program
+  .command('run')
+  .description('run agents on tasks: one task, or every ready task in dependency order')
+  .argument('[taskId]', 'a single task (default: all ready tasks)')
+  .option('--agent <name>', 'start with this agent instead of routing')
+  .action(async (taskId: string | undefined, o: { agent?: string }) => {
+    await withProject(undefined, async ({ graph, project, config }) => {
+      const log = (line: string) => console.log(`  ${line}`);
+      const deps = await createRunDeps({ graph, project, config, log });
+      const stop = new AbortController();
+      process.once('SIGINT', () => {
+        console.log('\nstopping…');
+        stop.abort();
+      });
+      if (taskId) {
+        const agent = o.agent ? agentOf(o.agent) : undefined;
+        printRun([await runTask({ ...deps, signal: stop.signal }, taskId, { agent })]);
+        return;
+      }
+      const orchestrator = new Orchestrator(deps);
+      stop.signal.addEventListener('abort', () => void orchestrator.stop());
+      const results = await orchestrator.start();
+      if (!results.length)
+        console.log(
+          'Nothing to run: no ready tasks. Create one with: npm run puff -- task add "…" -t <symbol>',
+        );
+      printRun(results);
+    });
+  });
+
+const demo = program.command('demo').description('set up the demo project for real agent runs');
+
+demo
+  .command('setup')
+  .description(
+    'create a separate git repository from demo/shop-api for agents to work in, and point Puff at it',
+  )
+  .option('--source <dir>', 'demo project to copy', 'demo/shop-api')
+  .option('--dest <dir>', 'where to create it (default: ~/.puff/demo/shop-api)')
+  .option('-f, --force', 'recreate it from scratch, discarding anything agents merged')
+  .option('--no-write-env', 'do not update PUFF_REPO in .env')
+  .action(async (o: { source: string; dest?: string; force?: boolean; writeEnv: boolean }) => {
+    const ws = await setupDemoWorkspace({ source: o.source, dest: o.dest, force: o.force });
+    console.log(`✔ ${ws.path} is a fresh git repository (1 commit)`);
+    console.log(
+      ws.linkedNodeModules
+        ? '  node_modules linked from the demo source'
+        : '  ⚠ no node_modules in the demo source: run npm install in demo/shop-api so tests can run',
+    );
+    if (o.writeEnv) {
+      const { readFile, writeFile } = await import('node:fs/promises');
+      const line = `PUFF_REPO=${ws.path.replace(/\\/g, '/')}`;
+      const env = await readFile('.env', 'utf8').catch(() => '');
+      const next = /^PUFF_REPO=.*$/m.test(env)
+        ? env.replace(/^PUFF_REPO=.*$/m, line)
+        : `${env}${env && !env.endsWith('\n') ? '\n' : ''}${line}\n`;
+      await writeFile('.env', next);
+      console.log(`  .env now has ${line}`);
+    }
+    console.log(
+      `\nNext:\n  npm run puff -- index      # index the new copy (same graph, same code)\n  npm run puff -- agents     # see which agent CLIs are ready\n  npm run puff -- run        # run the ready tasks`,
+    );
   });
 
 program.parseAsync().catch((err: Error) => {

@@ -30,8 +30,10 @@ routing:
       maxParallel: 3,
       timeoutMs: 600_000,
       retriesBeforeEscalate: 1,
+      maxAttempts: 3,
       contextTokenBudget: 2000,
     });
+    expect(config.worktrees.linkDirs).toEqual(['node_modules']);
   });
 
   it('rejects escalation to an unknown harness', () => {

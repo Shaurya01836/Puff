@@ -1,32 +1,27 @@
 # Puff configuration: agent pool, routing and limits.
 # Agents, capabilities and HAS_STRENGTH edges are written to the graph from this file on startup.
+#
+# `args` are the base arguments for a headless run. Puff adds the role's permissions (what the agent
+# may edit or run), the working directory and the model, and always sends the prompt on stdin.
+# Set `model` to override the model; leave it out to use the CLI's own configuration.
 
 harnesses:
   claude-code:
     command: claude
-    args:
-      [
-        '-p',
-        '--output-format',
-        'json',
-        '--permission-mode',
-        'acceptEdits',
-        '--mcp-config',
-        '{mcpConfig}',
-      ]
+    args: ["-p", "--output-format", "json", "--no-session-persistence"]
     promptVia: stdin
     instances: 2
     strengths: [reasoning, planning, verification, review]
   codex:
     command: codex
-    args: ['exec', '--json', '--full-auto', '-']
+    args: ["exec", "--json", "--skip-git-repo-check", "--ephemeral"]
     promptVia: stdin
     instances: 2
     strengths: [implementation, refactor]
   opencode:
     command: opencode
-    args: ['run', '--format', 'json', '{prompt}']
-    promptVia: arg
+    args: ["run", "--format", "json"]
+    promptVia: stdin
     instances: 1
     strengths: [simple-edit, docs, formatting, boilerplate]
 
@@ -41,10 +36,18 @@ limits:
   maxParallel: 3
   timeoutMs: 600000
   retriesBeforeEscalate: 1
+  # Hard cap on agent runs for one task across retries and escalation, so a stubborn task cannot burn money.
+  maxAttempts: 3
   contextTokenBudget: 2000
 
+# Weakest to strongest. A task that keeps failing moves to the next agent after the current one.
 escalation: [opencode, codex, claude-code]
 
 verify:
-  testCommand: 'npm test --silent'
+  testCommand: "npm test"
   verifierAgent: claude-code
+
+worktrees:
+  # Directories linked into every task worktree from the main checkout (they are git-ignored,
+  # so a fresh worktree would otherwise have no dependencies installed).
+  linkDirs: [node_modules]

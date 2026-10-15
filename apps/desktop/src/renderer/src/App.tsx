@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BackendInfo, GraphData } from '@puff/shared';
 import { MOCK_PROJECT_ID } from '@puff/shared/mocks';
 import type { MascotState } from '@/components/Mascot';
 import { Sidebar, type Screen } from '@/components/Sidebar';
 import { TopBar } from '@/components/TopBar';
+import { Notice } from '@/components/ui';
 import { puff } from '@/lib/api';
 import { useLoad, useTasks } from '@/lib/hooks';
 import { Agents } from '@/screens/Agents';
@@ -24,26 +25,58 @@ function badgeFor(info?: BackendInfo): string | undefined {
   return info.seeded ? 'Live graph · sample memory' : undefined;
 }
 
+interface NoticeState {
+  tone: 'good' | 'warn' | 'bad';
+  text: string;
+}
+
 export function App() {
   const [screen, setScreen] = useState<Screen>('graph');
   const [openTask, setOpenTask] = useState<string>();
   const [running, setRunning] = useState(false);
   const [graph, setGraph] = useState<GraphData>();
+  const [notice, setNotice] = useState<NoticeState>();
+  /** Bumped when agents finish a session, so the agent pool and stats reload */
+  const [agentsTick, setAgentsTick] = useState(0);
 
   const info = useLoad(() => puff.getBackendInfo(), []);
   const projectId = info?.projectId ?? MOCK_PROJECT_ID;
   const live = info?.mode === 'live';
   const savingsMocked = !live || info.mockParts.includes('savings');
-  const runBlocked = live ? info.mockParts.find((p) => p.startsWith('orchestrator')) : undefined;
 
   const tasks = useTasks(projectId);
-  const agents = useLoad(() => puff.listAgents(projectId), [projectId]);
+  const agents = useLoad(() => puff.listAgents(projectId), [projectId, agentsTick]);
   const savings = useLoad(() => puff.getSavings(projectId), [projectId]);
 
   const loadGraph = useCallback(() => puff.getGraph(projectId).then(setGraph), [projectId]);
   useEffect(() => {
     if (info) void loadGraph();
   }, [info, loadGraph]);
+
+  // Live updates while agents work: pool and stats on session changes, the graph (new failures,
+  // fixes, merged code) shortly after memory changes, and run start/stop from the backend.
+  const graphTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => {
+    const off = puff.onEvent((e) => {
+      if (e.type === 'session:update') setAgentsTick((t) => t + 1);
+      if (e.type === 'memory') {
+        clearTimeout(graphTimer.current);
+        graphTimer.current = setTimeout(() => void loadGraph(), 1200);
+      }
+      if (e.type === 'run') {
+        setRunning(e.running);
+        if (!e.running) {
+          setAgentsTick((t) => t + 1);
+          void loadGraph();
+          if (e.message) setNotice({ tone: e.tone ?? 'good', text: e.message });
+        }
+      }
+    });
+    return () => {
+      off();
+      clearTimeout(graphTimer.current);
+    };
+  }, [loadGraph]);
 
   const mascot: MascotState = useMemo(() => {
     if (tasks.some((t) => t.status === 'failed')) return 'worried';
@@ -53,9 +86,18 @@ export function App() {
   }, [tasks, running]);
 
   const toggleRun = async () => {
-    if (running) await puff.stop(projectId);
-    else await puff.start(projectId);
-    setRunning(!running);
+    try {
+      if (running) {
+        await puff.stop(projectId);
+        return;
+      }
+      setNotice(undefined);
+      await puff.start(projectId);
+      // The live backend reports start and finish through `run` events; the mock does not.
+      if (!live) setRunning(true);
+    } catch (err) {
+      setNotice({ tone: 'bad', text: (err as Error).message });
+    }
   };
 
   const createGoal = async (goal: string) => {
@@ -89,7 +131,7 @@ export function App() {
           onToggleRun={toggleRun}
           onGoal={createGoal}
           badge={badgeFor(info)}
-          runBlockedReason={runBlocked?.replace(/^orchestrator: /, '')}
+          runBlockedReason={live ? info.runBlocked : undefined}
         />
         <div className="min-h-0 flex-1 overflow-auto">
           {screen === 'graph' && (
@@ -104,6 +146,11 @@ export function App() {
         </div>
       </main>
       {openTask && <TaskDetail taskId={openTask} onClose={closeTask} />}
+      {notice && (
+        <Notice tone={notice.tone} onClose={() => setNotice(undefined)}>
+          {notice.text}
+        </Notice>
+      )}
     </div>
   );
 }
