@@ -1,6 +1,8 @@
 import type {
   AgentProfile,
   BackendInfo,
+  ChatInfo,
+  ChatMessage,
   ContextPack,
   GraphData,
   MemoryEvent,
@@ -10,6 +12,8 @@ import type {
   Savings,
   SessionInfo,
   Task,
+  TaskDiffInfo,
+  TaskEditInput,
   TeamEvent,
   WhyPath,
 } from './types';
@@ -51,6 +55,14 @@ export interface PuffApi {
   createGoal(projectId: string, goal: string): Promise<Task[]>;
   createTask(projectId: string, t: Partial<Task>): Promise<Task>;
   getTask(taskId: string): Promise<{ task: Task; sessions: SessionInfo[] }>;
+  /** Put a failed task back in the queue; its earlier attempts stay in its history */
+  retryTask(taskId: string): Promise<Task>;
+  /** Change a planned, ready or failed task */
+  editTask(taskId: string, edit: TaskEditInput): Promise<Task>;
+  /** Delete a task that never ran; a task with history, or that others wait for, stays */
+  removeTask(taskId: string): Promise<void>;
+  /** What a task changed: the commit that merged it, or its newest kept attempt. Undefined if it changed nothing yet. */
+  getTaskDiff(taskId: string): Promise<TaskDiffInfo | undefined>;
   getContextPack(sessionId: string): Promise<ContextPack>;
   getWhy(taskId: string): Promise<WhyPath>;
   getGraph(projectId: string, focusId?: string, depth?: number): Promise<GraphData>;
@@ -59,6 +71,19 @@ export interface PuffApi {
   /** Who worked on what, who handed what to whom, which agent asked for which task. Newest first. */
   getTeamTimeline(projectId: string, limit?: number): Promise<TeamEvent[]>;
   getSavings(projectId: string): Promise<Savings>;
+  /** What the chat is powered by, and whether plain sentences can be answered */
+  chatInfo(): Promise<ChatInfo>;
+  /** The conversation so far, oldest first */
+  chatHistory(): Promise<ChatMessage[]>;
+  /**
+   * Say something. A slash command answers at once; anything else goes to the orchestrator agent.
+   * Resolves when the reply is complete; every message also arrives as a `chat` event as it happens.
+   */
+  chatSend(text: string): Promise<void>;
+  /** Answer a request the orchestrator made, such as running the team */
+  chatApprove(approvalId: string, approve: boolean): Promise<void>;
+  /** Start a fresh conversation */
+  chatReset(): Promise<void>;
   start(projectId: string): Promise<void>;
   stop(projectId: string): Promise<void>;
   /** Subscribe to live events; returns an unsubscribe function */
@@ -83,6 +108,10 @@ export const PUFF_INVOKE_METHODS = [
   'createGoal',
   'createTask',
   'getTask',
+  'retryTask',
+  'editTask',
+  'removeTask',
+  'getTaskDiff',
   'getContextPack',
   'getWhy',
   'getGraph',
@@ -90,6 +119,11 @@ export const PUFF_INVOKE_METHODS = [
   'listAgents',
   'getTeamTimeline',
   'getSavings',
+  'chatInfo',
+  'chatHistory',
+  'chatSend',
+  'chatApprove',
+  'chatReset',
   'start',
   'stop',
 ] as const satisfies readonly PuffInvokeMethod[];

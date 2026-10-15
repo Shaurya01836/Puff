@@ -20,6 +20,7 @@
     "build:desktop": "npm run package -w @puff/desktop",
     "puff": "tsx packages/core/src/cli.ts",
     "mcp": "tsx packages/mcp/src/index.ts",
+    "chat": "tsx packages/mcp/src/chat-cli.ts",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "typecheck": "npm run typecheck --workspaces --if-present",

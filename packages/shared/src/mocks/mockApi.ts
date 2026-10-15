@@ -2,6 +2,7 @@
 // and by `npm run dev:web` so the renderer runs in a plain browser.
 import type { PuffApi } from '../api';
 import type {
+  ChatMessage,
   MemoryEvent,
   ProjectSummary,
   PuffEvent,
@@ -117,6 +118,13 @@ export function createMockApi(opts: MockApiOptions = {}): PuffApi {
     },
   ];
 
+  const chat: ChatMessage[] = [];
+  const say = (m: Omit<ChatMessage, 'id' | 'at'>) => {
+    const message: ChatMessage = { id: `msg_${++seq}`, at: Date.now(), ...m };
+    chat.push(message);
+    emit({ type: 'chat', message: clone(message) });
+  };
+
   /** Stand-in for looking at a folder: a few words in the path pick which situation to show. */
   const sampleInspection = (repoPath: string): RepoInspection => {
     const path = repoPath.replaceAll('\\', '/');
@@ -218,6 +226,104 @@ export function createMockApi(opts: MockApiOptions = {}): PuffApi {
     },
     async pickDirectory() {
       return 'C:/work/new-project';
+    },
+    // ---- chat: scripted, so the panel can be designed without an agent ---------------------------
+    async chatInfo() {
+      return { brain: 'Claude Code (sample)', ready: true, autoApprove: false };
+    },
+    async chatHistory() {
+      return clone(chat);
+    },
+    async chatSend(text) {
+      say({ role: 'user', text });
+      if (text.trim().startsWith('/')) {
+        say({
+          role: 'system',
+          ok: true,
+          text: text.trim().startsWith('/help')
+            ? 'Type a slash command, or just say what you want.\n/status   Tasks by state\n/run      Run the ready tasks (spends tokens)'
+            : `(sample) ${text.trim()} done.`,
+        });
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 700));
+      say({ role: 'action', tool: 'create_goal', ok: true, text: `Added the goal: ${text}` });
+      say({
+        role: 'approval',
+        text: 'Run the team now?',
+        approval: {
+          id: `apr_${++seq}`,
+          summary: 'Run the ready tasks. This spends agent tokens.',
+          state: 'pending',
+        },
+      });
+      say({
+        role: 'assistant',
+        text: '(sample answer) I added that as a goal for the planner. Approve the run when you are ready.',
+        tokens: { in: 1200, out: 90 },
+      });
+    },
+    async chatApprove(approvalId, approve) {
+      const m = chat.find((x) => x.approval?.id === approvalId);
+      if (!m?.approval) throw new Error('That request is no longer waiting.');
+      m.approval.state = approve ? 'approved' : 'declined';
+      emit({ type: 'chat', message: clone(m) });
+    },
+    async chatReset() {
+      chat.length = 0;
+    },
+    async retryTask(taskId) {
+      const t = tasks.find((x) => x.id === taskId);
+      if (!t) throw new Error(`Unknown task ${taskId}`);
+      if (t.status !== 'failed') throw new Error('Only a failed task can be retried.');
+      t.status = 'ready';
+      t.updatedAt = Date.now();
+      emit({ type: 'task:update', task: clone(t) });
+      return clone(t);
+    },
+    async editTask(taskId, edit) {
+      const t = tasks.find((x) => x.id === taskId);
+      if (!t) throw new Error(`Unknown task ${taskId}`);
+      if (!['planned', 'ready', 'failed'].includes(t.status))
+        throw new Error('Only planned, ready or failed tasks can be edited.');
+      if (edit.title) t.title = edit.title;
+      if (edit.complexity) t.complexity = edit.complexity;
+      if (edit.preferredAgent !== undefined) t.preferredAgent = edit.preferredAgent ?? undefined;
+      if (edit.model !== undefined) t.model = edit.model ?? undefined;
+      if (edit.targets) t.targets = edit.targets;
+      t.updatedAt = Date.now();
+      emit({ type: 'task:update', task: clone(t) });
+      return clone(t);
+    },
+    async removeTask(taskId) {
+      const i = tasks.findIndex((x) => x.id === taskId);
+      if (i < 0) throw new Error(`Unknown task ${taskId}`);
+      if (!['planned', 'ready'].includes(tasks[i]!.status))
+        throw new Error('Only a task that has not run can be removed.');
+      tasks.splice(i, 1);
+      emit({ type: 'task:removed', taskId });
+    },
+    async getTaskDiff(taskId) {
+      const t = tasks.find((x) => x.id === taskId);
+      if (!t || ['planned', 'ready'].includes(t.status)) return undefined;
+      return {
+        source: t.status === 'done' ? 'merge' : 'attempt',
+        ref: t.status === 'done' ? 'a1b2c3d4e5' : `puff/${taskId}-a1`,
+        label: t.status === 'done' ? 'Merged into the main branch' : 'Attempt 1, not merged',
+        files: ['src/auth/login.ts'],
+        diff: [
+          'diff --git a/src/auth/login.ts b/src/auth/login.ts',
+          '--- a/src/auth/login.ts',
+          '+++ b/src/auth/login.ts',
+          '@@ -19,7 +19,7 @@ export function checkUser(email: string, password: string): UserRow {',
+          '   const user = findUserByEmail(email);',
+          '   if (!user || !verifyPassword(password, user.passwordHash)) {',
+          "-    audit('login.failed', { email });",
+          "+    audit('login.failed', { email, reason: user ? 'bad_password' : 'unknown_user' });",
+          "     throw unauthorized('Invalid email or password');",
+          '   }',
+        ].join('\n'),
+      };
     },
     async indexProject() {
       const symbols = mockGraph.nodes.filter((n) => n.kind === 'Symbol').length;

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Cpu, X } from 'lucide-react';
-import type { AgentName, Complexity, Task, TaskType } from '@puff/shared';
+import type { AgentName, Complexity, Task, TaskEditInput, TaskType } from '@puff/shared';
 import { cn } from '@/lib/cn';
 import { AGENT_META } from '@/lib/theme';
 import { AgentAvatar } from './ui';
@@ -20,23 +20,38 @@ const TYPES: { id: TaskType; label: string; hint: string }[] = [
 const LEVELS: Complexity[] = ['low', 'medium', 'high'];
 const AGENTS: AgentName[] = ['claude-code', 'codex', 'opencode'];
 
-/** Delegate a task: what, where in the code, and who does it (Auto lets Puff route it). */
+/**
+ * Delegate a task: what, where in the code, and who does it (Auto lets Puff route it). With `edit`
+ * the same form changes an existing task instead (its type stays as it was).
+ */
 export function NewTaskDialog({
   symbols,
   onClose,
   onCreate,
+  edit,
 }: {
   symbols: SymbolOption[];
   onClose: () => void;
   onCreate: (task: Partial<Task>, run: boolean) => Promise<void>;
+  edit?: { task: Task; onSave: (changes: TaskEditInput) => Promise<void> };
 }) {
-  const [title, setTitle] = useState('');
-  const [type, setType] = useState<TaskType>('implement');
-  const [complexity, setComplexity] = useState<Complexity>('medium');
-  const [targets, setTargets] = useState<SymbolOption[]>([]);
+  const initial = edit?.task;
+  const [title, setTitle] = useState(initial?.title ?? '');
+  const [type, setType] = useState<TaskType>(initial?.type ?? 'implement');
+  const [complexity, setComplexity] = useState<Complexity>(initial?.complexity ?? 'medium');
+  const [targets, setTargets] = useState<SymbolOption[]>(() =>
+    (initial?.targets ?? []).map(
+      (id) =>
+        symbols.find((s) => s.id === id) ?? {
+          id,
+          name: id.split('::').pop() ?? id,
+          file: id.split('::')[0] ?? '',
+        },
+    ),
+  );
   const [query, setQuery] = useState('');
-  const [agent, setAgent] = useState<AgentName | 'auto'>('auto');
-  const [model, setModel] = useState('');
+  const [agent, setAgent] = useState<AgentName | 'auto'>(initial?.preferredAgent ?? 'auto');
+  const [model, setModel] = useState(initial?.model ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const titleRef = useRef<HTMLTextAreaElement>(null);
@@ -65,6 +80,17 @@ export function NewTaskDialog({
     setBusy(true);
     setError(undefined);
     try {
+      if (edit) {
+        await edit.onSave({
+          title: title.trim(),
+          complexity,
+          preferredAgent: agent === 'auto' ? null : agent,
+          model: model.trim() || null,
+          targets: targets.map((t) => t.id),
+        });
+        onClose();
+        return;
+      }
       await onCreate(
         {
           title: title.trim(),
@@ -96,8 +122,14 @@ export function NewTaskDialog({
       >
         <header className="flex items-start justify-between border-b border-line px-6 py-4">
           <div>
-            <h2 className="font-display text-lg font-semibold">New task</h2>
-            <p className="text-xs text-ink-3">Delegate a task to an agent in this project.</p>
+            <h2 className="font-display text-lg font-semibold">
+              {edit ? 'Edit task' : 'New task'}
+            </h2>
+            <p className="text-xs text-ink-3">
+              {edit
+                ? 'Change what this task asks for before it runs.'
+                : 'Delegate a task to an agent in this project.'}
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -122,11 +154,17 @@ export function NewTaskDialog({
 
           <div className="grid grid-cols-2 gap-5">
             <Field label="Type">
-              <Segmented
-                value={type}
-                onChange={setType}
-                options={TYPES.map((t) => ({ id: t.id, label: t.label, title: t.hint }))}
-              />
+              {edit ? (
+                <div className="rounded-xl border border-line bg-surface-2 px-3 py-2 text-sm text-ink-2 capitalize">
+                  {type}
+                </div>
+              ) : (
+                <Segmented
+                  value={type}
+                  onChange={setType}
+                  options={TYPES.map((t) => ({ id: t.id, label: t.label, title: t.hint }))}
+                />
+              )}
             </Field>
             <Field label="Complexity">
               <Segmented
@@ -238,20 +276,32 @@ export function NewTaskDialog({
           >
             Cancel
           </button>
-          <button
-            disabled={busy}
-            onClick={() => void submit(false)}
-            className="rounded-xl border border-line-strong bg-surface-2 px-4 py-2 text-sm font-medium hover:bg-surface-3 disabled:opacity-50"
-          >
-            Add to board
-          </button>
-          <button
-            disabled={busy}
-            onClick={() => void submit(true)}
-            className="rounded-xl bg-gradient-to-br from-brand to-brand-deep px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_20px_-6px_rgb(139_124_246/0.7)] hover:brightness-110 disabled:opacity-50"
-          >
-            Add and run
-          </button>
+          {edit ? (
+            <button
+              disabled={busy}
+              onClick={() => void submit(false)}
+              className="rounded-xl bg-gradient-to-br from-brand to-brand-deep px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_20px_-6px_rgb(139_124_246/0.7)] hover:brightness-110 disabled:opacity-50"
+            >
+              Save changes
+            </button>
+          ) : (
+            <>
+              <button
+                disabled={busy}
+                onClick={() => void submit(false)}
+                className="rounded-xl border border-line-strong bg-surface-2 px-4 py-2 text-sm font-medium hover:bg-surface-3 disabled:opacity-50"
+              >
+                Add to board
+              </button>
+              <button
+                disabled={busy}
+                onClick={() => void submit(true)}
+                className="rounded-xl bg-gradient-to-br from-brand to-brand-deep px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_20px_-6px_rgb(139_124_246/0.7)] hover:brightness-110 disabled:opacity-50"
+              >
+                Add and run
+              </button>
+            </>
+          )}
         </footer>
       </div>
     </div>

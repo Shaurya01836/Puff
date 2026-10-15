@@ -26,7 +26,18 @@ export interface PuffServerOptions {
   config: PuffConfig;
   /** The session this agent is running in; Puff sets PUFF_SESSION when it launches one */
   sessionId?: string;
+  /** Offer only the tools that look, not the ones that write memory (for the chat orchestrator) */
+  readOnly?: boolean;
 }
+
+/** The tools that change memory. */
+export const WRITE_TOOLS = new Set([
+  'record_decision',
+  'record_failure',
+  'record_solution',
+  'confirm_memory',
+  'handoff',
+]);
 
 const ok = (text: string) => ({ content: [{ type: 'text' as const, text }] });
 const fail = (err: unknown) => ({
@@ -45,8 +56,22 @@ const safely =
     }
   };
 
-export function createPuffServer({ graph, config, sessionId }: PuffServerOptions): McpServer {
+export function createPuffServer({
+  graph,
+  config,
+  sessionId,
+  readOnly = false,
+}: PuffServerOptions): McpServer {
   const server = new McpServer({ name: 'puff', version: '0.2.0' });
+  /** registerTool, except that a read-only server skips the tools that write */
+  const register = ((name: string, ...rest: unknown[]) =>
+    readOnly && WRITE_TOOLS.has(name)
+      ? undefined
+      : (server.registerTool as (...a: unknown[]) => unknown).call(
+          server,
+          name,
+          ...rest,
+        )) as McpServer['registerTool'];
   const session = (given?: string) => {
     const id = given ?? sessionId;
     if (!id) throw new Error('This needs a session id: pass sessionId, or run inside a Puff task.');
@@ -62,7 +87,7 @@ export function createPuffServer({ graph, config, sessionId }: PuffServerOptions
     return ids;
   };
 
-  server.registerTool(
+  register(
     'project_status',
     {
       title: 'Project memory status',
@@ -72,7 +97,7 @@ export function createPuffServer({ graph, config, sessionId }: PuffServerOptions
     safely(async () => ok(JSON.stringify(await graphStats(graph), null, 2))),
   );
 
-  server.registerTool(
+  register(
     'find_symbols',
     {
       title: 'Find functions and classes',
@@ -89,7 +114,7 @@ export function createPuffServer({ graph, config, sessionId }: PuffServerOptions
     }),
   );
 
-  server.registerTool(
+  register(
     'get_context',
     {
       title: 'Context for a task',
@@ -118,7 +143,7 @@ export function createPuffServer({ graph, config, sessionId }: PuffServerOptions
     ),
   );
 
-  server.registerTool(
+  register(
     'impact_of',
     {
       title: 'What may break',
@@ -136,7 +161,7 @@ export function createPuffServer({ graph, config, sessionId }: PuffServerOptions
     }),
   );
 
-  server.registerTool(
+  register(
     'record_decision',
     {
       title: 'Record a decision',
@@ -168,7 +193,7 @@ export function createPuffServer({ graph, config, sessionId }: PuffServerOptions
     ),
   );
 
-  server.registerTool(
+  register(
     'record_failure',
     {
       title: 'Record a failure',
@@ -205,7 +230,7 @@ export function createPuffServer({ graph, config, sessionId }: PuffServerOptions
     ),
   );
 
-  server.registerTool(
+  register(
     'record_solution',
     {
       title: 'Record a fix',
@@ -217,7 +242,7 @@ export function createPuffServer({ graph, config, sessionId }: PuffServerOptions
     ),
   );
 
-  server.registerTool(
+  register(
     'confirm_memory',
     {
       title: 'Confirm memory still holds',
@@ -231,7 +256,7 @@ export function createPuffServer({ graph, config, sessionId }: PuffServerOptions
     }),
   );
 
-  server.registerTool(
+  register(
     'handoff',
     {
       title: 'Leave a note for the next agent',
@@ -263,7 +288,7 @@ export function createPuffServer({ graph, config, sessionId }: PuffServerOptions
     ),
   );
 
-  server.registerTool(
+  register(
     'why',
     {
       title: 'Why this task went to this agent',
@@ -274,7 +299,7 @@ export function createPuffServer({ graph, config, sessionId }: PuffServerOptions
     safely(async ({ taskId }: { taskId: string }) => ok((await getWhy(graph, taskId)).summary)),
   );
 
-  server.registerTool(
+  register(
     'similar_failures',
     {
       title: 'Past failures worded like this',
@@ -294,7 +319,7 @@ export function createPuffServer({ graph, config, sessionId }: PuffServerOptions
     }),
   );
 
-  server.registerTool(
+  register(
     'hotspots',
     {
       title: 'Most load-bearing code',

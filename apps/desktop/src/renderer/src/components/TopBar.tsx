@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { CornerDownLeft, Pause, Play, Plus, Sparkles } from 'lucide-react';
+import { CornerDownLeft, MessageSquare, Pause, Play, Plus, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Kbd, MockBadge } from './ui';
 
@@ -10,6 +10,8 @@ export function TopBar({
   onToggleRun,
   onGoal,
   onNewTask,
+  chatOpen,
+  onToggleChat,
   badge,
   runBlockedReason,
 }: {
@@ -19,6 +21,8 @@ export function TopBar({
   onToggleRun: () => void;
   onGoal: (goal: string) => Promise<void>;
   onNewTask: () => void;
+  chatOpen: boolean;
+  onToggleChat: () => void;
   badge?: string;
   /** When set, the run button is disabled and this explains why */
   runBlockedReason?: string;
@@ -65,6 +69,20 @@ export function TopBar({
 
       <div className="flex shrink-0 items-center gap-3">
         {badge && <MockBadge label={badge} />}
+        <button
+          onClick={onToggleChat}
+          aria-pressed={chatOpen}
+          title="Talk to Puff (Ctrl+K)"
+          className={cn(
+            'inline-flex h-10 items-center gap-2 rounded-xl border px-3.5 text-sm font-medium transition-colors',
+            chatOpen
+              ? 'border-brand/50 bg-brand/15 text-ink'
+              : 'border-line-strong bg-surface-2 hover:bg-surface-3',
+          )}
+        >
+          <MessageSquare className="size-4" />
+          Ask Puff
+        </button>
         <button
           onClick={onNewTask}
           className="inline-flex h-10 items-center gap-2 rounded-xl border border-line-strong bg-surface-2 px-3.5 text-sm font-medium hover:bg-surface-3"

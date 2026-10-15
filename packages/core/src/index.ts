@@ -38,3 +38,7 @@ export { userConfigPath, projectsPath } from './paths';
 export * from './projects/registry';
 export * from './projects/inspect';
 export * from './projects/open';
+export * from './control/resolve';
+export * from './control/summary';
+export * from './control/controller';
+export * from './control/commands';

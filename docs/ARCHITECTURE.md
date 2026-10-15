@@ -423,6 +423,37 @@ in a final block:
 
 ---
 
+## Command center: talking to Puff
+
+One class, `ProjectController` (`control/controller.ts`), is everything a person can do to the open project: look at tasks, create and edit them, retry a failed one, remove one that never ran, read what a task changed, run and stop the team, re-index. The desktop app's buttons, the slash commands, the chat's tools and `npm run chat` all go through it, so they cannot disagree about what an action means. Tasks are named like a person would (`resolveTask`): the exact id, the end or a part of an id (four characters or more), or a word from the title; if several match it says which instead of guessing.
+
+**Task actions and their limits.** *Retry* only a failed task (it goes back to `ready`, or `planned` if what it depends on is not done; its attempts stay in its history). *Edit* only planned, ready or failed tasks (title, complexity, agent, model, targets; the type is fixed). *Remove* only a task that never ran and that no other task waits for: history is kept. *Changes* (`GitRepo.taskDiff`) finds a finished task through the commit that merged it, otherwise its newest kept attempt branch.
+
+**Slash commands** (`control/commands.ts`, list in `shared/src/commands.ts`) run at once, for free, and never reach an agent. They never throw: a failure is an answer the person can read.
+
+**The orchestrator** answers plain sentences. `ChatSession` (`packages/mcp/src/chat.ts`) starts a local MCP endpoint (`http.ts`: `127.0.0.1` only, a random port, a random bearer token that exists only for this chat, POST `/mcp` only, and only for its own host name) and runs **Claude Code** against it:
+
+```
+claude -p --output-format json --mcp-config <file> --strict-mcp-config --tools "" \
+       --allowedTools "mcp__puff__*" --append-system-prompt <instructions> [--resume <id>]
+```
+
+The endpoint serves tools from the **app's own process**, which is why the agent drives the same controller and the same running team as the buttons (an agent started as a separate stdio server could only write to the graph). Tools: `team_status`, `list_tasks`, `task_details`, `create_goal`, `create_task`, `edit_task`, `retry_task`, `request_run`, `stop_team`, plus the read-only memory tools (`find_symbols`, `get_context`, `impact_of`, `why`, `similar_failures`, `hotspots`).
+
+**What the orchestrator cannot do, by construction:**
+
+| Limit | How |
+|---|---|
+| Edit files or run commands | `--tools ""` removes every built-in tool; `--strict-mcp-config` ignores the user's other MCP servers |
+| Delete tasks or memory | There is no such tool; the memory tools are served read-only (`record_*`, `confirm_memory` and `handoff` are not registered) |
+| Spend tokens on its own | `request_run` only **asks**: the chat shows **Run now / Not now**, and the tool answer says it has NOT started. `PUFF_CHAT_AUTO_APPROVE=1` is the explicit opt-out |
+| Loop | At most 20 tool calls per message; the next call gets an error telling it to stop |
+| Be reached by anyone else | Loopback only, token on every request, DNS-rebinding check on the host header |
+
+The conversation continues across messages (`--resume` with the session id from the last reply) and is kept in memory per open project; switching project starts that project's own conversation. Every message, tool card and approval is an event (`{ type: 'chat' }`), so the UI updates as the agent works. If Claude Code is missing or not signed in, the chat says exactly that and slash commands keep working. The brain is an interface (`ChatBrain`); the tests drive the whole path with a scripted agent that connects to the real HTTP endpoint as a real MCP client.
+
+**Not done:** a person cannot message an agent that is mid-run (headless runs take one prompt); chat history is not saved across restarts; Codex cannot be the orchestrator (it cancels MCP tool calls when run headless).
+
 ## Puff MCP server
 
 A stdio server (`packages/mcp`) built with `@modelcontextprotocol/sdk`. Environment: `FALKORDB_URL`, `PUFF_PROJECT`, and optionally `PUFF_SESSION` (the session the agent is running in) and `PUFF_CONFIG`. Every tool is a thin wrapper over `@puff/core`, so an agent that calls a tool and Puff's own run loop write the same facts to the same graph. A bad input (unknown symbol, unknown id) comes back as a tool error the agent can read, never a crash.
@@ -711,7 +742,7 @@ Every phase ends with a **checkpoint**: a working build, committed. The next pha
 | **P6 Benchmark** ✅ | Sat afternoon | Benchmark runner (sessions recorded since P3), `results.json` | Savings meter | Real numbers on screen |
 | **P7 Land it** ✅ | Sat evening | Benchmark numbers in README and docs | Every new screen checked | Savings screen shows measured results |
 | **P8 Projects** ✅ | Sat night | Project registry, folder inspection, git setup on request, per-project settings, `puff project` | Project switcher, Add a project dialog, welcome screen | Add a second repo, index it, switch back |
-| **P9 Command center** | planned | Orchestrator agent with Puff control tools over MCP, task actions | Command bar and chat panel | A sentence in chat creates and runs tasks |
+| **P9 Command center** ✅ | Sat night | `ProjectController`, slash commands, control tools served over local HTTP MCP, chat session with approvals, task actions | Ask Puff panel (Ctrl+K), task Retry / Edit / Remove / Changes | A sentence in chat creates tasks; running asks first |
 | **P10 Installer** | planned | Packaged backend without `.env`, first-run checks | Windows installer, setup screen | Install, add a project, run a task without the source folder |
 | **P11 Watch agents** | planned | Stream agent events, re-test after merge | Live activity in Task detail | You see what an agent does as it does it |
 | **P12 Ship** | planned | One-command demo story, clean-clone test | Screenshots, video | Fresh clone to running demo |

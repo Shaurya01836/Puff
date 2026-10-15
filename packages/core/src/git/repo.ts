@@ -69,6 +69,16 @@ export async function removeLink(path: string): Promise<void> {
   }
 }
 
+/** What a task changed. */
+export interface TaskDiff {
+  source: 'merge' | 'attempt';
+  /** The merge commit or the attempt branch */
+  ref: string;
+  label: string;
+  files: string[];
+  diff: string;
+}
+
 export class GitRepo {
   private mergeLock: Promise<unknown> = Promise.resolve();
 
@@ -212,6 +222,54 @@ export class GitRepo {
     await git(['merge', '--abort'], this.root);
     const conflict = /conflict/i.test(r.out + r.err);
     return { merged: false, conflict, reason: (r.out + r.err).trim().slice(0, 400) };
+  }
+
+  /**
+   * What a task changed, for people to read. A finished task is found through the commit that merged
+   * it; otherwise the newest attempt branch that was kept (failed attempts keep theirs).
+   */
+  async taskDiff(taskId: string): Promise<TaskDiff | undefined> {
+    const clip = (diff: string) =>
+      diff.length > MAX_DIFF_BYTES ? `${diff.slice(0, MAX_DIFF_BYTES)}\n… (diff truncated)` : diff;
+    // trim() also removes the carriage return git prints on Windows
+    const names = (out: string) =>
+      out
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
+
+    const merged = await git(
+      ['log', '--all', `--grep=^Merge puff task ${taskId}:`, '--format=%H', '-n', '1'],
+      this.root,
+    );
+    const sha = names(merged.out)[0];
+    if (merged.code === 0 && sha) {
+      return {
+        source: 'merge',
+        ref: sha.slice(0, 10),
+        label: 'Merged into the main branch',
+        files: names(await must(['diff', '--name-only', '--no-color', `${sha}^1`, sha], this.root)),
+        diff: clip(await must(['diff', '--no-color', '--no-ext-diff', `${sha}^1`, sha], this.root)),
+      };
+    }
+
+    const prefix = `puff/${safeName(taskId)}-a`;
+    const branches = names(
+      await must(['for-each-ref', '--format=%(refname:short)', `refs/heads/${prefix}*`], this.root),
+    )
+      .map((b) => ({ b, n: Number(b.slice(prefix.length)) }))
+      .filter((x) => Number.isInteger(x.n))
+      .sort((x, y) => y.n - x.n);
+    const newest = branches[0];
+    if (!newest) return undefined;
+    const base = (await must(['merge-base', 'HEAD', newest.b], this.root)).trim();
+    return {
+      source: 'attempt',
+      ref: newest.b,
+      label: `Attempt ${newest.n}, not merged`,
+      files: names(await must(['diff', '--name-only', '--no-color', base, newest.b], this.root)),
+      diff: clip(await must(['diff', '--no-color', '--no-ext-diff', base, newest.b], this.root)),
+    };
   }
 
   /** Remove the worktree. The branch is kept unless asked otherwise, so a failed attempt can be inspected. */

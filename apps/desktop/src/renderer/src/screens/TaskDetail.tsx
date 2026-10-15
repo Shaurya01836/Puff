@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, FileCode2, Sparkles, X } from 'lucide-react';
-import type { AgentName, ContextPack, SessionInfo, Task, WhyPath } from '@puff/shared';
+import { ArrowRight, FileCode2, Pencil, RotateCcw, Sparkles, Trash2, X } from 'lucide-react';
+import type {
+  AgentName,
+  ContextPack,
+  SessionInfo,
+  Task,
+  TaskDiffInfo,
+  WhyPath,
+} from '@puff/shared';
+import { NewTaskDialog, type SymbolOption } from '@/components/NewTaskDialog';
 import { AgentChip, SectionTitle, StatusPill } from '@/components/ui';
 import { puff } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -22,17 +30,44 @@ async function loadDetail(taskId: string): Promise<Detail> {
   return { task, sessions, pack, why };
 }
 
-type Tab = 'context' | 'why' | 'sessions';
+type Tab = 'context' | 'changes' | 'why' | 'sessions';
 
-export function TaskDetail({ taskId, onClose }: { taskId: string; onClose: () => void }) {
-  const detail = useLoad(() => loadDetail(taskId), [taskId]);
+export function TaskDetail({
+  taskId,
+  onClose,
+  symbols,
+}: {
+  taskId: string;
+  onClose: () => void;
+  symbols: SymbolOption[];
+}) {
+  // Bumped after an action, so what is shown is read again
+  const [tick, setTick] = useState(0);
+  const detail = useLoad(() => loadDetail(taskId), [taskId, tick]);
+  const diff = useLoad(() => puff.getTaskDiff(taskId), [taskId, tick, detail?.task.status]);
   const [tab, setTab] = useState<Tab>('context');
+  const [editing, setEditing] = useState(false);
+  const [problem, setProblem] = useState<string>();
+
+  const act = async (action: () => Promise<unknown>, closeAfter = false) => {
+    setProblem(undefined);
+    try {
+      await action();
+      if (closeAfter) onClose();
+      else setTick((t) => t + 1);
+    } catch (err) {
+      setProblem((err as Error).message);
+    }
+  };
+  const status = detail?.task.status;
+  const canEdit = status === 'planned' || status === 'ready' || status === 'failed';
+  const canRemove = (status === 'planned' || status === 'ready') && detail?.sessions.length === 0;
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !editing && onClose();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, editing]);
 
   return (
     <div
@@ -79,10 +114,37 @@ export function TaskDetail({ taskId, onClose }: { taskId: string; onClose: () =>
             </div>
           )}
 
+          {detail && (status === 'failed' || canEdit || canRemove) && (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              {status === 'failed' && (
+                <ActionButton
+                  icon={RotateCcw}
+                  label="Retry"
+                  title="Put it back in the queue; the earlier attempts stay in its history"
+                  onClick={() => void act(() => puff.retryTask(taskId))}
+                />
+              )}
+              {canEdit && (
+                <ActionButton icon={Pencil} label="Edit" onClick={() => setEditing(true)} />
+              )}
+              {canRemove && (
+                <ActionButton
+                  icon={Trash2}
+                  label="Remove"
+                  title="Delete this task. It has never run, so nothing is lost."
+                  danger
+                  onClick={() => void act(() => puff.removeTask(taskId), true)}
+                />
+              )}
+            </div>
+          )}
+          {problem && <p className="mt-3 text-sm text-bad">{problem}</p>}
+
           <div className="mt-5 flex gap-1">
             {(
               [
                 ['context', 'Context received'],
+                ['changes', `Changes${diff ? ` · ${diff.files.length}` : ''}`],
                 ['why', 'Why?'],
                 ['sessions', `Sessions${detail ? ` · ${detail.sessions.length}` : ''}`],
               ] as const
@@ -105,10 +167,106 @@ export function TaskDetail({ taskId, onClose }: { taskId: string; onClose: () =>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-6">
           {detail && tab === 'context' && <ContextTab task={detail.task} pack={detail.pack} />}
+          {detail && tab === 'changes' && <ChangesTab diff={diff} status={detail.task.status} />}
           {detail && tab === 'why' && <WhyTab why={detail.why} />}
           {detail && tab === 'sessions' && <SessionsTab sessions={detail.sessions} />}
         </div>
       </aside>
+      {editing && detail && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <NewTaskDialog
+            symbols={symbols}
+            onClose={() => setEditing(false)}
+            onCreate={async () => {}}
+            edit={{
+              task: detail.task,
+              onSave: async (changes) => {
+                await puff.editTask(taskId, changes);
+                setTick((t) => t + 1);
+              },
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ActionButton({
+  icon: Icon,
+  label,
+  title,
+  danger,
+  onClick,
+}: {
+  icon: typeof Pencil;
+  label: string;
+  title?: string;
+  danger?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors',
+        danger
+          ? 'border-bad/30 text-bad hover:bg-bad/10'
+          : 'border-line-strong bg-surface-2 text-ink-2 hover:bg-surface-3 hover:text-ink',
+      )}
+    >
+      <Icon className="size-3.5" />
+      {label}
+    </button>
+  );
+}
+
+/** What the task changed, as git shows it: green added, red removed. */
+function ChangesTab({ diff, status }: { diff?: TaskDiffInfo; status: Task['status'] }) {
+  if (!diff) {
+    return (
+      <p className="text-sm text-ink-3">
+        {status === 'planned' || status === 'ready'
+          ? 'Nothing yet: this task has not run.'
+          : 'No changes were kept for this task. An attempt that changed nothing leaves nothing to show.'}
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <div className="text-sm font-medium">{diff.label}</div>
+        <div className="mt-0.5 font-mono text-[11px] text-ink-3">{diff.ref}</div>
+        <ul className="mt-3 flex flex-wrap gap-1.5">
+          {diff.files.map((f) => (
+            <li
+              key={f}
+              className="rounded-md border border-line bg-surface-2 px-2 py-0.5 font-mono text-[11px] text-ink-2"
+            >
+              {f}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <pre className="overflow-x-auto rounded-xl border border-line bg-abyss/60 p-3 font-mono text-[11px] leading-relaxed">
+        {diff.diff.split('\n').map((line, i) => (
+          <div
+            key={i}
+            className={cn(
+              'whitespace-pre',
+              line.startsWith('+') && !line.startsWith('+++') && 'bg-good/10 text-good',
+              line.startsWith('-') && !line.startsWith('---') && 'bg-bad/10 text-bad',
+              line.startsWith('@@') && 'text-brand-soft',
+              (line.startsWith('diff ') || line.startsWith('+++') || line.startsWith('---')) &&
+                'font-semibold text-ink-2',
+              !/^[+@-]|^diff /.test(line) && 'text-ink-3',
+            )}
+          >
+            {line || ' '}
+          </div>
+        ))}
+      </pre>
     </div>
   );
 }

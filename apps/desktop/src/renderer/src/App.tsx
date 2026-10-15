@@ -6,8 +6,9 @@ import { Sidebar, type Screen } from '@/components/Sidebar';
 import { TopBar } from '@/components/TopBar';
 import { Notice } from '@/components/ui';
 import { puff } from '@/lib/api';
-import { useLoad, useTasks } from '@/lib/hooks';
+import { useChat, useLoad, useTasks } from '@/lib/hooks';
 import { NewTaskDialog, type SymbolOption } from '@/components/NewTaskDialog';
+import { ChatPanel } from '@/components/ChatPanel';
 import { ImportProjectDialog, ProjectSettingsDialog } from '@/components/ProjectDialogs';
 import { Agents } from '@/screens/Agents';
 import { Board } from '@/screens/Board';
@@ -43,6 +44,7 @@ export function App() {
   const [notice, setNotice] = useState<NoticeState>();
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [settingsFor, setSettingsFor] = useState<ProjectSummary>();
   /** Bumped when the active project changes (added, switched, removed, edited): everything reloads */
   const [projectTick, setProjectTick] = useState(0);
@@ -56,6 +58,7 @@ export function App() {
   const savingsMocked = !live || info.mockParts.includes('savings');
 
   const tasks = useTasks(projectId);
+  const chat = useChat(projectId);
   const agents = useLoad(() => puff.listAgents(projectId), [projectId, agentsTick]);
   const savings = useLoad(() => puff.getSavings(projectId), [projectId]);
   const timeline = useLoad(() => puff.getTeamTimeline(projectId), [projectId, agentsTick]);
@@ -152,6 +155,18 @@ export function App() {
 
   const closeTask = useCallback(() => setOpenTask(undefined), []);
 
+  // Ctrl+K (or Cmd+K) opens and closes the chat from anywhere
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setChatOpen((open) => !open);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const reloadProjects = () => setProjectTick((t) => t + 1);
   const switchProject = async (id: string) => {
     try {
@@ -184,6 +199,8 @@ export function App() {
           onToggleRun={toggleRun}
           onGoal={createGoal}
           onNewTask={() => setNewTaskOpen(true)}
+          chatOpen={chatOpen}
+          onToggleChat={() => setChatOpen((open) => !open)}
           badge={badgeFor(info)}
           runBlockedReason={
             info?.noProject ? 'Add a project first.' : live ? info.runBlocked : undefined
@@ -207,6 +224,18 @@ export function App() {
           )}
         </div>
       </main>
+      {chatOpen && (
+        <ChatPanel
+          messages={chat.messages}
+          info={chat.info}
+          busy={chat.busy}
+          error={chat.error}
+          onSend={(text) => void chat.send(text)}
+          onApprove={(id, approve) => void chat.approve(id, approve)}
+          onReset={() => void chat.reset()}
+          onClose={() => setChatOpen(false)}
+        />
+      )}
       {newTaskOpen && (
         <NewTaskDialog
           symbols={symbols}
@@ -241,7 +270,7 @@ export function App() {
           }}
         />
       )}
-      {openTask && <TaskDetail taskId={openTask} onClose={closeTask} />}
+      {openTask && <TaskDetail taskId={openTask} onClose={closeTask} symbols={symbols} />}
       {notice && (
         <Notice tone={notice.tone} onClose={() => setNotice(undefined)}>
           {notice.text}

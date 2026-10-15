@@ -4,7 +4,9 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'electron-vite';
 
 // Workspace packages ship TypeScript source, so they must be bundled rather than externalized.
-const bundleWorkspace = { externalizeDeps: { exclude: ['@puff/shared', '@puff/core'] } };
+const bundleWorkspace = {
+  externalizeDeps: { exclude: ['@puff/shared', '@puff/core', '@puff/mcp'] },
+};
 
 export default defineConfig({
   main: { build: bundleWorkspace },

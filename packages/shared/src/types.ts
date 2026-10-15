@@ -208,12 +208,16 @@ export interface Savings {
 
 export type PuffEvent =
   | { type: 'task:update'; task: Task }
+  /** A task that never ran was deleted */
+  | { type: 'task:removed'; taskId: string }
   | { type: 'session:update'; session: SessionInfo }
   | { type: 'memory'; event: MemoryEvent }
   /** The team started or stopped working; `message` summarises how a run ended or why it could not start */
   | { type: 'run'; running: boolean; message?: string; tone?: 'good' | 'warn' | 'bad' }
   /** The active project changed (added, switched, removed or its settings changed): reload everything */
-  | { type: 'project'; projectId: string };
+  | { type: 'project'; projectId: string }
+  /** A chat message was added or changed (an approval was answered): upsert it by id */
+  | { type: 'chat'; message: ChatMessage };
 
 /** Where the API gets its data. Lets the UI say honestly what is live and what is mock. */
 export interface BackendInfo {
@@ -233,6 +237,64 @@ export interface BackendInfo {
   error?: string;
   /** Live, but no project has been added yet: the app shows its welcome screen */
   noProject?: boolean;
+}
+
+export type ChatRole = 'user' | 'assistant' | 'system' | 'action' | 'approval';
+
+/** Something the orchestrator asks the person to approve before it happens (running the team spends tokens). */
+export interface ChatApproval {
+  id: string;
+  summary: string;
+  state: 'pending' | 'approved' | 'declined';
+}
+
+/** One line of the conversation with the orchestrator. */
+export interface ChatMessage {
+  id: string;
+  at: number;
+  /** `action` is something the orchestrator did with a tool, shown as a card; `system` is a slash command's answer */
+  role: ChatRole;
+  text: string;
+  /** For an action or a command: whether it worked */
+  ok?: boolean;
+  /** The tool behind an action */
+  tool?: string;
+  /** Tokens the agent spent on this reply */
+  tokens?: { in: number; out: number };
+  approval?: ChatApproval;
+}
+
+/** What the chat is powered by, and whether it can answer plain sentences right now. */
+export interface ChatInfo {
+  /** The agent behind plain sentences, e.g. "Claude Code" */
+  brain: string;
+  /** Slash commands always work; this says whether the agent can be asked (it is installed) */
+  ready: boolean;
+  note?: string;
+  /** Runs the orchestrator asks for start without asking the person first */
+  autoApprove: boolean;
+}
+
+/** What a person can change about a task that is not being worked on. */
+export interface TaskEditInput {
+  title?: string;
+  complexity?: Complexity;
+  /** `null` goes back to routing by strengths and past results */
+  preferredAgent?: AgentName | null;
+  /** `null` uses the agent's own model */
+  model?: string | null;
+  /** Symbol ids or unique function names; replaces the current targets */
+  targets?: string[];
+}
+
+/** What a task changed, read from git. */
+export interface TaskDiffInfo {
+  /** `merge`: the commit that landed it. `attempt`: the newest attempt that was kept, never merged. */
+  source: 'merge' | 'attempt';
+  ref: string;
+  label: string;
+  files: string[];
+  diff: string;
 }
 
 /** A project Puff knows about: a repository, its graph, and the settings that differ per project. */

@@ -248,3 +248,84 @@ export async function claimTask(graph: Graph, id: string, owner: string): Promis
   );
   return rows.length > 0;
 }
+
+/** Statuses in which a task is not being worked on and its definition can still change. */
+export const EDITABLE_STATUSES: TaskStatus[] = ['planned', 'ready', 'failed'];
+
+export interface TaskEdit {
+  title?: string;
+  complexity?: Complexity;
+  /** `null` goes back to routing the task by strengths and past results */
+  preferredAgent?: AgentName | null;
+  /** `null` uses the CLI's own model */
+  model?: string | null;
+  /** Symbol ids or unique names; replaces the task's current targets */
+  targets?: string[];
+}
+
+/**
+ * Change what a task asks for. Only planned, ready or failed tasks: a task an agent is working on, or
+ * one that is done, keeps its definition so the history still describes what was done.
+ */
+export async function editTask(graph: Graph, id: string, edit: TaskEdit): Promise<Task> {
+  const task = await getTask(graph, id);
+  if (!task) throw new Error(`Unknown task ${id}`);
+  if (!EDITABLE_STATUSES.includes(task.status))
+    throw new Error(
+      `Task ${id} is ${task.status}. Only planned, ready or failed tasks can be edited.`,
+    );
+
+  // Resolve targets first so a bad name changes nothing.
+  const targets = edit.targets ? await resolveSymbols(graph, edit.targets) : undefined;
+
+  const sets: string[] = ['t.updatedAt = timestamp()'];
+  const params: Record<string, unknown> = { id };
+  const set = (key: string, value: unknown) => {
+    sets.push(`t.${key} = $${key}`);
+    params[key] = value;
+  };
+  if (edit.title !== undefined) {
+    if (!edit.title.trim()) throw new Error('A task needs a title');
+    set('title', edit.title.trim());
+  }
+  if (edit.complexity !== undefined) set('complexity', edit.complexity);
+  if (edit.preferredAgent !== undefined) set('preferredAgent', edit.preferredAgent);
+  if (edit.model !== undefined) set('model', edit.model?.trim() || null);
+  await run(graph, `MATCH (t:Task {id: $id}) SET ${sets.join(', ')}`, params);
+
+  if (targets) {
+    await run(graph, `MATCH (:Task {id: $id})-[r:TARGETS]->() DELETE r`, { id });
+    if (targets.length)
+      await run(
+        graph,
+        `MATCH (t:Task {id: $id}) UNWIND $targets AS sid MATCH (s:Symbol {id: sid}) MERGE (t)-[:TARGETS]->(s)`,
+        { id, targets },
+      );
+  }
+  return (await getTask(graph, id))!;
+}
+
+/**
+ * Delete a task that never ran. A task with history (sessions), or that other tasks wait on, stays:
+ * what happened is worth keeping, and removing a dependency would silently change other tasks.
+ */
+export async function removeTask(graph: Graph, id: string): Promise<void> {
+  const task = await getTask(graph, id);
+  if (!task) throw new Error(`Unknown task ${id}`);
+  if (!['planned', 'ready'].includes(task.status))
+    throw new Error(`Task ${id} is ${task.status}. Only a task that has not run can be removed.`);
+  const [facts] = await read<{ sessions: number; dependents: number }>(
+    graph,
+    `MATCH (t:Task {id: $id})
+     OPTIONAL MATCH (t)<-[:WORKED_ON]-(se:Session)
+     WITH t, count(se) AS sessions
+     OPTIONAL MATCH (t)<-[:DEPENDS_ON]-(d:Task)
+     RETURN sessions, count(d) AS dependents`,
+    { id },
+  );
+  if (facts && facts.sessions > 0)
+    throw new Error(`Task ${id} has been worked on, so its history is kept.`);
+  if (facts && facts.dependents > 0)
+    throw new Error(`Other tasks wait for task ${id}. Remove or change those first.`);
+  await run(graph, `MATCH (t:Task {id: $id}) DETACH DELETE t`, { id });
+}

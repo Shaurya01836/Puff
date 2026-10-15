@@ -11,24 +11,22 @@ import type {
 import { neighbourhood } from '@puff/shared';
 import { createMockApi } from '@puff/shared/mocks';
 import {
-  Orchestrator,
+  ProjectController,
   activeProject,
   addProject as addToRegistry,
   agentProfiles,
   applyProject,
   connect,
-  createRunDeps,
-  createTask,
   deleteProjectMemory,
   exportGraph,
   findConfigFile,
+  findProject,
   getContextPack,
   getMemoryFeed,
   getTask,
   getTeamTimeline,
   getWhy,
   graphName,
-  indexRepo,
   initRepo,
   inspectRepo,
   isSeeded,
@@ -44,12 +42,12 @@ import {
   savingsFromBench,
   setActiveProject,
   updateProject as updateInRegistry,
-  type OrchestratorDeps,
   type ProjectEntry,
+  type ProjectHooks,
   type ProjectInfo,
   type PuffConfig,
-  type TaskRunResult,
 } from '@puff/core';
+import { ChatSession, ClaudeCodeBrain } from '@puff/mcp';
 import type { FalkorDB, Graph } from 'falkordb';
 
 /** Parts of the API served from mocks in live mode: the savings, until bench/results.json exists. */
@@ -66,23 +64,6 @@ function findRoot(appDir: string): string {
   return process.cwd();
 }
 
-/** One line describing how a run ended, and whether it went well. */
-function summarizeRun(results: TaskRunResult[]): {
-  message: string;
-  tone: 'good' | 'warn' | 'bad';
-} {
-  if (results.length === 0) return { message: 'Nothing to run: no ready tasks.', tone: 'warn' };
-  const done = results.filter((r) => r.status === 'done').length;
-  const failed = results.filter((r) => r.status === 'failed');
-  const attempts = results.reduce((n, r) => n + r.attempts.length, 0);
-  const base = `${done}/${results.length} task(s) done in ${attempts} agent run(s)`;
-  if (failed.length === 0) return { message: base, tone: 'good' };
-  return {
-    message: `${base}. Failed: ${failed[0]!.reason ?? 'see the board'}`,
-    tone: done ? 'warn' : 'bad',
-  };
-}
-
 /** What only the Electron main process can do. */
 export interface BackendHooks {
   /** Show the system "choose a folder" dialog */
@@ -95,9 +76,10 @@ interface OpenProject {
   project: ProjectInfo;
   graph: Graph;
   config: PuffConfig;
-  runDeps?: OrchestratorDeps;
-  runBlocked?: string;
-  orchestrator?: Orchestrator;
+  /** Everything done to the project goes through this: tasks, runs, indexing */
+  controller: ProjectController;
+  /** The conversation with the orchestrator agent for this project */
+  chat: ChatSession;
 }
 
 const NO_PROJECT = 'No project is open. Add one first.';
@@ -123,22 +105,54 @@ export async function createBackend(appDir: string, hooks: BackendHooks = {}): P
   let userConfig: PuffConfig;
   let current: OpenProject | undefined;
 
-  /** Agents can only run when the project is its own git repository; say why if it is not. */
-  const prepareRun = async (p: OpenProject) => {
-    p.runDeps = undefined;
-    p.runBlocked = undefined;
-    p.orchestrator = undefined;
-    try {
-      p.runDeps = await createRunDeps({
-        graph: p.graph,
-        project: p.project,
-        config: p.config,
-        emit,
-        log: (line) => console.log(`[puff] ${line}`),
-      });
-    } catch (err) {
-      p.runBlocked = (err as Error).message;
-    }
+  /** Agents can only run when the project is its own git repository; the controller says why if it is not. */
+  const makeController = (project: ProjectInfo, graph: Graph, config: PuffConfig) =>
+    ProjectController.create({
+      graph,
+      project,
+      config,
+      emit,
+      log: (line) => console.log(`[puff] ${line}`),
+    });
+
+  /**
+   * The chat: slash commands answer at once; plain sentences go to Claude Code, which can only use
+   * Puff's tools. Set PUFF_CHAT_AUTO_APPROVE=1 to let it start runs without asking first.
+   */
+  const makeChat = (controller: ProjectController) => {
+    const claude = controller.config.harnesses['claude-code'];
+    const projects: ProjectHooks = {
+      list: async () => {
+        const reg = await loadRegistry();
+        return reg.projects.map((p) => ({
+          id: p.slug,
+          name: p.name,
+          repoPath: p.repoPath,
+          active: p.slug === current?.entry.slug,
+        }));
+      },
+      switchTo: async (ref) => {
+        const reg = await loadRegistry();
+        const entry = findProject(reg, ref);
+        if (!entry) throw new Error(`No project "${ref}". Type /projects to see them.`);
+        refuseWhileRunning('switch projects');
+        // Switch after this reply has been delivered, so it lands in the conversation it belongs to.
+        setTimeout(() => {
+          activate(entry).catch((err: Error) =>
+            emit({ type: 'run', running: false, message: err.message, tone: 'bad' }),
+          );
+        }, 0);
+        return entry.name;
+      },
+    };
+    return new ChatSession({
+      controller,
+      brain: new ClaudeCodeBrain(claude?.command ?? 'claude'),
+      projects,
+      model: claude?.model,
+      autoApprove: process.env.PUFF_CHAT_AUTO_APPROVE === '1',
+      emit,
+    });
   };
 
   const open = async (entry: ProjectEntry): Promise<OpenProject> => {
@@ -147,14 +161,15 @@ export async function createBackend(appDir: string, hooks: BackendHooks = {}): P
         `The folder ${entry.repoPath} no longer exists. Remove the project or restore the folder.`,
       );
     const opened = await openProject(db, entry, userConfig);
-    const next: OpenProject = {
+    const controller = await makeController(opened.project, opened.graph, opened.config);
+    return {
       entry,
       project: opened.project,
       graph: opened.graph,
       config: opened.config,
+      controller,
+      chat: makeChat(controller),
     };
-    await prepareRun(next);
-    return next;
   };
 
   /**
@@ -202,7 +217,7 @@ export async function createBackend(appDir: string, hooks: BackendHooks = {}): P
   };
 
   const refuseWhileRunning = (action: string) => {
-    if (current?.orchestrator?.running)
+    if (current?.controller.running)
       throw new Error(`Agents are running. Stop them before you ${action}.`);
   };
 
@@ -221,7 +236,9 @@ export async function createBackend(appDir: string, hooks: BackendHooks = {}): P
   /** Make `entry` the open project and remember it for next time. */
   const activate = async (entry: ProjectEntry) => {
     refuseWhileRunning('switch projects');
-    current = await open(entry);
+    const next = await open(entry);
+    await current?.chat.close();
+    current = next;
     await setActiveProject(entry.slug);
     emit({ type: 'project', projectId: entry.slug });
   };
@@ -246,7 +263,7 @@ export async function createBackend(appDir: string, hooks: BackendHooks = {}): P
         repoPath: current.entry.repoPath,
         graphName: graphName(current.entry.slug),
         mockParts,
-        runBlocked: current.runBlocked,
+        runBlocked: current.controller.runBlocked,
         seeded: await isSeeded(current.graph),
       };
     },
@@ -283,10 +300,12 @@ export async function createBackend(appDir: string, hooks: BackendHooks = {}): P
     },
     async updateProject(projectId, patch) {
       const entry = await updateInRegistry(projectId, patch);
-      if (current?.entry.slug === projectId && !current.orchestrator?.running) {
+      if (current?.entry.slug === projectId && !current.controller.running) {
         current.entry = entry;
         current.config = applyProject(userConfig, entry);
-        await prepareRun(current);
+        current.controller = await makeController(current.project, current.graph, current.config);
+        await current.chat.close();
+        current.chat = makeChat(current.controller);
         emit({ type: 'project', projectId });
       }
       return summary(entry, current?.entry.slug);
@@ -301,7 +320,9 @@ export async function createBackend(appDir: string, hooks: BackendHooks = {}): P
       if (opts?.deleteMemory) await deleteProjectMemory(db, projectId);
       if (isOpen) {
         const next = activeProject(await loadRegistry());
-        current = next ? await open(next) : undefined;
+        const opened = next ? await open(next) : undefined;
+        await current?.chat.close();
+        current = opened;
         emit({ type: 'project', projectId: current?.entry.slug ?? '' });
       }
     },
@@ -311,8 +332,7 @@ export async function createBackend(appDir: string, hooks: BackendHooks = {}): P
 
     // ---- the open project ----------------------------------------------------------------------
     async indexProject() {
-      const p = need();
-      const s = await indexRepo(p.graph, p.project);
+      const s = await need().controller.index();
       return { files: s.files, symbols: s.symbols, calls: s.calls };
     },
     async getGraph(_projectId, focusId, depth): Promise<GraphData> {
@@ -325,8 +345,7 @@ export async function createBackend(appDir: string, hooks: BackendHooks = {}): P
       return current ? listTasks(current.graph) : [];
     },
     async createTask(_projectId, t) {
-      const p = need();
-      const task = await createTask(p.graph, p.project.slug, p.config, {
+      return need().controller.createTask({
         title: t.title ?? 'Untitled task',
         type: t.type,
         complexity: t.complexity,
@@ -335,25 +354,50 @@ export async function createBackend(appDir: string, hooks: BackendHooks = {}): P
         preferredAgent: t.preferredAgent,
         model: t.model,
       });
-      emit({ type: 'task:update', task });
-      return task;
     },
     /** A goal becomes a planning task; when the team runs, the planner agent splits it into tasks. */
     async createGoal(_projectId, goal) {
-      const p = need();
-      const task = await createTask(p.graph, p.project.slug, p.config, {
-        title: `Plan: ${goal}`,
-        type: 'plan',
-        complexity: 'high',
-      });
-      emit({ type: 'task:update', task });
-      return [task];
+      return [await need().controller.createGoal(goal)];
     },
     async getTask(taskId) {
       const p = need();
       const task = await getTask(p.graph, taskId);
       if (!task) throw new Error(`Unknown task ${taskId}`);
       return { task, sessions: await listSessions(p.graph, taskId) };
+    },
+    async retryTask(taskId) {
+      return need().controller.retryTask(taskId);
+    },
+    async editTask(taskId, edit) {
+      return need().controller.editTask(taskId, edit);
+    },
+    async removeTask(taskId) {
+      await need().controller.removeTask(taskId);
+    },
+    async getTaskDiff(taskId) {
+      return (await need().controller.diff(taskId)).diff;
+    },
+    async chatInfo() {
+      if (!current)
+        return {
+          brain: 'Claude Code',
+          ready: false,
+          note: 'Add a project first.',
+          autoApprove: false,
+        };
+      return current.chat.info();
+    },
+    async chatHistory() {
+      return current ? current.chat.history : [];
+    },
+    async chatSend(text) {
+      await need().chat.send(text);
+    },
+    async chatApprove(approvalId, approve) {
+      await need().chat.approve(approvalId, approve);
+    },
+    async chatReset() {
+      current?.chat.reset();
     },
     async getContextPack(sessionId) {
       const pack = await getContextPack(need().graph, sessionId);
@@ -375,18 +419,10 @@ export async function createBackend(appDir: string, hooks: BackendHooks = {}): P
 
     /** Run the ready tasks. Returns at once; progress arrives as events, and a `run` event says how it ended. */
     async start() {
-      const p = need();
-      if (!p.runDeps) throw new Error(p.runBlocked ?? 'Agents cannot run for this project');
-      if (p.orchestrator?.running) return;
-      const o = (p.orchestrator = new Orchestrator(p.runDeps));
-      emit({ type: 'run', running: true });
-      o.start().then(
-        (results) => emit({ type: 'run', running: false, ...summarizeRun(results) }),
-        (err: Error) => emit({ type: 'run', running: false, message: err.message, tone: 'bad' }),
-      );
+      await need().controller.start();
     },
     async stop() {
-      await current?.orchestrator?.stop();
+      await current?.controller.stop();
     },
     onEvent(cb) {
       listeners.add(cb);
