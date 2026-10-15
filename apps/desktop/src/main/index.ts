@@ -51,8 +51,22 @@ function createWindow(): BrowserWindow {
   return win;
 }
 
+// One Puff at a time: two would run the same team on the same projects.
+if (!app.requestSingleInstanceLock()) app.quit();
+else
+  app.on('second-instance', () => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.focus();
+    }
+  });
+
 app.whenReady().then(async () => {
+  if (!app.hasSingleInstanceLock()) return;
   backend = await createBackend(here, {
+    // The installed app has no checkout; what ships with it is next to the app files.
+    resourcesDir: app.isPackaged ? process.resourcesPath : undefined,
     // The system "choose a folder" dialog, over whichever window the person is using.
     pickDirectory: async () => {
       const parent = BrowserWindow.getFocusedWindow() ?? undefined;

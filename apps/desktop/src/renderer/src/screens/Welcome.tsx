@@ -1,8 +1,10 @@
 import { FolderPlus, GitBranch, Network, Users } from 'lucide-react';
+import type { AgentCliStatus } from '@puff/shared';
 import { Mascot } from '@/components/Mascot';
+import { AgentChecklist } from '@/screens/Setup';
 
 /** Shown when no project has been added yet: the one thing to do, and what Puff needs. */
-export function Welcome({ onAdd }: { onAdd: () => void }) {
+export function Welcome({ onAdd, agents }: { onAdd: () => void; agents?: AgentCliStatus[] }) {
   return (
     <div className="grid h-full place-items-center p-10">
       <div className="flex max-w-lg flex-col items-center text-center">
@@ -41,6 +43,11 @@ export function Welcome({ onAdd }: { onAdd: () => void }) {
               Code, signed in. You can explore the graph without one.
             </span>
           </li>
+          {agents && (
+            <li className="rounded-xl border border-line bg-surface p-4">
+              <AgentChecklist agents={agents} />
+            </li>
+          )}
         </ul>
       </div>
     </div>

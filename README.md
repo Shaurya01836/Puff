@@ -231,7 +231,7 @@ Puff is built in **phases**. Each phase ends with a checkpoint: a working build 
 | **P7 Land it** ✅ | Real benchmark numbers, every new screen checked, committed | Savings screen shows measured results |
 | **P8 Projects** ✅ | Add any repo from the app or CLI, switch between projects, per-project settings, import checks | Add a second repo, index it, switch back |
 | **P9 Command center** ✅ | Ask Puff chat with slash commands and a Claude Code orchestrator, task actions (retry, edit, remove, see changes) | "Add a /health endpoint and run it" typed in chat |
-| **P10 Installer** | Windows installer, first-run setup (database, agent CLIs) | Install, add a project, run a task without the source folder |
+| **P10 Installer** ✅ | Windows installer, first-run setup (database, agent CLIs) | Install, add a project, run a task without the source folder |
 | **P11 Watch agents** | Live view of what each agent does, re-test after every merge | You see files read, edits and commands as they happen |
 | **P12 Ship** | One-command demo story, clean-clone test, screenshots | Fresh clone to running demo in minutes |
 | **Stretch** | PageRank (hotspots, done), similar failures (done), vector search, Python support | Each one ships independently |
@@ -242,7 +242,9 @@ Details: [docs/ARCHITECTURE.md → Build phases](docs/ARCHITECTURE.md#build-phas
 
 ## Quick start
 
-> 🚧 Puff is being built during Graph Hacks (15–18 Oct 2026). **Phases P0 to P9 are in:** the code graph, shared memory (failures tied to the function they happened in, fixes, decisions, procedures, handoffs), the context compiler with its "why" trail, real agents, **and team coordination**. Claude Code, Codex and OpenCode run tasks in isolated git worktrees, Puff verifies with the project's own tests, records what went wrong, retries with the lesson and escalates. Give it a goal and a planner agent splits it into tasks; independent tasks run in parallel and a task that touches the same code as one already running waits. Tasks that were really run by agents were verified on the demo repo (OpenCode and Codex, both merged with tests passing; a real OpenCode planner turned a goal into three linked tasks). Memory stays correct: editing a function marks what was learned about *that function* "possibly outdated" (not the whole file), a replaced decision is kept but superseded, and a Puff MCP server lets Claude Code and OpenCode read and write memory mid-task. You can add any TypeScript or JavaScript repository as a project and switch between projects in the app or the CLI, and you can talk to Puff: slash commands answer at once, and plain sentences go to a Claude Code orchestrator that can only use Puff's tools (it adds tasks and goals, retries failures, reads the project memory, and asks you before it runs anything). A first benchmark has run (see [Benchmark](#benchmark)); the sample data in the quick start below is seeded, not real.
+> 🚧 Puff is being built during Graph Hacks (15–18 Oct 2026). **Phases P0 to P10 are in:** the code graph, shared memory (failures tied to the function they happened in, fixes, decisions, procedures, handoffs), the context compiler with its "why" trail, real agents, **and team coordination**. Claude Code, Codex and OpenCode run tasks in isolated git worktrees, Puff verifies with the project's own tests, records what went wrong, retries with the lesson and escalates. Give it a goal and a planner agent splits it into tasks; independent tasks run in parallel and a task that touches the same code as one already running waits. Tasks that were really run by agents were verified on the demo repo (OpenCode and Codex, both merged with tests passing; a real OpenCode planner turned a goal into three linked tasks). Memory stays correct: editing a function marks what was learned about *that function* "possibly outdated" (not the whole file), a replaced decision is kept but superseded, and a Puff MCP server lets Claude Code and OpenCode read and write memory mid-task. You can add any TypeScript or JavaScript repository as a project and switch between projects in the app or the CLI, and you can talk to Puff: slash commands answer at once, and plain sentences go to a Claude Code orchestrator that can only use Puff's tools (it adds tasks and goals, retries failures, reads the project memory, and asks you before it runs anything). A first benchmark has run (see [Benchmark](#benchmark)); the sample data in the quick start below is seeded, not real.
+
+**Just want to use it?** Install the Windows app (no source code, Node or npm needed): see [docs/INSTALL.md](docs/INSTALL.md). The rest of this section is for running from a checkout.
 
 **Prerequisites:** Node 22.12+, Docker (or [falkordblite](docs/ARCHITECTURE.md#option-b-no-docker-falkordblite)), git. Agent CLIs (`claude`, `codex`, `opencode`) are needed from phase P3.
 
@@ -469,6 +471,7 @@ puff/
 | Doc | What's inside |
 |---|---|
 | 📐 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Platform, components, agent adapters, orchestrator, config, UI, deployment, build phases, risks |
+| 💿 [docs/INSTALL.md](docs/INSTALL.md) | Install on Windows, first-run setup, where files live, building the installer |
 | 🕸️ [docs/GRAPH_SCHEMA.md](docs/GRAPH_SCHEMA.md) | Database setup, full graph data model, indexes, every Cypher query with explanations |
 
 ---

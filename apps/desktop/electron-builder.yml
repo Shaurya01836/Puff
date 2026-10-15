@@ -1,5 +1,6 @@
 appId: dev.puff.desktop
 productName: Puff
+copyright: Copyright (c) 2026 Dhruv Pancholi
 directories:
   output: release
   buildResources: build
@@ -7,8 +8,33 @@ files:
   - out/**
   - package.json
 asar: true
+# Ships next to the app files: the default agent configuration and the measured benchmark results.
+# Both are read from process.resourcesPath, so the installed app needs no checkout of Puff.
+extraResources:
+  - from: ../../puff.config.yaml
+    to: puff.config.yaml
+  - from: ../../bench/results.json
+    to: bench/results.json
+  # The three tree-sitter grammars the indexer loads (read from here, not from node_modules)
+  - from: ../../node_modules/tree-sitter-wasms/out
+    to: wasm
+    filter:
+      - tree-sitter-typescript.wasm
+      - tree-sitter-tsx.wasm
+      - tree-sitter-javascript.wasm
 win:
-  target: nsis
+  target:
+    - target: nsis
+      arch: x64
+  artifactName: Puff-Setup-${version}.${ext}
+nsis:
+  # A guided installer that lets the person pick the folder; per-user, so it needs no administrator rights.
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
 mac:
   target: dmg
   category: public.app-category.developer-tools

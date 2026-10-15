@@ -15,6 +15,7 @@ import { Board } from '@/screens/Board';
 import { MemoryGraph } from '@/screens/MemoryGraph';
 import { Team } from '@/screens/Team';
 import { TaskDetail } from '@/screens/TaskDetail';
+import { Setup } from '@/screens/Setup';
 import { Welcome } from '@/screens/Welcome';
 
 const TITLES: Record<Screen, { title: string; subtitle: string }> = {
@@ -53,6 +54,12 @@ export function App() {
 
   const info = useLoad(() => puff.getBackendInfo(), [projectTick]);
   const projects = useLoad(() => puff.listProjects(), [projectTick]);
+  // What the setup screen shows (database and Docker) or the welcome screen (agent tools)
+  const setup = useLoad(
+    () =>
+      info?.needsSetup || info?.noProject ? puff.getSetupStatus() : Promise.resolve(undefined),
+    [info?.needsSetup, info?.noProject, projectTick],
+  );
   const projectId = info?.projectId ?? MOCK_PROJECT_ID;
   const live = info?.mode === 'live';
   const savingsMocked = !live || info.mockParts.includes('savings');
@@ -177,6 +184,23 @@ export function App() {
     }
   };
 
+  if (info?.needsSetup) {
+    return (
+      <Setup
+        status={setup}
+        onStart={async () => {
+          await puff.startDatabase();
+          reloadProjects();
+        }}
+        onRetry={async () => {
+          const status = await puff.retrySetup();
+          if (!status.databaseOk) throw new Error(status.databaseError ?? 'Still not reachable.');
+          reloadProjects();
+        }}
+      />
+    );
+  }
+
   return (
     <div className="flex h-full">
       <Sidebar
@@ -207,7 +231,7 @@ export function App() {
           }
         />
         <div className="min-h-0 flex-1 overflow-auto">
-          {info?.noProject && <Welcome onAdd={() => setImportOpen(true)} />}
+          {info?.noProject && <Welcome onAdd={() => setImportOpen(true)} agents={setup?.agents} />}
           {!info?.noProject && screen === 'graph' && (
             <MemoryGraph
               projectId={projectId}

@@ -10,6 +10,7 @@ import type {
   PuffEvent,
   RepoInspection,
   Savings,
+  SetupStatus,
   SessionInfo,
   Task,
   TaskDiffInfo,
@@ -25,6 +26,12 @@ import type {
 export interface PuffApi {
   /** Live or mock, current project, and which parts are still mocked */
   getBackendInfo(): Promise<BackendInfo>;
+  /** What Puff needs to run (database, Docker, agent CLIs) and which of it is in place */
+  getSetupStatus(): Promise<SetupStatus>;
+  /** Start FalkorDB in Docker (the person pressed the button), then connect. Rejects with a readable reason. */
+  startDatabase(): Promise<SetupStatus>;
+  /** Try to connect again, for example after the person started the database themselves */
+  retrySetup(): Promise<SetupStatus>;
   /** Every project Puff knows about, the active one marked */
   listProjects(): Promise<ProjectSummary[]>;
   /** What Puff finds in a folder, before it is added: problems, what blocks agents, warnings */
@@ -96,6 +103,9 @@ export type PuffInvokeMethod = Exclude<keyof PuffApi, 'onEvent'>;
 /** Every invoke method, used by preload and main to wire IPC without listing channels twice. */
 export const PUFF_INVOKE_METHODS = [
   'getBackendInfo',
+  'getSetupStatus',
+  'startDatabase',
+  'retrySetup',
   'listProjects',
   'inspectProject',
   'addProject',

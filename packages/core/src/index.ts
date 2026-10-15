@@ -42,3 +42,4 @@ export * from './control/resolve';
 export * from './control/summary';
 export * from './control/controller';
 export * from './control/commands';
+export * from './setup/setup';

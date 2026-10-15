@@ -7,8 +7,9 @@ import type {
   PuffApi,
   PuffEvent,
   RepoInspection,
+  SetupStatus,
 } from '@puff/shared';
-import { neighbourhood } from '@puff/shared';
+import { PUFF_INVOKE_METHODS, neighbourhood } from '@puff/shared';
 import { createMockApi } from '@puff/shared/mocks';
 import {
   ProjectController,
@@ -16,6 +17,7 @@ import {
   addProject as addToRegistry,
   agentProfiles,
   applyProject,
+  checkSetup,
   connect,
   deleteProjectMemory,
   exportGraph,
@@ -41,7 +43,10 @@ import {
   removeProject as removeFromRegistry,
   savingsFromBench,
   setActiveProject,
+  setWasmDirectory,
+  startDatabase,
   updateProject as updateInRegistry,
+  userEnvPath,
   type ProjectEntry,
   type ProjectHooks,
   type ProjectInfo,
@@ -68,6 +73,11 @@ function findRoot(appDir: string): string {
 export interface BackendHooks {
   /** Show the system "choose a folder" dialog */
   pickDirectory?: () => Promise<string | undefined>;
+  /**
+   * Set when this is the installed app: the folder holding what ships with it (the default
+   * puff.config.yaml and bench/results.json). There is then no checkout of Puff to look around in.
+   */
+  resourcesDir?: string;
 }
 
 /** The project that is open: its graph, its settings on top of the shared config, and how agents run on it. */
@@ -84,22 +94,103 @@ interface OpenProject {
 
 const NO_PROJECT = 'No project is open. Add one first.';
 
+/** The agents Puff knows how to drive, for the setup check when no configuration could be read */
+const DEFAULT_HARNESSES = {
+  'claude-code': { command: 'claude' },
+  codex: { command: 'codex' },
+  opencode: { command: 'opencode' },
+};
+
 /**
  * The PuffApi the main process serves over IPC.
  * Everything is live from FalkorDB, and Run team really runs the agents. The savings numbers
- * are real once `puff bench` has written bench/results.json, and mock data until then. If FalkorDB
- * is unreachable the whole API falls back to mocks and says why.
+ * are real once `puff bench` has written bench/results.json, and mock data until then.
+ *
+ * If FalkorDB is unreachable the app is "in setup": the data calls answer from mocks, getBackendInfo
+ * says `needsSetup` so the UI shows its setup screen, and startDatabase / retrySetup bring the real
+ * backend up without restarting the app.
  *
  * Projects come from ~/.puff/projects.json (shared with the `puff` CLI). One is active at a time;
  * switching is refused while agents are running.
  */
 export async function createBackend(appDir: string, hooks: BackendHooks = {}): Promise<PuffApi> {
-  const mock = createMockApi();
-  const root = findRoot(appDir);
-  loadDotEnv(join(root, '.env'));
-
   const listeners = new Set<(e: PuffEvent) => void>();
   const emit = (e: PuffEvent) => listeners.forEach((cb) => cb(e));
+  const mock = createMockApi();
+
+  let live: Omit<PuffApi, 'onEvent'> | undefined;
+  let error: string | undefined;
+  let harnesses: Record<string, { command: string }> = DEFAULT_HARNESSES;
+
+  const connectLive = async () => {
+    // A database port remembered by an earlier setup (~/.puff/.env) is picked up here
+    loadDotEnv(userEnvPath());
+    try {
+      const built = await buildLive(appDir, hooks, emit);
+      live = built.api;
+      harnesses = built.harnesses;
+      error = undefined;
+    } catch (err) {
+      error = (err as Error).message;
+      console.error(`[puff] live backend unavailable: ${error}`);
+    }
+  };
+  await connectLive();
+
+  const setupStatus = async (): Promise<SetupStatus> => {
+    const status = await checkSetup(harnesses);
+    // Something other than the database is wrong (no configuration found): say that, not "database ok"
+    return !live && error && status.databaseOk
+      ? { ...status, databaseOk: false, databaseError: error }
+      : status;
+  };
+  const retrySetup = async () => {
+    if (!live) {
+      await connectLive();
+      if (live) emit({ type: 'project', projectId: '' });
+    }
+    return setupStatus();
+  };
+
+  const offline: PuffApi = {
+    ...mock,
+    async getBackendInfo(): Promise<BackendInfo> {
+      return { ...(await mock.getBackendInfo()), error, needsSetup: true };
+    },
+  };
+
+  const api = { ...offline } as PuffApi;
+  for (const method of PUFF_INVOKE_METHODS) {
+    (api as unknown as Record<string, unknown>)[method] = (...args: unknown[]) =>
+      ((live ?? offline) as unknown as Record<string, (...a: unknown[]) => unknown>)[method]!(
+        ...args,
+      );
+  }
+  api.getSetupStatus = setupStatus;
+  api.retrySetup = retrySetup;
+  api.startDatabase = async () => {
+    await startDatabase((line) => console.log(`[puff] ${line}`));
+    return retrySetup();
+  };
+  api.onEvent = (cb) => {
+    listeners.add(cb);
+    return () => listeners.delete(cb);
+  };
+  return api;
+}
+
+/** Connect to the database and open the starting project. Throws if that is not possible. */
+async function buildLive(
+  appDir: string,
+  hooks: BackendHooks,
+  emit: (e: PuffEvent) => void,
+): Promise<{ api: Omit<PuffApi, 'onEvent'>; harnesses: Record<string, { command: string }> }> {
+  const mock = createMockApi();
+  const packaged = hooks.resourcesDir !== undefined;
+  const root = hooks.resourcesDir ?? findRoot(appDir);
+  loadDotEnv(join(root, '.env'));
+  // The installed app carries its three grammar files with it instead of a node_modules folder
+  if (packaged) setWasmDirectory(join(root, 'wasm'));
 
   let db: FalkorDB;
   let userConfig: PuffConfig;
@@ -178,7 +269,7 @@ export async function createBackend(appDir: string, hooks: BackendHooks = {}): P
    */
   const startingProject = async (): Promise<ProjectEntry | undefined> => {
     const active = activeProject(await loadRegistry());
-    if (active) return active;
+    if (active || packaged) return active;
     const seed = process.env.PUFF_REPO
       ? resolve(root, process.env.PUFF_REPO)
       : join(root, 'demo/shop-api');
@@ -192,23 +283,17 @@ export async function createBackend(appDir: string, hooks: BackendHooks = {}): P
     return entry;
   };
 
+  const configFile = findConfigFile([root, appDir, process.cwd()]);
+  if (!configFile)
+    throw new Error('No Puff configuration found (puff.config.yaml or ~/.puff/config.yaml)');
+  userConfig = await loadConfig(configFile);
+  db = await connect();
   try {
-    const configFile = findConfigFile([root, appDir, process.cwd()]);
-    if (!configFile)
-      throw new Error('No Puff configuration found (puff.config.yaml or ~/.puff/config.yaml)');
-    userConfig = await loadConfig(configFile);
-    db = await connect();
     const entry = await startingProject();
     current = entry ? await open(entry) : undefined;
   } catch (err) {
-    const error = (err as Error).message;
-    console.error(`[puff] live backend unavailable, using mocks: ${error}`);
-    return {
-      ...mock,
-      async getBackendInfo(): Promise<BackendInfo> {
-        return { ...(await mock.getBackendInfo()), error };
-      },
-    };
+    await db.close().catch(() => {});
+    throw err;
   }
 
   const need = (): OpenProject => {
@@ -243,7 +328,7 @@ export async function createBackend(appDir: string, hooks: BackendHooks = {}): P
     emit({ type: 'project', projectId: entry.slug });
   };
 
-  return {
+  const api: Omit<PuffApi, 'onEvent'> = {
     // Everything not overridden below is a mock; the savings are real once `puff bench` has run.
     ...mock,
 
@@ -424,9 +509,6 @@ export async function createBackend(appDir: string, hooks: BackendHooks = {}): P
     async stop() {
       await current?.controller.stop();
     },
-    onEvent(cb) {
-      listeners.add(cb);
-      return () => listeners.delete(cb);
-    },
   };
+  return { api, harnesses: userConfig.harnesses };
 }

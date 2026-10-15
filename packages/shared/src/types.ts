@@ -237,6 +237,30 @@ export interface BackendInfo {
   error?: string;
   /** Live, but no project has been added yet: the app shows its welcome screen */
   noProject?: boolean;
+  /** The database is not reachable: the app shows its setup screen (see getSetupStatus) */
+  needsSetup?: boolean;
+}
+
+/** One agent CLI Puff can drive, and whether it is installed on this computer */
+export interface AgentCliStatus {
+  id: string;
+  command: string;
+  installed: boolean;
+  version?: string;
+  /** How to install it (and sign in), shown when it is missing */
+  installHint: string;
+}
+
+/** What the first-run setup screen shows */
+export interface SetupStatus {
+  databaseOk: boolean;
+  databaseUrl: string;
+  databaseError?: string;
+  /** missing = no docker command, stopped = Docker is installed but not running, ready = Puff can start the database */
+  docker: 'missing' | 'stopped' | 'ready';
+  agents: AgentCliStatus[];
+  /** Where Puff keeps its files (projects, settings) */
+  homePath: string;
 }
 
 export type ChatRole = 'user' | 'assistant' | 'system' | 'action' | 'approval';

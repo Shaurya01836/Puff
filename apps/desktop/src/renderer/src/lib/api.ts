@@ -11,4 +11,8 @@ declare global {
 /** True when running inside Electron with the real IPC bridge. */
 export const inElectron = typeof window !== 'undefined' && window.puff !== undefined;
 
-export const puff: PuffApi = window.puff ?? createMockApi();
+// In a plain browser, `?setup` previews the first-run setup screen (the database starts "down").
+const previewSetup =
+  typeof location !== 'undefined' && new URLSearchParams(location.search).has('setup');
+
+export const puff: PuffApi = window.puff ?? createMockApi({ databaseDown: previewSetup });

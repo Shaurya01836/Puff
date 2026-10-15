@@ -1,5 +1,6 @@
 // Parse one source file into definitions, calls and imports with tree-sitter (WASM, no native build).
 import { createRequire } from 'node:module';
+import { basename, join } from 'node:path';
 import Parser from 'web-tree-sitter';
 
 const resolveModulePath = createRequire(import.meta.url).resolve;
@@ -63,6 +64,19 @@ const WASM: Record<Lang, string> = {
   javascript: 'tree-sitter-wasms/out/tree-sitter-javascript.wasm',
 };
 
+let wasmDirectory: string | undefined;
+
+/**
+ * Load the grammar files from this folder instead of from the tree-sitter-wasms package. The installed
+ * app ships the three files it needs next to its resources and has no node_modules for that package.
+ */
+export function setWasmDirectory(dir: string | undefined): void {
+  wasmDirectory = dir;
+}
+
+const wasmPath = (lang: Lang): string =>
+  wasmDirectory ? join(wasmDirectory, basename(WASM[lang])) : resolveModulePath(WASM[lang]);
+
 interface Loaded {
   parser: Parser;
   query: Parser.Query;
@@ -77,7 +91,7 @@ async function load(lang: Lang): Promise<Loaded> {
   let entry = loaded.get(lang);
   if (!entry) {
     entry = (async () => {
-      const language = await Parser.Language.load(resolveModulePath(WASM[lang]));
+      const language = await Parser.Language.load(wasmPath(lang));
       const parser = new Parser();
       parser.setLanguage(language);
       return { parser, query: language.query(lang === 'javascript' ? QUERY_JS : QUERY) };

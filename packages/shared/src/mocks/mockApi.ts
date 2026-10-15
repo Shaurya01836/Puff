@@ -7,6 +7,7 @@ import type {
   ProjectSummary,
   PuffEvent,
   RepoInspection,
+  SetupStatus,
   Task,
   TaskStatus,
 } from '../types';
@@ -39,10 +40,39 @@ const clone = <T>(v: T): T => structuredClone(v);
 export interface MockApiOptions {
   /** Milliseconds between simulated events after `start()` (default 2500) */
   tickMs?: number;
+  /** Start with the database "down", so the setup screen shows (until startDatabase is pressed) */
+  databaseDown?: boolean;
 }
+
+const sampleSetup = (databaseOk: boolean): SetupStatus => ({
+  databaseOk,
+  databaseUrl: 'falkor://localhost:6379',
+  databaseError: databaseOk
+    ? undefined
+    : 'Could not connect to FalkorDB at falkor://localhost:6379.',
+  docker: 'ready',
+  agents: [
+    {
+      id: 'claude-code',
+      command: 'claude',
+      installed: true,
+      version: '2.1.0 (Claude Code)',
+      installHint: '',
+    },
+    {
+      id: 'codex',
+      command: 'codex',
+      installed: false,
+      installHint: 'npm install -g @openai/codex, then run `codex` once to sign in',
+    },
+    { id: 'opencode', command: 'opencode', installed: true, version: '1.4.3', installHint: '' },
+  ],
+  homePath: '~/.puff',
+});
 
 export function createMockApi(opts: MockApiOptions = {}): PuffApi {
   const tickMs = opts.tickMs ?? 2500;
+  let databaseUp = !opts.databaseDown;
   const tasks = clone(mockTasks);
   const feed = clone(mockMemoryEvents);
   const listeners = new Set<(e: PuffEvent) => void>();
@@ -178,7 +208,19 @@ export function createMockApi(opts: MockApiOptions = {}): PuffApi {
         projectId: projects.find((p) => p.active)?.id ?? MOCK_PROJECT_ID,
         projectName: projects.find((p) => p.active)?.name ?? 'shop-api',
         mockParts: ['everything'],
+        needsSetup: databaseUp ? undefined : true,
       };
+    },
+    async getSetupStatus() {
+      return sampleSetup(databaseUp);
+    },
+    async startDatabase() {
+      await new Promise((r) => setTimeout(r, 1500));
+      databaseUp = true;
+      return sampleSetup(true);
+    },
+    async retrySetup() {
+      return sampleSetup(databaseUp);
     },
     async listProjects() {
       return clone(projects);
