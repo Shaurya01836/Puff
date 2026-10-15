@@ -1,35 +1,91 @@
 @import 'tailwindcss';
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/jetbrains-mono';
+@import '@fontsource-variable/space-grotesk';
 
-/* Puff design tokens: dark "mission control", purple brand, one colour per agent. */
+/*
+ * Puff design tokens: "deep sea". Ink-dark surfaces, a violet brand, and cyan
+ * bioluminescence for anything that is memory. Agent colours are a validated
+ * categorical palette (OKLCH L 0.65-0.66, colourblind-safe on --color-surface).
+ * Status colours are reserved for state and always ship with an icon + label.
+ */
 @theme {
-  --color-bg: #0e0b1a;
-  --color-panel: #161226;
-  --color-panel-2: #1e1933;
-  --color-line: #2b2545;
-  --color-text: #ece8ff;
-  --color-muted: #9a92bf;
-  --color-puff: #a48bf5;
-  --color-puff-deep: #6a4bd4;
+  /* surfaces, darkest to lightest */
+  --color-abyss: #070a12;
+  --color-surface: #0d1322;
+  --color-surface-2: #121a2c;
+  --color-surface-3: #18223a;
+  --color-line: #1d2740;
+  --color-line-strong: #2a3756;
 
-  --color-claude: #ff9a3c;
-  --color-codex: #3ddc84;
-  --color-opencode: #4aa8ff;
+  /* ink */
+  --color-ink: #e7ecf6;
+  --color-ink-2: #a9b4cc;
+  --color-ink-3: #6b7894;
 
-  --color-ok: #3ddc84;
-  --color-warn: #ffc53d;
-  --color-fail: #ff5c7a;
+  /* brand + memory accent */
+  --color-brand: #8b7cf6;
+  --color-brand-soft: #b4a5ff;
+  --color-brand-deep: #5b45d6;
+  --color-memory: #2dd4e0;
 
-  --font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Cascadia Code', ui-monospace, monospace;
+  /* agents (validated categorical) */
+  --color-claude: #e16a3e;
+  --color-codex: #00aa95;
+  --color-opencode: #5b89f6;
 
-  --animate-bob: bob 2.4s ease-in-out infinite;
+  /* status (reserved) */
+  --color-good: #4ade80;
+  --color-warn: #f5b83d;
+  --color-bad: #f45d6d;
+  --color-info: #38bdf8;
+
+  --font-sans: 'Inter Variable', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Space Grotesk Variable', 'Inter Variable', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'Cascadia Code', ui-monospace, monospace;
+
+  --animate-bob: bob 2.6s ease-in-out infinite;
+  --animate-breathe: breathe 2.4s ease-in-out infinite;
+  --animate-spin-slow: spin 3.5s linear infinite;
+  --animate-fade-in: fade-in 0.35s ease-out both;
+  --animate-slide-in: slide-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+
   @keyframes bob {
     0%,
     100% {
-      transform: translateY(0);
+      transform: translateY(0) rotate(0deg);
     }
     50% {
-      transform: translateY(-6px);
+      transform: translateY(-5px) rotate(-2deg);
+    }
+  }
+  @keyframes breathe {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes slide-in {
+    from {
+      transform: translateX(24px);
+      opacity: 0;
+    }
+    to {
+      transform: none;
+      opacity: 1;
     }
   }
 }
@@ -42,17 +98,94 @@ body,
 
 body {
   margin: 0;
-  background: var(--color-bg);
-  color: var(--color-text);
+  background: var(--color-abyss);
+  color: var(--color-ink);
   font-family: var(--font-sans);
+  font-feature-settings: 'cv11', 'ss01';
   -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-brand) 45%, transparent);
 }
 
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
+::-webkit-scrollbar-track {
+  background: transparent;
+}
 ::-webkit-scrollbar-thumb {
-  background: var(--color-line);
+  background: var(--color-line-strong);
   border-radius: 8px;
+}
+
+@utility panel {
+  background: color-mix(in oklab, var(--color-surface) 92%, transparent);
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.03),
+    0 8px 24px -12px rgb(0 0 0 / 0.6);
+}
+
+@utility text-gradient {
+  background: linear-gradient(100deg, var(--color-brand-soft), var(--color-memory));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* The "sea floor" behind the memory graph: soft glow + faint dot grid. */
+@utility sea {
+  background:
+    radial-gradient(1200px 600px at 30% 20%, rgb(139 124 246 / 0.1), transparent 60%),
+    radial-gradient(900px 500px at 80% 90%, rgb(45 212 224 / 0.07), transparent 60%),
+    radial-gradient(circle at 1px 1px, rgb(169 180 204 / 0.07) 1px, transparent 0) 0 0 / 22px 22px,
+    var(--color-surface);
+}
+
+/* Animated border for cards whose agent is working right now. */
+@utility live-border {
+  position: relative;
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: conic-gradient(
+      from var(--live-angle, 0deg),
+      transparent 0 60%,
+      var(--live-color, var(--color-memory)) 80%,
+      transparent 100%
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: live-spin 2.8s linear infinite;
+    pointer-events: none;
+  }
+}
+
+@property --live-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes live-spin {
+  to {
+    --live-angle: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before {
+    animation: none !important;
+    transition: none !important;
+  }
 }

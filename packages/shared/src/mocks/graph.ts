@@ -17,6 +17,7 @@ const files: Record<string, string[]> = {
   'src/users/users.ts': ['findUser', 'createUser'],
   'src/lib/logger.ts': ['log'],
   'src/lib/db.ts': ['query'],
+  'test/auth.spec.ts': [],
 };
 
 const sym = (file: string, name: string) => `${file}::${name}`;
@@ -90,6 +91,8 @@ const imports: [string, string][] = [
   ['src/cart/cart.ts', 'src/products/products.ts'],
   ['src/products/products.ts', 'src/lib/db.ts'],
   ['src/users/users.ts', 'src/lib/db.ts'],
+  ['test/auth.spec.ts', 'src/auth/login.ts'],
+  ['test/auth.spec.ts', 'src/auth/tokens.ts'],
 ];
 
 const memory: GraphNode[] = [
@@ -172,6 +175,7 @@ function buildGraph(): GraphData {
   for (const [path, names] of Object.entries(files)) {
     nodes.push({ id: path, label: path.split('/').pop() ?? path, kind: 'File', props: { path } });
     edges.push({ source: path, target: 'tech:typescript', type: 'USES' });
+    if (path.startsWith('test/')) edges.push({ source: path, target: 'tech:jest', type: 'USES' });
     if (path.startsWith('src/routes') || path.startsWith('src/middleware')) {
       edges.push({ source: path, target: 'tech:express', type: 'USES' });
     }

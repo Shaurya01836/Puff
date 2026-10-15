@@ -1,36 +1,98 @@
-import type { AgentName, TaskStatus } from '@puff/shared';
+import type { AgentName, MemoryEventType, TaskStatus } from '@puff/shared';
 
-export const AGENT_META: Record<AgentName, { label: string; color: string; text: string }> = {
-  'claude-code': { label: 'Claude Code', color: '#ff9a3c', text: 'text-claude' },
-  codex: { label: 'Codex', color: '#3ddc84', text: 'text-codex' },
-  opencode: { label: 'OpenCode', color: '#4aa8ff', text: 'text-opencode' },
+/** Validated categorical palette (see styles.css). Keep in sync with --color-claude/codex/opencode. */
+export const AGENT_META: Record<
+  AgentName,
+  { label: string; short: string; color: string; text: string; tagline: string }
+> = {
+  'claude-code': {
+    label: 'Claude Code',
+    short: 'CC',
+    color: '#e16a3e',
+    text: 'text-claude',
+    tagline: 'Plans, reasons and verifies',
+  },
+  codex: {
+    label: 'Codex',
+    short: 'CX',
+    color: '#00aa95',
+    text: 'text-codex',
+    tagline: 'Fast implementation and refactors',
+  },
+  opencode: {
+    label: 'OpenCode',
+    short: 'OC',
+    color: '#5b89f6',
+    text: 'text-opencode',
+    tagline: 'Cheap edits, docs and boilerplate',
+  },
 };
 
-export const STATUS_META: Record<TaskStatus, { label: string; dot: string }> = {
-  planned: { label: 'Planned', dot: 'bg-muted' },
-  ready: { label: 'Ready', dot: 'bg-puff' },
-  running: { label: 'Running', dot: 'bg-warn animate-pulse' },
-  verifying: { label: 'Verifying', dot: 'bg-opencode animate-pulse' },
-  failed: { label: 'Failed', dot: 'bg-fail' },
-  retrying: { label: 'Retrying', dot: 'bg-warn' },
-  escalated: { label: 'Escalated', dot: 'bg-claude' },
-  done: { label: 'Done', dot: 'bg-ok' },
+export type StatusTone = 'neutral' | 'brand' | 'info' | 'good' | 'warn' | 'bad';
+
+export const TONE_COLOR: Record<StatusTone, string> = {
+  neutral: '#6b7894',
+  brand: '#8b7cf6',
+  info: '#38bdf8',
+  good: '#4ade80',
+  warn: '#f5b83d',
+  bad: '#f45d6d',
 };
 
-/** Graph node colours by label, shared by the memory graph and the Why view. */
+export const STATUS_META: Record<TaskStatus, { label: string; tone: StatusTone; live?: boolean }> =
+  {
+    planned: { label: 'Planned', tone: 'neutral' },
+    ready: { label: 'Ready', tone: 'brand' },
+    running: { label: 'Running', tone: 'info', live: true },
+    verifying: { label: 'Verifying', tone: 'brand', live: true },
+    failed: { label: 'Failed', tone: 'bad' },
+    retrying: { label: 'Retrying', tone: 'warn', live: true },
+    escalated: { label: 'Escalated', tone: 'warn' },
+    done: { label: 'Done', tone: 'good' },
+  };
+
+/** Graph node groups: what the filter chips toggle. */
+export const NODE_GROUPS: Record<string, 'code' | 'work' | 'memory'> = {
+  File: 'code',
+  Symbol: 'code',
+  Technology: 'code',
+  Task: 'work',
+  Session: 'work',
+  Agent: 'work',
+  Capability: 'work',
+  Failure: 'memory',
+  Solution: 'memory',
+  Decision: 'memory',
+  Procedure: 'memory',
+  ContextPack: 'memory',
+  Handoff: 'memory',
+};
+
+/** Graph node colours by label. Memory kinds reuse the meaning of the status colours. */
 export const NODE_COLORS: Record<string, string> = {
-  File: '#5b5480',
-  Symbol: '#a48bf5',
-  Task: '#ece8ff',
-  Session: '#7d74a8',
-  Agent: '#ff9a3c',
-  Capability: '#c48bff',
-  Technology: '#4aa8ff',
-  Failure: '#ff5c7a',
-  Solution: '#3ddc84',
-  Decision: '#ffc53d',
-  Procedure: '#4dd4c6',
-  ContextPack: '#9a92bf',
+  File: '#3a4766',
+  Symbol: '#8b7cf6',
+  Technology: '#6b7894',
+  Task: '#e7ecf6',
+  Session: '#4b5878',
+  Agent: '#b4a5ff',
+  Capability: '#7c6fd0',
+  Failure: '#f45d6d',
+  Solution: '#4ade80',
+  Decision: '#f5b83d',
+  Procedure: '#2dd4e0',
+  ContextPack: '#2dd4e0',
+  Handoff: '#2dd4e0',
+};
+
+export const MEMORY_EVENT_META: Record<MemoryEventType, { label: string; color: string }> = {
+  failure_recorded: { label: 'Failure recorded', color: '#f45d6d' },
+  solution_recorded: { label: 'Fix recorded', color: '#4ade80' },
+  decision_recorded: { label: 'Decision', color: '#f5b83d' },
+  decision_superseded: { label: 'Decision superseded', color: '#f5b83d' },
+  memory_stale: { label: 'Memory marked stale', color: '#a9b4cc' },
+  handoff: { label: 'Handoff', color: '#b4a5ff' },
+  context_compiled: { label: 'Context compiled', color: '#2dd4e0' },
 };
 
 export const formatTokens = (n: number): string =>

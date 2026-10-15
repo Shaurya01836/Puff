@@ -1,9 +1,58 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import ForceGraph2D from 'react-force-graph-2d';
-import type { GraphData, GraphNode } from '@puff/shared';
-import { Panel, SectionTitle } from '@/components/ui';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ForceGraph2D, { type ForceGraphMethods, type NodeObject } from 'react-force-graph-2d';
+import { Crosshair, Maximize2, X } from 'lucide-react';
+import type { AgentName, GraphData, GraphEdge, GraphNode } from '@puff/shared';
+import { EventIcon, Panel, SectionTitle } from '@/components/ui';
+import { puff } from '@/lib/api';
+import { cn } from '@/lib/cn';
 import { useMemoryFeed } from '@/lib/hooks';
-import { NODE_COLORS, timeAgo } from '@/lib/theme';
+import { AGENT_META, MEMORY_EVENT_META, NODE_COLORS, NODE_GROUPS, timeAgo } from '@/lib/theme';
+
+type Group = 'code' | 'work' | 'memory';
+type GNode = NodeObject<GraphNode>;
+
+const GROUPS: { id: Group; label: string; color: string }[] = [
+  { id: 'code', label: 'Code', color: '#8b7cf6' },
+  { id: 'work', label: 'Work', color: '#e7ecf6' },
+  { id: 'memory', label: 'Memory', color: '#2dd4e0' },
+];
+
+const MEMORY_LINKS = new Set([
+  'IN',
+  'FIXED_BY',
+  'ABOUT',
+  'HIT',
+  'SUPERSEDES',
+  'APPLIES_TO',
+  'INCLUDED',
+]);
+const RADIUS: Record<string, number> = {
+  File: 5,
+  Symbol: 3.6,
+  Technology: 4,
+  Task: 4.6,
+  Session: 3,
+  Agent: 6.5,
+  Capability: 3,
+  Failure: 5.5,
+  Solution: 4.2,
+  Decision: 4.2,
+  Procedure: 3.8,
+};
+
+/** force-graph renders tooltips as HTML; labels can come from real repos, so escape them. */
+const escapeHtml = (s: string): string => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+const idOf = (v: unknown): string =>
+  typeof v === 'object' && v !== null ? String((v as { id: string }).id) : String(v);
+
+function nodeColor(n: GraphNode): string {
+  if (n.kind === 'Agent') {
+    const agent = n.id.replace('agent:', '') as AgentName;
+    return AGENT_META[agent]?.color ?? NODE_COLORS.Agent!;
+  }
+  return NODE_COLORS[n.kind] ?? '#6b7894';
+}
 
 function useSize<T extends HTMLElement>() {
   const ref = useRef<T>(null);
@@ -21,70 +70,327 @@ function useSize<T extends HTMLElement>() {
 
 export function MemoryGraph({ projectId, graph }: { projectId: string; graph?: GraphData }) {
   const [ref, size] = useSize<HTMLDivElement>();
+  const fg = useRef<ForceGraphMethods<GNode, GraphEdge> | undefined>(undefined);
+  const fitted = useRef(false);
+  const [groups, setGroups] = useState<Record<Group, boolean>>({
+    code: true,
+    work: true,
+    memory: true,
+  });
+  const [hover, setHover] = useState<string>();
   const [selected, setSelected] = useState<GraphNode>();
-  const feed = useMemoryFeed(projectId, 30);
+  const [focus, setFocus] = useState<{ id: string; label: string; data: GraphData }>();
+  const feed = useMemoryFeed(projectId, 40);
 
-  // force-graph mutates link objects, so hand it copies.
-  const data = useMemo(
-    () => ({
-      nodes: (graph?.nodes ?? []).map((n) => ({ ...n })),
-      links: (graph?.edges ?? []).map((e) => ({ ...e })),
-    }),
-    [graph],
+  const source = focus?.data ?? graph;
+
+  // force-graph mutates nodes/links (adds x/y, swaps ids for objects), so hand it copies.
+  const data = useMemo(() => {
+    const nodes = (source?.nodes ?? [])
+      .filter((n) => groups[NODE_GROUPS[n.kind] ?? 'code'])
+      .map((n) => ({ ...n }));
+    const keep = new Set(nodes.map((n) => n.id));
+    const links = (source?.edges ?? [])
+      .filter((e) => keep.has(e.source) && keep.has(e.target))
+      .map((e) => ({ ...e }));
+    return { nodes, links };
+  }, [source, groups]);
+
+  const neighbours = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const e of source?.edges ?? []) {
+      if (!map.has(e.source)) map.set(e.source, new Set());
+      if (!map.has(e.target)) map.set(e.target, new Set());
+      map.get(e.source)!.add(e.target);
+      map.get(e.target)!.add(e.source);
+    }
+    return map;
+  }, [source]);
+
+  const stats = useMemo(() => {
+    const count = (kinds: string[]) =>
+      graph?.nodes.filter((n) => kinds.includes(n.kind)).length ?? 0;
+    return [
+      { label: 'Files', value: count(['File']) },
+      { label: 'Symbols', value: count(['Symbol']) },
+      { label: 'Memories', value: count(['Failure', 'Solution', 'Decision', 'Procedure']) },
+      { label: 'Tasks', value: count(['Task']) },
+    ];
+  }, [graph]);
+
+  const groupCounts = useMemo(() => {
+    const c: Record<Group, number> = { code: 0, work: 0, memory: 0 };
+    for (const n of source?.nodes ?? []) c[NODE_GROUPS[n.kind] ?? 'code']++;
+    return c;
+  }, [source]);
+
+  // Fit once the layout settles; the timer covers remounts where the engine stops early.
+  useEffect(() => {
+    fitted.current = false;
+    const t = setTimeout(() => {
+      fg.current?.zoomToFit(500, 70);
+      fitted.current = true;
+    }, 1600);
+    return () => clearTimeout(t);
+  }, [source, groups, size.width, size.height]);
+
+  const active = hover ?? selected?.id;
+  const isLit = useCallback(
+    (id: string) => !active || id === active || neighbours.get(active)?.has(id) === true,
+    [active, neighbours],
   );
-  const kinds = useMemo(() => [...new Set(data.nodes.map((n) => n.kind))], [data]);
+
+  const drawNode = useCallback(
+    (node: GNode, ctx: CanvasRenderingContext2D, scale: number) => {
+      const x = node.x ?? 0;
+      const y = node.y ?? 0;
+      const r = RADIUS[node.kind] ?? 3.5;
+      const color = nodeColor(node);
+      const lit = isLit(node.id);
+      const group = NODE_GROUPS[node.kind];
+
+      ctx.save();
+      ctx.globalAlpha = lit ? 1 : 0.12;
+      if (group === 'memory' || node.kind === 'Agent') {
+        ctx.shadowColor = color;
+        ctx.shadowBlur = node.kind === 'Failure' ? 18 : 10;
+      }
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      if (node.kind === 'File') {
+        ctx.roundRect(x - r, y - r, r * 2, r * 2, 2);
+      } else {
+        ctx.arc(x, y, r, 0, 2 * Math.PI);
+      }
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      if (node.id === selected?.id || node.highlight) {
+        ctx.strokeStyle = '#e7ecf6';
+        ctx.lineWidth = 1.5 / scale;
+        ctx.beginPath();
+        ctx.arc(x, y, r + 3, 0, 2 * Math.PI);
+        ctx.stroke();
+      }
+
+      const showLabel =
+        scale > 2.4 ||
+        (lit && active !== undefined) ||
+        (group === 'memory' && scale > 1.6) ||
+        node.kind === 'Failure' ||
+        node.kind === 'Agent';
+      if (showLabel) {
+        const size = Math.max(10 / scale, 1.6);
+        ctx.font = `500 ${size}px 'Inter Variable', sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = group === 'memory' ? color : '#a9b4cc';
+        const label = node.label.length > 28 ? `${node.label.slice(0, 27)}…` : node.label;
+        ctx.fillText(label, x, y + r + 2);
+      }
+      ctx.restore();
+    },
+    [isLit, selected, active],
+  );
+
+  const focusOn = async (node: GraphNode) => {
+    const data = await puff.getGraph(projectId, node.id, 2);
+    setFocus({ id: node.id, label: node.label, data });
+    setSelected(node);
+  };
 
   return (
-    <div className="grid h-full grid-cols-[1fr_320px] gap-4 p-4">
-      <Panel className="relative min-h-0 overflow-hidden">
+    <div className="grid h-full grid-cols-[minmax(0,1fr)_340px] gap-4 p-4">
+      <div className="sea relative min-h-0 overflow-hidden rounded-[14px] border border-line">
         <div ref={ref} className="absolute inset-0">
           {size.width > 0 && (
-            <ForceGraph2D
+            <ForceGraph2D<GraphNode, GraphEdge>
+              ref={fg}
               width={size.width}
               height={size.height}
               graphData={data}
-              backgroundColor="#161226"
+              backgroundColor="rgba(0,0,0,0)"
               nodeId="id"
-              nodeLabel={(n) => `${n.kind}: ${n.label}`}
-              nodeColor={(n) => NODE_COLORS[n.kind] ?? '#9a92bf'}
-              nodeVal={(n) => (n.kind === 'File' ? 3 : n.kind === 'Failure' ? 4 : 2)}
-              linkColor={() => 'rgba(154,146,191,0.25)'}
-              linkDirectionalArrowLength={3}
+              nodeLabel={(n) => `<b>${n.kind}</b> · ${escapeHtml(n.label)}`}
+              nodeCanvasObject={drawNode}
+              nodePointerAreaPaint={(n, color, ctx) => {
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(n.x ?? 0, n.y ?? 0, (RADIUS[n.kind] ?? 3.5) + 3, 0, 2 * Math.PI);
+                ctx.fill();
+              }}
+              linkColor={(l) => {
+                const lit = !active || idOf(l.source) === active || idOf(l.target) === active;
+                if (!lit) return 'rgba(107,120,148,0.05)';
+                if (MEMORY_LINKS.has(l.type)) return 'rgba(45,212,224,0.5)';
+                if (l.type === 'CALLS') return 'rgba(139,124,246,0.4)';
+                return 'rgba(107,120,148,0.22)';
+              }}
+              linkWidth={(l) => (MEMORY_LINKS.has(l.type) ? 1.4 : 0.8)}
+              linkDirectionalArrowLength={(l) => (l.type === 'CALLS' ? 3 : 0)}
               linkDirectionalArrowRelPos={1}
-              onNodeClick={(n) => setSelected(n as GraphNode)}
-              cooldownTicks={120}
+              linkDirectionalParticles={(l) => (MEMORY_LINKS.has(l.type) ? 2 : 0)}
+              linkDirectionalParticleWidth={2}
+              linkDirectionalParticleSpeed={0.005}
+              linkDirectionalParticleColor={() => '#2dd4e0'}
+              onNodeHover={(n) => setHover(n ? n.id : undefined)}
+              onNodeClick={(n) => setSelected(n)}
+              onBackgroundClick={() => setSelected(undefined)}
+              cooldownTicks={140}
+              d3VelocityDecay={0.3}
+              onEngineStop={() => {
+                if (!fitted.current) {
+                  fg.current?.zoomToFit(500, 70);
+                  fitted.current = true;
+                }
+              }}
             />
           )}
         </div>
-        <div className="pointer-events-none absolute top-3 left-3 flex flex-wrap gap-2">
-          {kinds.map((k) => (
-            <span
-              key={k}
-              className="inline-flex items-center gap-1.5 rounded-full bg-bg/80 px-2 py-0.5 text-[11px] text-muted"
+
+        {/* top-left: hero numbers */}
+        <div className="pointer-events-none absolute top-4 left-4 flex gap-2">
+          {stats.map((s) => (
+            <div
+              key={s.label}
+              className="rounded-xl border border-line bg-abyss/70 px-3 py-2 backdrop-blur"
             >
-              <span className="size-2 rounded-full" style={{ background: NODE_COLORS[k] }} />
+              <div className="font-display text-lg leading-none font-semibold tabular-nums">
+                {s.value}
+              </div>
+              <div className="mt-1 text-[10px] tracking-wider text-ink-3 uppercase">{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* top-right: layer toggles */}
+        <div className="absolute top-4 right-4 flex items-center gap-1.5 rounded-xl border border-line bg-abyss/70 p-1 backdrop-blur">
+          {GROUPS.map((g) => (
+            <button
+              key={g.id}
+              onClick={() => setGroups((s) => ({ ...s, [g.id]: !s[g.id] }))}
+              aria-pressed={groups[g.id]}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs transition-colors',
+                groups[g.id] ? 'bg-surface-3 text-ink' : 'text-ink-3 hover:text-ink-2',
+              )}
+            >
+              <span
+                className="size-2 rounded-full"
+                style={{
+                  background: groups[g.id] ? g.color : 'transparent',
+                  boxShadow: `inset 0 0 0 1px ${g.color}`,
+                }}
+              />
+              {g.label}
+              <span className="text-ink-3 tabular-nums">{groupCounts[g.id]}</span>
+            </button>
+          ))}
+          <button
+            onClick={() => fg.current?.zoomToFit(400, 70)}
+            className="ml-1 rounded-lg p-1.5 text-ink-3 hover:bg-surface-3 hover:text-ink"
+            title="Fit to view"
+          >
+            <Maximize2 className="size-3.5" />
+          </button>
+        </div>
+
+        {focus && (
+          <div className="absolute top-20 left-4 inline-flex items-center gap-2 rounded-lg border border-brand/30 bg-brand/10 px-3 py-1.5 text-xs text-brand-soft backdrop-blur">
+            <Crosshair className="size-3.5" />
+            Neighbourhood of <b className="font-medium text-ink">{focus.label}</b>
+            <button
+              onClick={() => setFocus(undefined)}
+              className="ml-1 text-ink-3 hover:text-ink"
+              title="Show all"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* bottom-left: legend */}
+        <div className="pointer-events-none absolute bottom-4 left-4 flex max-w-[60%] flex-wrap gap-x-3 gap-y-1.5 rounded-xl border border-line bg-abyss/70 px-3 py-2 backdrop-blur">
+          {[
+            'Symbol',
+            'File',
+            'Task',
+            'Session',
+            'Failure',
+            'Solution',
+            'Decision',
+            'Procedure',
+          ].map((k) => (
+            <span key={k} className="inline-flex items-center gap-1.5 text-[11px] text-ink-2">
+              <span
+                className={cn('size-2', k === 'File' ? 'rounded-[2px]' : 'rounded-full')}
+                style={{ background: NODE_COLORS[k] }}
+              />
               {k}
             </span>
           ))}
         </div>
+
+        {/* bottom-right: inspector */}
         {selected && (
-          <div className="absolute right-3 bottom-3 w-72 rounded-lg border border-line bg-bg/95 p-3 text-sm">
-            <div className="text-[11px] text-muted uppercase">{selected.kind}</div>
-            <div className="font-medium">{selected.label}</div>
-            <div className="mt-1 font-mono text-[11px] break-all text-muted">{selected.id}</div>
+          <div className="absolute right-4 bottom-4 w-80 animate-fade-in rounded-xl border border-line-strong bg-abyss/90 p-4 backdrop-blur">
+            <div className="flex items-center justify-between">
+              <span
+                className="rounded-md px-2 py-0.5 text-[11px] font-medium"
+                style={{
+                  color: nodeColor(selected),
+                  background: `color-mix(in oklab, ${nodeColor(selected)} 14%, transparent)`,
+                }}
+              >
+                {selected.kind}
+              </span>
+              <button onClick={() => setSelected(undefined)} className="text-ink-3 hover:text-ink">
+                <X className="size-4" />
+              </button>
+            </div>
+            <div className="mt-2 text-sm font-medium">{selected.label}</div>
+            <div className="mt-1 font-mono text-[11px] break-all text-ink-3">{selected.id}</div>
+            <div className="mt-3 flex items-center justify-between text-xs text-ink-3">
+              <span>{neighbours.get(selected.id)?.size ?? 0} connections</span>
+              <button
+                onClick={() => void focusOn(selected)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-surface-3 px-2.5 py-1 text-ink hover:bg-line-strong"
+              >
+                <Crosshair className="size-3.5" />
+                Focus 2 hops
+              </button>
+            </div>
           </div>
         )}
-      </Panel>
+      </div>
 
       <Panel className="flex min-h-0 flex-col p-4">
-        <SectionTitle>Memory feed</SectionTitle>
-        <ol className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
+        <SectionTitle
+          right={
+            <span className="inline-flex items-center gap-1.5 text-[11px] text-memory">
+              <span className="size-1.5 animate-breathe rounded-full bg-memory" />
+              live
+            </span>
+          }
+        >
+          Memory feed
+        </SectionTitle>
+        <ol className="-mr-2 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-2">
           {feed.map((e) => (
-            <li key={e.id} className="border-l-2 border-line pl-3">
-              <div className="text-[11px] text-muted">
-                {e.type.replaceAll('_', ' ')} · {timeAgo(e.at)}
+            <li
+              key={e.id}
+              className="flex animate-fade-in gap-3 rounded-lg p-2 transition-colors hover:bg-surface-2"
+            >
+              <EventIcon type={e.type} />
+              <div className="min-w-0">
+                <div className="flex items-baseline gap-2 text-[11px]">
+                  <span className="font-medium" style={{ color: MEMORY_EVENT_META[e.type].color }}>
+                    {MEMORY_EVENT_META[e.type].label}
+                  </span>
+                  <span className="text-ink-3">{timeAgo(e.at)}</span>
+                </div>
+                <div className="text-[13px] leading-snug text-ink-2">{e.text}</div>
               </div>
-              <div className="text-sm">{e.text}</div>
             </li>
           ))}
         </ol>
