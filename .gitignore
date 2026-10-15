@@ -18,3 +18,7 @@ Thumbs.db
 !.vscode/extensions.json
 .idea/
 *.log
+
+# Downloaded agent skills (skills.sh)
+.agents/
+skills-lock.json
