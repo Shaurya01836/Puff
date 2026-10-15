@@ -209,10 +209,10 @@ WHEN DONE: final block <puff-report>{"decisions":[...],"notes":"..."}</puff-repo
 | 🔁 | Core loop: plan → implement → verify → record → retry → escalate | 🔨 |
 | 🧭 | Routing by strength + learned success rate | 🔨 |
 | 🚦 | Graph-based parallel scheduling (overlap-aware) | 🔨 |
-| 💡 | **Why?** view: graph path for every choice | 🔨 |
-| ♻️ | Memory correctness: stale-on-change, `SUPERSEDES` for decisions | 🔨 |
-| 🔌 | Puff MCP server | 🔨 |
-| 📊 | Benchmark: tokens, files read, first-try pass rate, with vs without Puff | 🔨 |
+| 💡 | **Why?** view: graph path for every choice | ✅ |
+| ♻️ | Memory correctness: stale-on-change, `SUPERSEDES` for decisions | ✅ |
+| 🔌 | Puff MCP server | ✅ |
+| 📊 | Benchmark: tokens, files read, first-try pass rate, with vs without Puff | ✅ |
 | ✨ | Stretch: PageRank-based complexity, vector search over failures, generic CLI adapter | 🔭 |
 
 ## Roadmap
@@ -227,7 +227,7 @@ Puff is built in **phases**. Each phase ends with a checkpoint: a working build 
 | **P3 Three agents, one loop** ✅ | Claude Code + Codex + OpenCode adapters, worktrees, verify, retry | Session 2 avoids session 1's mistake |
 | **P4 Team coordination** ✅ | Goal-to-tasks planner, overlap-aware parallel runs, Team timeline, New task dialog | 3 agents in parallel, one waits on overlap |
 | **P5 Correctness + Why** ✅ | Stale flags per function, supersede, confirm, Why view, MCP server | Editing code marks memory stale |
-| **P6 Benchmark** | Benchmark runner, savings screen | Real numbers on screen |
+| **P6 Benchmark** ✅ | Benchmark runner, savings screen | Real numbers on screen |
 | **P7 Stretch** | PageRank, vector search, generic adapter, Electron packaging | Each one ships independently |
 
 Details: [docs/ARCHITECTURE.md → Build phases](docs/ARCHITECTURE.md#build-phases).
@@ -236,7 +236,7 @@ Details: [docs/ARCHITECTURE.md → Build phases](docs/ARCHITECTURE.md#build-phas
 
 ## Quick start
 
-> 🚧 Puff is being built during Graph Hacks (15–18 Oct 2026). **Phases P0 to P5 are in:** the code graph, shared memory (failures tied to the function they happened in, fixes, decisions, procedures, handoffs), the context compiler with its "why" trail, real agents, **and team coordination**. Claude Code, Codex and OpenCode run tasks in isolated git worktrees, Puff verifies with the project's own tests, records what went wrong, retries with the lesson and escalates. Give it a goal and a planner agent splits it into tasks; independent tasks run in parallel and a task that touches the same code as one already running waits. Tasks that were really run by agents were verified on the demo repo (OpenCode and Codex, both merged with tests passing; a real OpenCode planner turned a goal into three linked tasks). Memory stays correct: editing a function marks what was learned about *that function* "possibly outdated" (not the whole file), a replaced decision is kept but superseded, and a Puff MCP server lets Claude Code and OpenCode read and write memory mid-task. Not yet: the benchmark numbers (P6), and the sample data below is seeded, not real.
+> 🚧 Puff is being built during Graph Hacks (15–18 Oct 2026). **Phases P0 to P6 are in:** the code graph, shared memory (failures tied to the function they happened in, fixes, decisions, procedures, handoffs), the context compiler with its "why" trail, real agents, **and team coordination**. Claude Code, Codex and OpenCode run tasks in isolated git worktrees, Puff verifies with the project's own tests, records what went wrong, retries with the lesson and escalates. Give it a goal and a planner agent splits it into tasks; independent tasks run in parallel and a task that touches the same code as one already running waits. Tasks that were really run by agents were verified on the demo repo (OpenCode and Codex, both merged with tests passing; a real OpenCode planner turned a goal into three linked tasks). Memory stays correct: editing a function marks what was learned about *that function* "possibly outdated" (not the whole file), a replaced decision is kept but superseded, and a Puff MCP server lets Claude Code and OpenCode read and write memory mid-task. A first benchmark has run (see [Benchmark](#benchmark)); the sample data in the quick start below is seeded, not real.
 
 **Prerequisites:** Node 22.12+, Docker (or [falkordblite](docs/ARCHITECTURE.md#option-b-no-docker-falkordblite)), git. Agent CLIs (`claude`, `codex`, `opencode`) are needed from phase P3.
 
@@ -365,10 +365,27 @@ Setup, configuration and deployment details: **[docs/ARCHITECTURE.md](docs/ARCHI
 
 ## Benchmark
 
-Same tasks, same models, a fresh worktree per run. **Arm A** is the plain harness. **Arm B** is the same harness with Puff context.
+Same agent and model, the same four tasks, a fresh copy of the demo repo for every run, one attempt each. **Without Puff** the agent gets the task alone; **with Puff** it also gets the target code, its callers, and what the team learned about that code. A run passes only if the agent changed files and the whole test suite plus a hidden acceptance spec pass. 16 real runs on OpenCode (its default free model), 2 per task and arm.
 
-| Metric | Without Puff | With Puff | Δ |
+| Metric (average per run) | Without Puff | With Puff | Change |
 |---|---|---|---|
+| Tokens (input + output) | 302,838 | 212,725 | **-30%** |
+| Files read | 9.8 | 10.3 | +5% (no reduction) |
+| First-try pass rate | 8/8 | 8/8 | no difference |
+| Wall time (final attempt) | 293 s | 166 s | -43% (noisy, see below) |
+
+| Task | Without Puff | With Puff | Change |
+|---|---|---|---|
+| `cart-summary` | 359,641 | 176,954 | -51% |
+| `token-expiry` (control, no lesson in memory) | 347,534 | 218,087 | -37% |
+| `cart-bulk-add` | 370,315 | 285,454 | -23% |
+| `failed-login-reason` | 133,861 | 170,407 | **+27%** |
+
+**What this does and does not show.** Puff used about 30% fewer tokens on average, but it is a small sample: the same arm varied by up to 2x between runs, and in two of the four tasks the ranges of the two arms overlap. The saving also appeared on the control task, where nothing was remembered, so it cannot be credited to memory; it more likely comes from the target code and callers in the prompt, but files read did not go down, so we cannot say why. **No agent fell into any trap in either arm**, so every run passed and this benchmark does **not** show Puff preventing repeated mistakes. That claim rests on the recorded demo, not on these numbers. Wall time covers only the final attempt of each run, on a free model whose speed varies by the hour, so it should not be read closely.
+
+Method, limits and how to reproduce: **[docs/BENCHMARK.md](docs/BENCHMARK.md)**. Raw results: [`bench/results.json`](bench/results.json).
+
+---|---|---|---|
 | Tokens (in + out) | — | — | — |
 | Files read | — | — | — |
 | First-try pass rate | — | — | — |

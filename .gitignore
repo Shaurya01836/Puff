@@ -9,7 +9,6 @@ coverage/
 
 # Puff runtime
 .puff/
-bench/results*.json
 puff-mcp.json
 
 # OS / editors

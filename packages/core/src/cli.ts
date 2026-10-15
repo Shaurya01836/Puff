@@ -24,6 +24,7 @@ import { finishSession, listSessions, startSession } from './memory/sessions';
 import { createTask, listTasks } from './memory/tasks';
 import { findSymbols, impactOf, resolveSymbols } from './queries/code';
 import { getMemoryFeed, getTeamTimeline, getWhy } from './queries/explain';
+import { hotspots, similarFailures } from './queries/insights';
 import { clearMemory, seedDemoMemory } from './seed/demo';
 import { createAdapters } from './agents/adapters';
 import { setupDemoWorkspace } from './git/demo';
@@ -171,6 +172,28 @@ program
       const rows = await impactOf(graph, id!);
       console.log(`Changing ${id} may affect ${rows.length} file(s):`);
       for (const r of rows) console.log(`  ${r.file}\n    ← ${r.callers.join(', ')}`);
+    });
+  });
+
+program
+  .command('hotspots')
+  .description('the most load-bearing code: PageRank over the call graph, with the memory on each')
+  .option('--top <n>', 'how many symbols to show', '10')
+  .argument(...repoArg)
+  .action(async (repo: string | undefined, o: { top: string }) => {
+    await withProject(repo, async ({ graph }) => {
+      const rows = await hotspots(graph, Number(o.top));
+      if (!rows.length) return console.log('No calls indexed yet: run `puff index` first.');
+      for (const r of rows) {
+        const memory = [
+          `${r.failures} failure${r.failures === 1 ? '' : 's'}`,
+          r.staleFailures ? `${r.staleFailures} possibly outdated` : null,
+          `${r.decisions} decision${r.decisions === 1 ? '' : 's'}`,
+        ]
+          .filter(Boolean)
+          .join(', ');
+        console.log(`${r.score.toFixed(4)}  ${r.id}\n        ${memory}`);
+      }
     });
   });
 
@@ -335,6 +358,22 @@ session
 // ---------------------------------------------------------------------------------------------
 
 const failure = program.command('failure').description('record failures, tied to code');
+
+failure
+  .command('similar')
+  .description('past failures worded like this task or message, wherever they happened')
+  .argument('<text>', 'what the task or the failure is about (quote it)')
+  .argument(...repoArg)
+  .action(async (text: string, repo?: string) => {
+    await withProject(repo, async ({ graph }) => {
+      const rows = await similarFailures(graph, text);
+      if (!rows.length) return console.log('No similar failures.');
+      for (const r of rows) {
+        const flag = r.stale ? ' (possibly outdated)' : '';
+        console.log(`${r.score.toFixed(2)}  ${r.symbol}${flag}\n        ${r.message}`);
+      }
+    });
+  });
 
 failure
   .command('add')
@@ -642,6 +681,73 @@ program
       printRun(results);
     });
   });
+
+program
+  .command('bench')
+  .description(
+    'benchmark one agent on the demo tasks with and without Puff (spends real tokens); writes bench/results.json',
+  )
+  .option('--agent <agent>', 'claude-code | codex | opencode', 'opencode')
+  .option('--runs <n>', 'runs per task and arm', '1')
+  .option('--task <ids>', 'comma-separated task ids (default: all)')
+  .option('--arms <arms>', 'plain, puff or both', 'plain,puff')
+  .option('--source <dir>', 'demo project to copy', 'demo/shop-api')
+  .option('--out <file>', 'where to write the results', 'bench/results.json')
+  .option('--keep', 'keep the temporary repositories for inspection')
+  .action(
+    async (o: {
+      agent: string;
+      runs: string;
+      task?: string;
+      arms: string;
+      source: string;
+      out: string;
+      keep?: boolean;
+    }) => {
+      const { mkdir, writeFile } = await import('node:fs/promises');
+      const { dirname } = await import('node:path');
+      const { runBenchmark, summarizeBench } = await import('./bench/runner');
+      const config = await loadConfig(program.opts<{ config: string }>().config);
+      const db = await connect(program.opts<{ db?: string }>().db);
+      const controller = new AbortController();
+      process.once('SIGINT', () => controller.abort());
+      try {
+        const results = await runBenchmark({
+          db,
+          config,
+          adapters: createAdapters(config),
+          agent: agentOf(o.agent),
+          source: resolve(o.source),
+          runs: Number(o.runs),
+          only: o.task?.split(',').map((s) => s.trim()),
+          arms: o.arms.split(',').map((s) => s.trim()) as ('plain' | 'puff')[],
+          keep: o.keep,
+          signal: controller.signal,
+          onProgress: async (partial) => {
+            await mkdir(dirname(resolve(o.out)), { recursive: true });
+            await writeFile(resolve(o.out), `${JSON.stringify(partial, null, 2)}\n`);
+          },
+          log: (l) => console.log(l),
+        });
+        await mkdir(dirname(resolve(o.out)), { recursive: true });
+        await writeFile(resolve(o.out), `${JSON.stringify(results, null, 2)}\n`);
+        const s = summarizeBench(results);
+        console.log(
+          `\n${'arm'.padEnd(7)}runs  passed  invalid  avg tokens  avg files read  avg time`,
+        );
+        for (const arm of ['plain', 'puff'] as const) {
+          const a = s[arm];
+          if (!a.runs) continue;
+          console.log(
+            `${arm.padEnd(7)}${String(a.runs).padEnd(6)}${`${a.passed}/${a.runs}`.padEnd(8)}${String(a.invalid).padEnd(9)}${String(a.tokens).padEnd(12)}${a.filesRead.toFixed(1).padEnd(16)}${Math.round(a.durationMs / 1000)}s`,
+          );
+        }
+        console.log(`\n✔ wrote ${resolve(o.out)}`);
+      } finally {
+        await db.close();
+      }
+    },
+  );
 
 const demo = program.command('demo').description('set up the demo project for real agent runs');
 

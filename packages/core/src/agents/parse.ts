@@ -3,6 +3,8 @@ import type { AgentError } from './types';
 
 export interface Parsed {
   output: string;
+  /** Distinct files the agent opened with its read tool. Only reported where the CLI prints tool calls. */
+  filesRead?: number;
   tokensIn?: number;
   cachedIn?: number;
   tokensOut?: number;
@@ -125,16 +127,20 @@ export function parseOpenCode(stdout: string): Parsed {
   let cost = 0;
   let sawTokens = false;
   let error: AgentError | undefined;
+  const read = new Set<string>();
 
   for (const ev of jsonLines(stdout)) {
     if (ev.type === 'text' && typeof ev.part?.text === 'string') {
       texts.push(ev.part.text);
+    } else if (ev.type === 'tool_use' && ev.part?.tool === 'read') {
+      const file = ev.part.state?.input?.filePath;
+      if (typeof file === 'string') read.add(file.replaceAll('\\', '/'));
     } else if (ev.type === 'step_finish' && ev.part?.tokens) {
       sawTokens = true;
       const t = ev.part.tokens;
-      const read = num(t.cache?.read);
-      tokensIn += num(t.input) + read + num(t.cache?.write);
-      cachedIn += read;
+      const cacheRead = num(t.cache?.read);
+      tokensIn += num(t.input) + cacheRead + num(t.cache?.write);
+      cachedIn += cacheRead;
       tokensOut += num(t.output) + num(t.reasoning);
       cost += num(ev.part.cost);
     } else if (ev.type === 'error') {
@@ -145,6 +151,7 @@ export function parseOpenCode(stdout: string): Parsed {
   }
   return {
     output: texts.join('\n\n'),
+    filesRead: sawTokens ? read.size : undefined,
     tokensIn: sawTokens ? tokensIn : undefined,
     cachedIn: sawTokens ? cachedIn : undefined,
     tokensOut: sawTokens ? tokensOut : undefined,

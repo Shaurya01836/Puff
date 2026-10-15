@@ -320,6 +320,27 @@ export const mockSavings: Savings = {
   tasks: 6,
   withPuff: { tokens: 41_300, filesRead: 38, firstTryPassRate: 0.83 },
   baseline: { tokens: 68_900, filesRead: 112, firstTryPassRate: 0.5 },
+  // Same shape as a real benchmark, with placeholder values, so the screen can be designed on mocks.
+  measured: {
+    agent: 'opencode',
+    model: 'sample model',
+    runsPerArm: 2,
+    generatedAt: '2026-10-15T12:00:00.000Z',
+    filesReadReported: true,
+    perTask: [
+      {
+        id: 'sample-task-a',
+        plain: { passed: 2, runs: 2, tokens: 70_000 },
+        puff: { passed: 2, runs: 2, tokens: 41_000 },
+      },
+      {
+        id: 'sample-task-b',
+        plain: { passed: 1, runs: 2, tokens: 68_000 },
+        puff: { passed: 2, runs: 2, tokens: 42_000 },
+      },
+    ],
+    notes: ['Placeholder numbers for UI work only.'],
+  },
 };
 
 const events: [minute: number, type: MemoryEvent['type'], text: string, refs: string[]][] = [

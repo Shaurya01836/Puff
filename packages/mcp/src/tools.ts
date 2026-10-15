@@ -10,12 +10,14 @@ import {
   findSymbols,
   getWhy,
   graphStats,
+  hotspots,
   impactOf,
   recordDecision,
   recordFailure,
   recordHandoff,
   recordSolution,
   resolveSymbols,
+  similarFailures,
   type PuffConfig,
 } from '@puff/core';
 
@@ -270,6 +272,49 @@ export function createPuffServer({ graph, config, sessionId }: PuffServerOptions
       inputSchema: { taskId: z.string() },
     },
     safely(async ({ taskId }: { taskId: string }) => ok((await getWhy(graph, taskId)).summary)),
+  );
+
+  server.registerTool(
+    'similar_failures',
+    {
+      title: 'Past failures worded like this',
+      description:
+        'Past failures in this project whose message is worded like the text (a task, an error), wherever they happened, with the function each one is anchored to.',
+      inputSchema: { text: z.string() },
+    },
+    safely(async ({ text }: { text: string }) => {
+      const rows = await similarFailures(graph, text);
+      return ok(
+        rows.length
+          ? rows
+              .map((r) => `${r.symbol}${r.stale ? ' (possibly outdated)' : ''}: ${r.message}`)
+              .join('\n')
+          : 'No past failure is worded like that.',
+      );
+    }),
+  );
+
+  server.registerTool(
+    'hotspots',
+    {
+      title: 'Most load-bearing code',
+      description:
+        'The functions other code depends on most (PageRank over calls), with the failures and decisions recorded on each. Check these before changing core code.',
+      inputSchema: { limit: z.number().int().min(1).max(50).default(10) },
+    },
+    safely(async ({ limit }: { limit: number }) => {
+      const rows = await hotspots(graph, limit);
+      return ok(
+        rows.length
+          ? rows
+              .map(
+                (r) =>
+                  `${r.id}  (${r.failures} failure(s), ${r.staleFailures} possibly outdated, ${r.decisions} decision(s))`,
+              )
+              .join('\n')
+          : 'No calls indexed yet.',
+      );
+    }),
   );
 
   return server;

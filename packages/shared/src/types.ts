@@ -168,15 +168,42 @@ export interface AgentProfile {
 }
 
 export interface SavingsArm {
+  /** Average input + output tokens per run */
   tokens: number;
+  /** Average distinct files opened per run; 0 when the harness does not report it */
   filesRead: number;
   firstTryPassRate: number;
+  /** Average wall time per run */
+  durationMs?: number;
+  /** Runs this arm is averaged over */
+  runs?: number;
+}
+
+/** One task in a measured benchmark: how each arm did on it, averaged over its runs. */
+export interface SavingsTask {
+  id: string;
+  plain: { passed: number; runs: number; tokens: number };
+  puff: { passed: number; runs: number; tokens: number };
+}
+
+/** Present when the numbers come from a real benchmark run (bench/results.json). */
+export interface SavingsMeasured {
+  agent: string;
+  model: string;
+  runsPerArm: number;
+  generatedAt: string;
+  /** Whether the harness reported files read at all */
+  filesReadReported: boolean;
+  perTask: SavingsTask[];
+  /** The limits of this measurement, in plain words */
+  notes: string[];
 }
 
 export interface Savings {
   tasks: number;
   withPuff: SavingsArm;
   baseline: SavingsArm;
+  measured?: SavingsMeasured;
 }
 
 export type PuffEvent =

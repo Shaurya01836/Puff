@@ -75,11 +75,13 @@ describe.skipIf(!db)('Puff MCP tools', () => {
       'find_symbols',
       'get_context',
       'handoff',
+      'hotspots',
       'impact_of',
       'project_status',
       'record_decision',
       'record_failure',
       'record_solution',
+      'similar_failures',
       'why',
     ]);
   });

@@ -29,6 +29,8 @@ export interface HarnessResult {
   report?: PuffReport;
   /** A <puff-report> block was present but unusable */
   reportError?: string;
+  /** Distinct files opened with the agent's read tool; only OpenCode prints tool calls we can count */
+  filesRead?: number;
   /** Total input tokens, including cached ones (normalised across vendors) */
   tokensIn?: number;
   /** The cached part of tokensIn */

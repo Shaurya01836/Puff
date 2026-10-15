@@ -1,0 +1,9 @@
+{"type":"step_start","timestamp":1792074744080,"sessionID":"ses_x","part":{"type":"step-start"}}
+{"type":"tool_use","timestamp":1792074744632,"sessionID":"ses_x","part":{"type":"tool","tool":"glob","callID":"call_1","state":{"status":"completed","input":{"pattern":"a.txt"},"output":"C:\\Users\\me\\proj\\a.txt"}}}
+{"type":"step_finish","timestamp":1792074744632,"sessionID":"ses_x","part":{"reason":"tool-calls","type":"step-finish","tokens":{"total":10948,"input":4769,"output":19,"reasoning":16,"cache":{"write":0,"read":6144}},"cost":0}}
+{"type":"tool_use","timestamp":1792074748943,"sessionID":"ses_x","part":{"type":"tool","tool":"read","callID":"call_2","state":{"status":"completed","input":{"filePath":"C:\\Users\\me\\proj\\a.txt"},"output":"hello"}}}
+{"type":"tool_use","timestamp":1792074748950,"sessionID":"ses_x","part":{"type":"tool","tool":"read","callID":"call_3","state":{"status":"completed","input":{"filePath":"C:\\Users\\me\\proj\\a.txt"},"output":"hello"}}}
+{"type":"tool_use","timestamp":1792074748960,"sessionID":"ses_x","part":{"type":"tool","tool":"read","callID":"call_4","state":{"status":"completed","input":{"filePath":"C:\\Users\\me\\proj\\src\\b.ts"},"output":"export {}"}}}
+{"type":"step_finish","timestamp":1792074749017,"sessionID":"ses_x","part":{"reason":"tool-calls","type":"step-finish","tokens":{"total":11009,"input":92,"output":33,"reasoning":4,"cache":{"write":0,"read":10880}},"cost":0}}
+{"type":"text","timestamp":1792074753033,"sessionID":"ses_x","part":{"type":"text","text":"Done."}}
+{"type":"step_finish","timestamp":1792074753033,"sessionID":"ses_x","part":{"reason":"stop","type":"step-finish","tokens":{"total":11087,"input":121,"output":14,"reasoning":8,"cache":{"write":0,"read":10944}},"cost":0}}

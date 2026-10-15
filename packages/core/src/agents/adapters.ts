@@ -147,6 +147,7 @@ export function createAdapter(name: AgentName, cfg: HarnessConfig): HarnessAdapt
         output: parsed.output,
         report,
         reportError,
+        filesRead: parsed.filesRead,
         tokensIn: parsed.tokensIn,
         cachedIn: parsed.cachedIn,
         tokensOut: parsed.tokensOut,

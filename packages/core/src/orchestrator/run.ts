@@ -313,7 +313,12 @@ async function runAttempt(
     })
     .finally(() => release?.());
   const tokens = { in: res.tokensIn ?? 0, out: res.tokensOut ?? 0 };
-  const facts = { tokensIn: res.tokensIn, tokensOut: res.tokensOut, durationMs: res.durationMs };
+  const facts = {
+    tokensIn: res.tokensIn,
+    tokensOut: res.tokensOut,
+    durationMs: res.durationMs,
+    filesRead: res.filesRead,
+  };
 
   // 1. The agent itself failed to run: not a code failure, so no failure memory.
   if (res.error) {

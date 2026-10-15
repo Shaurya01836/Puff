@@ -26,12 +26,23 @@ describe('parsers (real output captured from the CLIs)', () => {
   it('OpenCode: text, and tokens where input excludes the cache', () => {
     expect(parseOpenCode(fixture('agents/opencode-ok.jsonl'))).toEqual({
       output: 'ok',
+      filesRead: 0,
       tokensIn: 9073 + 1792, // input + cache read
       cachedIn: 1792,
       tokensOut: 2,
       costUsd: 0,
       error: undefined,
     });
+  });
+
+  it('OpenCode: counts distinct files opened with the read tool, not searches', () => {
+    // a.txt is read twice and b.ts once; the glob is not a read
+    expect(parseOpenCode(fixture('agents/opencode-read.jsonl'))).toMatchObject({
+      output: 'Done.',
+      filesRead: 2,
+    });
+    // the other CLIs do not print tool calls Puff can count, so it reports nothing rather than guess
+    expect(parseCodex(fixture('agents/codex-ok.jsonl')).filesRead).toBeUndefined();
   });
 
   it('Claude Code: a login problem is an auth error, not a code failure', () => {

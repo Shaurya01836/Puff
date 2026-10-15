@@ -21,9 +21,11 @@ import {
   isSeeded,
   listSessions,
   listTasks,
+  loadBenchResults,
   loadConfig,
   loadDotEnv,
   read,
+  savingsFromBench,
   slugify,
   type OrchestratorDeps,
   type ProjectInfo,
@@ -32,8 +34,8 @@ import {
 } from '@puff/core';
 import type { FalkorDB, Graph } from 'falkordb';
 
-/** Parts of the API still served from mocks in live mode. The benchmark (P6) replaces the last one. */
-const STILL_MOCKED = ['savings'];
+/** Parts of the API served from mocks in live mode: the savings, until bench/results.json exists. */
+const benchPath = (root: string) => join(root, process.env.PUFF_BENCH ?? 'bench/results.json');
 
 /** The Puff repo root: the nearest folder (from cwd or the app) that holds puff.config.yaml. */
 function findRoot(appDir: string): string {
@@ -65,8 +67,8 @@ function summarizeRun(results: TaskRunResult[]): {
 
 /**
  * The PuffApi the main process serves over IPC.
- * Phase P3: everything is live from FalkorDB, and Run team really runs the agents. Only the
- * savings numbers are still mock data (P6). If FalkorDB is unreachable the whole API falls back
+ * Everything is live from FalkorDB, and Run team really runs the agents. The savings numbers
+ * are real once `puff bench` has written bench/results.json, and mock data until then. If FalkorDB is unreachable the whole API falls back
  * to mocks and says why.
  */
 export async function createBackend(appDir: string): Promise<PuffApi> {
@@ -127,8 +129,13 @@ export async function createBackend(appDir: string): Promise<PuffApi> {
   await prepareRun();
 
   return {
-    // The savings numbers stay mock until the benchmark (P6).
+    // Everything not overridden below is a mock; the savings are real once `puff bench` has run.
     ...mock,
+
+    async getSavings() {
+      const results = await loadBenchResults(benchPath(root));
+      return results ? savingsFromBench(results) : mock.getSavings('');
+    },
 
     async getBackendInfo(): Promise<BackendInfo> {
       return {
@@ -137,7 +144,7 @@ export async function createBackend(appDir: string): Promise<PuffApi> {
         projectName: project.name,
         repoPath: project.repoPath,
         graphName: graphName(project.slug),
-        mockParts: STILL_MOCKED,
+        mockParts: (await loadBenchResults(benchPath(root))) ? [] : ['savings'],
         runBlocked,
         seeded: await isSeeded(graph),
       };

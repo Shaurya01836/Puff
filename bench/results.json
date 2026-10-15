@@ -1,0 +1,278 @@
+{
+  "generatedAt": "2026-10-15T16:48:17.871Z",
+  "agent": "opencode",
+  "model": "CLI default",
+  "runsPerArm": 2,
+  "tasks": [
+    "failed-login-reason",
+    "cart-summary",
+    "cart-bulk-add",
+    "token-expiry"
+  ],
+  "runs": [
+    {
+      "task": "failed-login-reason",
+      "arm": "plain",
+      "run": 1,
+      "changedFiles": 2,
+      "tokens": 132237,
+      "cachedTokens": 117888,
+      "filesRead": 2,
+      "durationMs": 261334,
+      "promptTokens": 150,
+      "passed": true,
+      "tests": {
+        "passed": 31,
+        "total": 31
+      }
+    },
+    {
+      "task": "failed-login-reason",
+      "arm": "puff",
+      "run": 1,
+      "changedFiles": 2,
+      "tokens": 136746,
+      "cachedTokens": 125312,
+      "filesRead": 5,
+      "durationMs": 129047,
+      "promptTokens": 414,
+      "passed": true,
+      "tests": {
+        "passed": 30,
+        "total": 30
+      }
+    },
+    {
+      "task": "failed-login-reason",
+      "arm": "puff",
+      "run": 2,
+      "changedFiles": 2,
+      "tokens": 204067,
+      "cachedTokens": 168896,
+      "filesRead": 11,
+      "durationMs": 170122,
+      "promptTokens": 414,
+      "passed": true,
+      "tests": {
+        "passed": 32,
+        "total": 32
+      }
+    },
+    {
+      "task": "failed-login-reason",
+      "arm": "plain",
+      "run": 2,
+      "changedFiles": 2,
+      "tokens": 135485,
+      "cachedTokens": 122944,
+      "filesRead": 3,
+      "durationMs": 224531,
+      "promptTokens": 150,
+      "passed": true,
+      "tests": {
+        "passed": 31,
+        "total": 31
+      }
+    },
+    {
+      "task": "cart-summary",
+      "arm": "puff",
+      "run": 1,
+      "changedFiles": 2,
+      "tokens": 160752,
+      "cachedTokens": 144384,
+      "filesRead": 11,
+      "durationMs": 107841,
+      "promptTokens": 482,
+      "passed": true,
+      "tests": {
+        "passed": 31,
+        "total": 31
+      }
+    },
+    {
+      "task": "cart-summary",
+      "arm": "plain",
+      "run": 1,
+      "changedFiles": 4,
+      "tokens": 391737,
+      "cachedTokens": 361728,
+      "filesRead": 15,
+      "durationMs": 112112,
+      "promptTokens": 126,
+      "passed": true,
+      "tests": {
+        "passed": 33,
+        "total": 33
+      }
+    },
+    {
+      "task": "cart-summary",
+      "arm": "plain",
+      "run": 2,
+      "changedFiles": 4,
+      "tokens": 327544,
+      "cachedTokens": 305408,
+      "filesRead": 15,
+      "durationMs": 193898,
+      "promptTokens": 126,
+      "passed": true,
+      "tests": {
+        "passed": 34,
+        "total": 34
+      }
+    },
+    {
+      "task": "cart-summary",
+      "arm": "puff",
+      "run": 2,
+      "changedFiles": 2,
+      "tokens": 193156,
+      "cachedTokens": 176832,
+      "filesRead": 11,
+      "durationMs": 112170,
+      "promptTokens": 482,
+      "passed": true,
+      "tests": {
+        "passed": 31,
+        "total": 31
+      }
+    },
+    {
+      "task": "cart-bulk-add",
+      "arm": "plain",
+      "run": 1,
+      "changedFiles": 4,
+      "tokens": 448625,
+      "cachedTokens": 404928,
+      "filesRead": 7,
+      "durationMs": 422751,
+      "promptTokens": 126,
+      "passed": true,
+      "tests": {
+        "passed": 39,
+        "total": 39
+      }
+    },
+    {
+      "task": "cart-bulk-add",
+      "arm": "puff",
+      "run": 1,
+      "changedFiles": 2,
+      "tokens": 194170,
+      "cachedTokens": 162688,
+      "filesRead": 9,
+      "durationMs": 118279,
+      "promptTokens": 457,
+      "passed": true,
+      "tests": {
+        "passed": 30,
+        "total": 30
+      }
+    },
+    {
+      "task": "cart-bulk-add",
+      "arm": "puff",
+      "run": 2,
+      "changedFiles": 3,
+      "tokens": 376738,
+      "cachedTokens": 339840,
+      "filesRead": 13,
+      "durationMs": 384035,
+      "promptTokens": 457,
+      "passed": true,
+      "tests": {
+        "passed": 32,
+        "total": 32
+      }
+    },
+    {
+      "task": "cart-bulk-add",
+      "arm": "plain",
+      "run": 2,
+      "changedFiles": 3,
+      "tokens": 292005,
+      "cachedTokens": 266560,
+      "filesRead": 10,
+      "durationMs": 303669,
+      "promptTokens": 126,
+      "passed": true,
+      "tests": {
+        "passed": 34,
+        "total": 34
+      }
+    },
+    {
+      "task": "token-expiry",
+      "arm": "puff",
+      "run": 1,
+      "changedFiles": 2,
+      "tokens": 246889,
+      "cachedTokens": 210112,
+      "filesRead": 12,
+      "durationMs": 232356,
+      "promptTokens": 184,
+      "passed": true,
+      "tests": {
+        "passed": 28,
+        "total": 28
+      }
+    },
+    {
+      "task": "token-expiry",
+      "arm": "plain",
+      "run": 1,
+      "changedFiles": 3,
+      "tokens": 355130,
+      "cachedTokens": 303680,
+      "filesRead": 13,
+      "durationMs": 549037,
+      "promptTokens": 108,
+      "passed": true,
+      "tests": {
+        "passed": 29,
+        "total": 29
+      }
+    },
+    {
+      "task": "token-expiry",
+      "arm": "plain",
+      "run": 2,
+      "changedFiles": 3,
+      "tokens": 339938,
+      "cachedTokens": 278272,
+      "filesRead": 13,
+      "durationMs": 273456,
+      "promptTokens": 108,
+      "passed": true,
+      "tests": {
+        "passed": 30,
+        "total": 30
+      }
+    },
+    {
+      "task": "token-expiry",
+      "arm": "puff",
+      "run": 2,
+      "changedFiles": 2,
+      "tokens": 189285,
+      "cachedTokens": 163072,
+      "filesRead": 10,
+      "durationMs": 72682,
+      "promptTokens": 184,
+      "passed": true,
+      "tests": {
+        "passed": 28,
+        "total": 28
+      }
+    }
+  ],
+  "notes": [
+    "One agent and one model for both arms; a fresh copy of the demo repo for every run; one attempt per run.",
+    "A run passes only if the agent changed files and the whole test suite plus a hidden acceptance spec pass.",
+    "Puff's memory was taught by running a careless change through the real tests and recording the real failure; it stands in for an earlier teammate session.",
+    "Tokens are input plus output as the harness reported them (input includes cached tokens). Files read is only counted where the harness prints its tool calls (OpenCode).",
+    "A run where the harness itself failed (timeout, provider error) after retries is left out of the averages and counted as invalid, not as a failure of either arm.",
+    "Small sample: treat differences as indications, not proof."
+  ]
+}

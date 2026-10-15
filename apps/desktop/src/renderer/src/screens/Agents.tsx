@@ -24,43 +24,115 @@ export function Agents({
         </div>
       </section>
 
-      {savings && (
-        <section>
-          <SectionTitle
-            right={
-              mock && (
-                <span className="rounded-full border border-warn/25 bg-warn/10 px-2.5 py-1 text-[11px] font-medium text-warn">
-                  Mock numbers, not benchmark results
-                </span>
-              )
-            }
-          >
-            With Puff vs without · same {savings.tasks} tasks, same models
-          </SectionTitle>
-          <div className="grid grid-cols-3 gap-4">
-            <Meter
-              label="Tokens spent"
-              withPuff={savings.withPuff.tokens}
-              baseline={savings.baseline.tokens}
-              format={formatTokens}
-              lowerIsBetter
-            />
-            <Meter
-              label="Files read"
-              withPuff={savings.withPuff.filesRead}
-              baseline={savings.baseline.filesRead}
-              lowerIsBetter
-            />
-            <Meter
-              label="First-try pass rate"
-              withPuff={savings.withPuff.firstTryPassRate}
-              baseline={savings.baseline.firstTryPassRate}
-              format={(v) => `${Math.round(v * 100)}%`}
-            />
-          </div>
-        </section>
-      )}
+      {savings && <SavingsSection savings={savings} mock={mock} />}
     </div>
+  );
+}
+
+function SavingsSection({ savings, mock }: { savings: Savings; mock: boolean }) {
+  const m = savings.measured;
+  return (
+    <section>
+      <SectionTitle
+        right={
+          mock ? (
+            <span className="rounded-full border border-warn/25 bg-warn/10 px-2.5 py-1 text-[11px] font-medium text-warn">
+              Mock numbers, not benchmark results
+            </span>
+          ) : (
+            <span className="rounded-full border border-memory/25 bg-memory/10 px-2.5 py-1 text-[11px] font-medium text-memory">
+              Measured
+            </span>
+          )
+        }
+      >
+        With Puff vs without · same {savings.tasks} tasks, same model
+      </SectionTitle>
+      {m && (
+        <p className="-mt-1 mb-3 text-xs text-ink-3">
+          {AGENT_META[m.agent as keyof typeof AGENT_META]?.label ?? m.agent} ({m.model}) ·{' '}
+          {m.runsPerArm} run{m.runsPerArm === 1 ? '' : 's'} per task and arm · one attempt each ·{' '}
+          {new Date(m.generatedAt).toLocaleDateString()}
+        </p>
+      )}
+      <div className="grid grid-cols-3 gap-4">
+        <Meter
+          label="Tokens spent per run"
+          withPuff={savings.withPuff.tokens}
+          baseline={savings.baseline.tokens}
+          format={formatTokens}
+          lowerIsBetter
+        />
+        {m && !m.filesReadReported ? (
+          <Panel className="p-5">
+            <div className="text-sm text-ink-2">Files read</div>
+            <p className="mt-3 text-sm leading-snug text-ink-3">
+              Not reported by this agent. Only OpenCode prints its tool calls, so Puff does not
+              guess.
+            </p>
+          </Panel>
+        ) : (
+          <Meter
+            label="Files read per run"
+            withPuff={savings.withPuff.filesRead}
+            baseline={savings.baseline.filesRead}
+            format={(v) => v.toFixed(1)}
+            lowerIsBetter
+          />
+        )}
+        <Meter
+          label="First-try pass rate"
+          withPuff={savings.withPuff.firstTryPassRate}
+          baseline={savings.baseline.firstTryPassRate}
+          format={(v) => `${Math.round(v * 100)}%`}
+        />
+      </div>
+
+      {m && (
+        <>
+          <Panel className="mt-4 overflow-hidden">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-line text-[11px] tracking-wider text-ink-3 uppercase">
+                <tr>
+                  <th className="px-4 py-2.5 font-medium">Task</th>
+                  <th className="px-4 py-2.5 font-medium">Without Puff</th>
+                  <th className="px-4 py-2.5 font-medium">With Puff</th>
+                </tr>
+              </thead>
+              <tbody>
+                {m.perTask.map((t) => (
+                  <tr key={t.id} className="border-b border-line/60 last:border-0">
+                    <td className="px-4 py-2.5 font-mono text-xs">{t.id}</td>
+                    <td className="px-4 py-2.5 tabular-nums">
+                      <Result arm={t.plain} />
+                    </td>
+                    <td className="px-4 py-2.5 tabular-nums">
+                      <Result arm={t.puff} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Panel>
+          <ul className="mt-3 flex list-disc flex-col gap-1 pl-5 text-xs text-ink-3">
+            {m.notes.map((n) => (
+              <li key={n}>{n}</li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  );
+}
+
+function Result({ arm }: { arm: { passed: number; runs: number; tokens: number } }) {
+  return (
+    <span>
+      <span className={arm.passed === arm.runs ? 'text-good' : 'text-bad'}>
+        {arm.passed}/{arm.runs} passed
+      </span>
+      <span className="text-ink-3"> · {formatTokens(arm.tokens)} tokens</span>
+    </span>
   );
 }
 
