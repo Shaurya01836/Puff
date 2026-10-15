@@ -432,4 +432,171 @@ describe.skipIf(!ready)('the run loop (fake agents, real git, real FalkorDB)', (
     const outcomes = (await listSessions(graph, t.id)).map((s) => s.outcome);
     expect(outcomes).not.toContain('running'); // the orphaned session was closed
   }, 120_000);
+
+  /**
+   * Two tasks that each pass their tests alone but fail together: the project's check fails when both
+   * a.txt and b.txt say X. Both agents finish before either merges (a gate), so both worktrees start
+   * from the same code, which is exactly how two parallel tasks collide.
+   */
+  async function collidingTasks(cfg: PuffConfig) {
+    const check = [
+      "const fs = require('fs');",
+      "const x = ['a.txt', 'b.txt'].filter((f) => fs.readFileSync(f, 'utf8').includes('X')).length;",
+      "console.log(x > 1 ? 'Tests  1 failed (1)' : 'Tests  1 passed (1)');",
+      'process.exit(x > 1 ? 1 : 0);',
+    ].join('\n');
+    let arrived = 0;
+    let open!: () => void;
+    const gate = new Promise<void>((r) => (open = r));
+    const agent = fakeAgent('codex', async (o, n) => {
+      o.onActivity?.({ kind: 'read', text: 'Read a.txt', path: 'a.txt' });
+      writeFileSync(join(o.cwd, n === 1 ? 'a.txt' : 'b.txt'), 'X\n');
+      o.onActivity?.({ kind: 'edit', text: `Edited ${n === 1 ? 'a.txt' : 'b.txt'}` });
+      if (++arrived === 2) open();
+      await gate;
+      return {};
+    });
+    const f = await fixture(cfg, { codex: agent });
+    writeFileSync(join(f.repoPath, 'check.cjs'), check);
+    writeFileSync(join(f.repoPath, 'a.txt'), 'a\n');
+    writeFileSync(join(f.repoPath, 'b.txt'), 'b\n');
+    gitIn(f.repoPath, 'add', '-A');
+    gitIn(f.repoPath, 'commit', '-q', '-m', 'add check');
+    const one = await f.task('Change a');
+    const two = await f.task('Change b');
+    const results = await Promise.all([
+      runTask(f.deps, one.id, { agent: 'codex' }),
+      runTask(f.deps, two.id, { agent: 'codex' }),
+    ]);
+    return { f, results, ids: [one.id, two.id] };
+  }
+
+  const COLLIDE: PuffConfig = {
+    ...config,
+    limits: { ...config.limits, maxAttempts: 1 },
+    verify: { ...config.verify, testCommand: 'node check.cjs' },
+  };
+
+  it('tasks that pass alone but break together: the second merge is caught by the re-test, reverted, and remembered', async () => {
+    const { f, results, ids } = await collidingTasks(COLLIDE);
+
+    // One task landed; the other passed in its own worktree, failed on the combined code, and was undone.
+    expect(results.map((r) => r.status).sort()).toEqual(['done', 'failed']);
+    const failedIdx = results.findIndex((r) => r.status === 'failed');
+    const failedId = ids[failedIdx]!;
+    expect(results[failedIdx]!.attempts[0]).toMatchObject({ outcome: 'failure' });
+    expect(results[failedIdx]!.reason).toMatch(/combined tests/);
+
+    // The main checkout is green again: only the first task's change is in it, the revert is in history.
+    const ax = readFileSync(join(f.repoPath, 'a.txt'), 'utf8').includes('X');
+    const bx = readFileSync(join(f.repoPath, 'b.txt'), 'utf8').includes('X');
+    expect([ax, bx].filter(Boolean)).toHaveLength(1);
+    expect(execFileSync('node', ['check.cjs'], { cwd: f.repoPath, encoding: 'utf8' })).toMatch(
+      /passed/,
+    );
+    expect(gitIn(f.repoPath, 'log', '--format=%s')).toMatch(/Revert "Merge puff task/);
+    expect(gitIn(f.repoPath, 'status', '--porcelain')).toBe('');
+
+    // What happened is on the record: failure memory for the task, and the steps with their phases.
+    const failures = await read<{ message: string; task: string }>(
+      f.graph,
+      `MATCH (fl:Failure) RETURN fl.message AS message, fl.taskId AS task`,
+    );
+    expect(failures.length).toBeGreaterThanOrEqual(1);
+    expect(failures.some((x) => /fail/i.test(x.message))).toBe(true);
+    const [session] = await listSessions(f.graph, failedId);
+    expect(session!.outcome).toBe('failure');
+    expect(session!.output).toMatch(/combined tests failed and the merge was reverted/);
+    const texts = (session!.activity ?? []).map((a) => a.text);
+    expect(texts).toEqual(
+      expect.arrayContaining([
+        'Read a.txt',
+        expect.stringMatching(/^Running the tests: node check.cjs/),
+        expect.stringMatching(/^Tests passed/),
+        'Merged. Re-testing the combined result',
+        'The combined tests failed. Running them once more to be sure',
+        'Still failing, so the merge was undone with a revert commit',
+      ]),
+    );
+    expect((session!.activity ?? []).find((a) => a.text.startsWith('Still failing'))?.ok).toBe(
+      false,
+    );
+
+    // The steps also reached the UI live, in order, tagged with the task.
+    const live = f.events.flatMap((e) =>
+      e.type === 'activity' && e.step.taskId === failedId ? [e.step.text] : [],
+    );
+    expect(live).toEqual(texts);
+  }, 180_000);
+
+  it('retestAfterMerge: false skips the second run, so the same collision lands both tasks', async () => {
+    const off: PuffConfig = { ...COLLIDE, verify: { ...COLLIDE.verify, retestAfterMerge: false } };
+    const { f, results } = await collidingTasks(off);
+    expect(results.map((r) => r.status)).toEqual(['done', 'done']);
+    expect(gitIn(f.repoPath, 'log', '--format=%s')).not.toMatch(/Revert/);
+    expect(f.logs.join('\n')).not.toMatch(/combined/);
+  }, 180_000);
+
+  it('when the combined tests pass, that is said in the steps and the task keeps the combined result', async () => {
+    const f = await fixture(FAST, {
+      codex: fakeAgent('codex', (o) => {
+        edit(
+          o.cwd,
+          'src/auth/login.ts',
+          "audit('login.failed', { email });",
+          "audit('login.failed', { email, reason: 'x' });",
+        );
+        return {};
+      }),
+    });
+    const t = await f.task('Log a reason');
+    const result = await runTask(f.deps, t.id, { agent: 'codex' });
+    expect(result.status).toBe('done');
+    const [session] = await listSessions(f.graph, t.id);
+    const texts = (session!.activity ?? []).map((a) => a.text);
+    expect(texts).toContain('Merged. Re-testing the combined result');
+    expect(texts).toContain('Combined tests passed (3 of 3)');
+    expect((await getTask(f.graph, t.id))?.testSummary).toEqual({ passed: 3, total: 3 });
+  }, 120_000);
+
+  it("the combined result is tested in a clean checkout, so a recursive test runner does not also run other tasks' worktrees", async () => {
+    // Like Vitest, this "runner" finds every *.marker file under the folder it is run in. In the main
+    // folder it would also find the copy inside .puff/worktrees (the task's own, still on disk).
+    const count = [
+      "const fs = require('fs'), path = require('path');",
+      'let n = 0;',
+      'const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) {',
+      "  if (e.name === 'node_modules' || e.name === '.git') continue;",
+      '  const p = path.join(d, e.name);',
+      "  if (e.isDirectory()) walk(p); else if (e.name.endsWith('.marker')) n++;",
+      '} };',
+      "walk('.');",
+      "console.log('Tests  ' + n + ' passed (' + n + ')');",
+    ].join('\n');
+    const cfg: PuffConfig = {
+      ...config,
+      verify: { ...config.verify, testCommand: 'node count.cjs' },
+    };
+    const f = await fixture(cfg, {
+      codex: fakeAgent('codex', (o) => {
+        writeFileSync(join(o.cwd, 'x.marker'), 'changed\n');
+        return {};
+      }),
+    });
+    writeFileSync(join(f.repoPath, 'count.cjs'), count);
+    writeFileSync(join(f.repoPath, 'x.marker'), 'x\n');
+    gitIn(f.repoPath, 'add', '-A');
+    gitIn(f.repoPath, 'commit', '-q', '-m', 'add runner');
+    const t = await f.task('Change the marker');
+    const result = await runTask(f.deps, t.id, { agent: 'codex' });
+    expect(result.status).toBe('done');
+    // 1 in the task's worktree, and still 1 on the merged result
+    expect((await getTask(f.graph, t.id))?.testSummary).toEqual({ passed: 1, total: 1 });
+    const [session] = await listSessions(f.graph, t.id);
+    expect((session!.activity ?? []).map((a) => a.text)).toContain(
+      'Combined tests passed (1 of 1)',
+    );
+    // and the clean checkout is gone afterwards
+    expect(existsSync(join(f.repoPath, '.puff', 'worktrees', `combined-${t.id}`))).toBe(false);
+  }, 120_000);
 });

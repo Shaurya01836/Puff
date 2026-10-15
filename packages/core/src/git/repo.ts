@@ -166,6 +166,35 @@ export class GitRepo {
     return { path, branch, name: n, links };
   }
 
+  /**
+   * Run `fn` in a clean, detached checkout of the current HEAD (no branch, dependency folders linked in),
+   * then remove it. This is how the merged result is tested: the main checkout also holds `.puff/worktrees`,
+   * where test runners find other tasks' half-finished copies and run them too.
+   */
+  async withCleanCheckout<T>(
+    name: string,
+    linkDirs: string[],
+    fn: (path: string) => Promise<T>,
+  ): Promise<T> {
+    const n = safeName(name);
+    const path = this.worktreePath(n);
+    const wt: Worktree = { path, branch: '', name: n, links: [] };
+    if (existsSync(path)) await this.remove(wt, { deleteBranch: false });
+    await mkdir(join(this.root, '.puff', 'worktrees'), { recursive: true });
+    await must(['worktree', 'add', '--detach', path, 'HEAD'], this.root);
+    try {
+      for (const dir of linkDirs) {
+        const source = join(this.root, dir);
+        if (!existsSync(source)) continue;
+        await symlink(source, join(path, dir), process.platform === 'win32' ? 'junction' : 'dir');
+        wt.links.push(dir);
+      }
+      return await fn(path);
+    } finally {
+      await this.remove(wt, { deleteBranch: false });
+    }
+  }
+
   /** What the agent changed: stages everything (new files included) and reads the staged diff. */
   async changes(wt: Worktree): Promise<{ files: string[]; diff: string }> {
     await must(['add', '-A'], wt.path);
@@ -222,6 +251,17 @@ export class GitRepo {
     await git(['merge', '--abort'], this.root);
     const conflict = /conflict/i.test(r.out + r.err);
     return { merged: false, conflict, reason: (r.out + r.err).trim().slice(0, 400) };
+  }
+
+  /**
+   * Undo a merge Puff just made, with a revert commit (history is kept, nothing is rewritten). For
+   * callers that hold the lock through serial(). On a conflict the revert is aborted and says why.
+   */
+  async revertMerge(sha: string): Promise<{ reverted: boolean; reason?: string }> {
+    const r = await git(['revert', '-m', '1', '--no-edit', sha], this.root, this.identity);
+    if (r.code === 0) return { reverted: true };
+    await git(['revert', '--abort'], this.root);
+    return { reverted: false, reason: (r.out + r.err).trim().slice(0, 400) };
   }
 
   /**

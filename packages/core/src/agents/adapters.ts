@@ -3,6 +3,7 @@
 import type { AgentName, Role } from '@puff/shared';
 import type { HarnessConfig, PuffConfig } from '../config';
 import { parsePuffReport } from '../memory/report';
+import { activityFromLine } from './activity';
 import { parseClaude, parseCodex, parseOpenCode, type Parsed } from './parse';
 import { resolveExecutable, runProcess } from './spawn';
 import { WRITES_FILES, type HarnessAdapter, type HarnessResult, type RunOptions } from './types';
@@ -71,6 +72,19 @@ const SPECS: Record<AgentName, Spec> = {
   },
 };
 
+/**
+ * Claude Code prints one result at the end with `--output-format json`; to watch it work it has to
+ * print events as it goes (`stream-json`, which needs `--verbose`). The last event is that same result.
+ */
+export function streamClaude(args: string[]): string[] {
+  const out = [...args];
+  const at = out.indexOf('--output-format');
+  if (at >= 0 && out[at + 1] === 'json') out[at + 1] = 'stream-json';
+  else if (at < 0) out.push('--output-format', 'stream-json');
+  if (!out.includes('--verbose')) out.push('--verbose');
+  return out;
+}
+
 export function createAdapter(name: AgentName, cfg: HarnessConfig): HarnessAdapter {
   const spec = SPECS[name];
   return {
@@ -97,14 +111,23 @@ export function createAdapter(name: AgentName, cfg: HarnessConfig): HarnessAdapt
     },
 
     async run(opts: RunOptions): Promise<HarnessResult> {
+      const watch = opts.onActivity;
       const proc = await runProcess({
         command: cfg.command,
-        args: [...cfg.args, ...spec.args(opts, cfg)],
+        args: [
+          ...(watch && name === 'claude-code' ? streamClaude(cfg.args) : cfg.args),
+          ...spec.args(opts, cfg),
+        ],
         cwd: opts.cwd,
         stdin: opts.prompt,
         timeoutMs: opts.timeoutMs,
         signal: opts.signal,
         env: { NO_COLOR: '1', ...spec.env?.(opts) },
+        onStdoutLine: watch
+          ? (line) => {
+              for (const step of activityFromLine(name, line, opts.cwd)) watch(step);
+            }
+          : undefined,
       });
       const base = {
         exitCode: proc.exitCode,

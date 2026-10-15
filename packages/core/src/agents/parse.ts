@@ -45,13 +45,21 @@ export function parseClaude(stdout: string): Parsed {
   try {
     j = JSON.parse(stdout.trim());
   } catch {
-    return {
-      output: '',
-      error: {
-        kind: 'crash',
-        message: `Claude Code printed no JSON result: ${stdout.trim().slice(0, 200) || '(empty)'}`,
-      },
-    };
+    // `--output-format stream-json` prints one event per line; the last `result` event is the same
+    // object `--output-format json` prints on its own.
+    const result = jsonLines(stdout)
+      .reverse()
+      .find((e) => e.type === 'result');
+    if (!result) {
+      return {
+        output: '',
+        error: {
+          kind: 'crash',
+          message: `Claude Code printed no JSON result: ${stdout.trim().slice(0, 200) || '(empty)'}`,
+        },
+      };
+    }
+    j = result;
   }
   // Some versions wrap events in an array; the result is the last element with type "result".
   if (Array.isArray(j)) j = [...j].reverse().find((e) => e?.type === 'result') ?? {};

@@ -423,6 +423,20 @@ in a final block:
 
 ---
 
+## Watching agents and re-testing merges
+
+**Steps.** `runProcess` can hand each complete line of an agent's stdout to a callback as it arrives (`onStdoutLine`). `agents/activity.ts` turns one line into zero or more `ActivityDraft`s (`read`, `edit`, `command`, `search`, `message`, `tool`), one pure function per CLI, tested against output captured from the real CLIs:
+
+| CLI | Where the steps come from |
+|---|---|
+| Codex | `item.started` for a command (shown without the `powershell.exe -Command` wrapper), `item.completed` for a file change or message; a non-zero exit is its own failed step |
+| OpenCode | one `tool_use` event per finished tool call (read, edit, write, bash, grep…) with its input, and `text` events |
+| Claude Code | run with `--output-format stream-json --verbose` only when someone is watching; `tool_use` blocks inside `assistant` events. The last event is the same `result` object `--output-format json` prints, so `parseClaude` reads either |
+
+`runAttempt` adds Puff's own `phase` steps (agent started, running the tests and the verdict, merging, re-testing) and gives every step an id, the task, the session and a time. Each step is emitted as `{ type: 'activity', step }` while it happens, and the whole list is stored on the session at the end (`Session.activity`, a JSON string, at most 400 steps), so `getTask` returns it with each session. The UI (`useActivity`) merges stored and live steps by id. Claude Code's streaming format was checked against the real CLI's init, assistant and result framing, but its tool-call blocks follow the documented format and have not been seen from a signed-in run.
+
+**Re-testing a merge.** Merge and re-index already happen together under the repository lock. With `verify.retestAfterMerge` (default on) the project's test command then runs on the merged commit, still under the lock, so nothing else lands in between. It runs in a clean detached checkout (`GitRepo.withCleanCheckout`), not in the main folder: the main folder also holds `.puff/worktrees`, where a recursive test runner such as Vitest finds other tasks' unfinished copies and runs them too (the demo suite reported 50 tests instead of 25). If it fails, it runs once more (a flaky test must not undo good work). A second failure means the task passed alone but not together with what was merged before it: `GitRepo.revertMerge` undoes the merge with `git revert -m 1` (history is kept, nothing is rewritten), the code is re-indexed, the failure is recorded against the code it broke (`recordTestFailures` on the combined output), the session ends as a failure whose summary says so, and the attempt branch is kept. The retry starts with that lesson in its context. If the revert itself conflicts, the task ends as an error that says main may be broken. If the tests cannot be run at all (a timeout, missing dependencies) the merge stands and a step says it could not be re-tested.
+
 ## Command center: talking to Puff
 
 One class, `ProjectController` (`control/controller.ts`), is everything a person can do to the open project: look at tasks, create and edit them, retry a failed one, remove one that never ran, read what a task changed, run and stop the team, re-index. The desktop app's buttons, the slash commands, the chat's tools and `npm run chat` all go through it, so they cannot disagree about what an action means. Tasks are named like a person would (`resolveTask`): the exact id, the end or a part of an id (four characters or more), or a word from the title; if several match it says which instead of guessing.
@@ -744,7 +758,7 @@ Every phase ends with a **checkpoint**: a working build, committed. The next pha
 | **P8 Projects** ✅ | Sat night | Project registry, folder inspection, git setup on request, per-project settings, `puff project` | Project switcher, Add a project dialog, welcome screen | Add a second repo, index it, switch back |
 | **P9 Command center** ✅ | Sat night | `ProjectController`, slash commands, control tools served over local HTTP MCP, chat session with approvals, task actions | Ask Puff panel (Ctrl+K), task Retry / Edit / Remove / Changes | A sentence in chat creates tasks; running asks first |
 | **P10 Installer** ✅ | Sat night | Packaged backend without a checkout or `.env` (bundled config, benchmark results and grammars; settings in `~/.puff`), setup check, start FalkorDB in Docker on request | NSIS Windows installer, first-run setup screen, agent tool list | Installed app: setup, add a project, a real agent run, uninstall |
-| **P11 Watch agents** | planned | Stream agent events, re-test after merge | Live activity in Task detail | You see what an agent does as it does it |
+| **P11 Watch agents** ✅ | Sat night | Streamed agent events (`ActivityStep`), re-test of the combined result after every merge, revert on failure | Activity tab in Task detail, `puff run` prints steps | You see what an agent does as it does it |
 | **P12 Ship** | planned | One-command demo story, clean-clone test | Screenshots, video | Fresh clone to running demo |
 | **Stretch** | any time | PageRank hotspots and similar failures (done); vector failures, Python support | Polish | Each item ships independently | PageRank routing (Q18), vector failures (Q17), generic CLI adapter | Electron packaging, polish | Each item ships independently |
 | **Ship** | Sun | README numbers, setup from a clean clone | Demo video, blog | Submit by 20:00 |

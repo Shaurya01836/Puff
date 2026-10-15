@@ -21,6 +21,8 @@ export interface ProcessOptions {
   shell?: boolean;
   /** Keep at most this many bytes per stream (the end is kept: failures print last) */
   maxBytes?: number;
+  /** Called with each complete line of stdout as it arrives (for watching an agent work) */
+  onStdoutLine?: (line: string) => void;
 }
 
 export interface ProcessResult {
@@ -223,13 +225,24 @@ export function runProcess(opts: ProcessOptions): Promise<ProcessResult> {
     if (opts.signal?.aborted) onAbort();
     else opts.signal?.addEventListener('abort', onAbort, { once: true });
 
-    child.stdout!.on('data', (c: Buffer) => out.push(c));
+    let pending = '';
+    child.stdout!.on('data', (c: Buffer) => {
+      out.push(c);
+      if (!opts.onStdoutLine) return;
+      pending += c.toString('utf8');
+      const lines = pending.split(/\r?\n/);
+      pending = lines.pop() ?? '';
+      for (const line of lines) if (line) opts.onStdoutLine(line);
+    });
     child.stderr!.on('data', (c: Buffer) => err.push(c));
     child.on('error', (e) => {
       spawnError = e.message;
       finish(null);
     });
-    child.on('close', (code) => finish(code));
+    child.on('close', (code) => {
+      if (pending && opts.onStdoutLine) opts.onStdoutLine(pending);
+      finish(code);
+    });
     // The process may exit before reading stdin; that is not our error.
     child.stdin!.on('error', () => {});
     child.stdin!.end(opts.stdin ?? '');

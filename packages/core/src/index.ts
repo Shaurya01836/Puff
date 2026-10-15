@@ -23,6 +23,7 @@ export * from './seed/demo';
 export * from './agents/types';
 export * from './agents/spawn';
 export * from './agents/parse';
+export * from './agents/activity';
 export * from './agents/adapters';
 export * from './git/repo';
 export * from './orchestrator/verify';

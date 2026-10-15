@@ -1,7 +1,7 @@
 // Sessions: one agent run on one task (episodic memory). Created when the run starts so the
 // context pack can hang off it, then finished with the outcome Puff observed.
 import type { Graph } from 'falkordb';
-import type { AgentName, Role, SessionInfo, SessionOutcome } from '@puff/shared';
+import type { ActivityStep, AgentName, Role, SessionInfo, SessionOutcome } from '@puff/shared';
 import { read, run } from '../db/client';
 import { newId } from '../ids';
 
@@ -42,7 +42,12 @@ export interface SessionResult {
   summary?: string;
   /** Repo-relative paths the agent changed (`git diff --name-only`) */
   changedFiles?: string[];
+  /** What happened during the session, kept so it can be read after the session is over */
+  activity?: ActivityStep[];
 }
+
+/** How many steps one session keeps (a runaway agent should not fill the graph) */
+export const MAX_STORED_STEPS = 400;
 
 /** Q11: record what Puff observed. Facts only: outcome, tokens, duration, files. */
 export async function finishSession(
@@ -54,7 +59,7 @@ export async function finishSession(
     graph,
     `MATCH (se:Session {id: $id})
      SET se.outcome = $outcome, se.tokensIn = $tokensIn, se.tokensOut = $tokensOut,
-         se.durationMs = $durationMs, se.filesRead = $filesRead, se.summary = $summary,
+         se.durationMs = $durationMs, se.filesRead = $filesRead, se.summary = $summary, se.activity = $activity,
          se.endedAt = timestamp()
      RETURN se.id AS id`,
     {
@@ -65,6 +70,9 @@ export async function finishSession(
       durationMs: result.durationMs ?? null,
       filesRead: result.filesRead ?? null,
       summary: result.summary?.slice(0, 2000) ?? null,
+      activity: result.activity?.length
+        ? JSON.stringify(result.activity.slice(-MAX_STORED_STEPS))
+        : null,
     },
   );
   if (!rows.length) throw new Error(`Unknown session ${sessionId}`);
@@ -108,5 +116,17 @@ export async function listSessions(graph: Graph, taskId?: string): Promise<Sessi
     changedFiles: changed.sort(),
     output: (p.summary as string | undefined) ?? undefined,
     startedAt: Number(p.startedAt),
+    activity: parseActivity(p.activity),
   }));
+}
+
+/** The stored steps; a missing or unreadable value is no steps, never an error. */
+function parseActivity(raw: unknown): ActivityStep[] | undefined {
+  if (typeof raw !== 'string' || !raw) return undefined;
+  try {
+    const steps = JSON.parse(raw);
+    return Array.isArray(steps) ? (steps as ActivityStep[]) : undefined;
+  } catch {
+    return undefined;
+  }
 }

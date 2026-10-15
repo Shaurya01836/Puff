@@ -232,7 +232,7 @@ Puff is built in **phases**. Each phase ends with a checkpoint: a working build 
 | **P8 Projects** ✅ | Add any repo from the app or CLI, switch between projects, per-project settings, import checks | Add a second repo, index it, switch back |
 | **P9 Command center** ✅ | Ask Puff chat with slash commands and a Claude Code orchestrator, task actions (retry, edit, remove, see changes) | "Add a /health endpoint and run it" typed in chat |
 | **P10 Installer** ✅ | Windows installer, first-run setup (database, agent CLIs) | Install, add a project, run a task without the source folder |
-| **P11 Watch agents** | Live view of what each agent does, re-test after every merge | You see files read, edits and commands as they happen |
+| **P11 Watch agents** ✅ | Live view of what each agent does (Activity tab), re-test of the combined result after every merge | You see files read, edits and commands as they happen |
 | **P12 Ship** | One-command demo story, clean-clone test, screenshots | Fresh clone to running demo in minutes |
 | **Stretch** | PageRank (hotspots, done), similar failures (done), vector search, Python support | Each one ships independently |
 
@@ -242,7 +242,7 @@ Details: [docs/ARCHITECTURE.md → Build phases](docs/ARCHITECTURE.md#build-phas
 
 ## Quick start
 
-> 🚧 Puff is being built during Graph Hacks (15–18 Oct 2026). **Phases P0 to P10 are in:** the code graph, shared memory (failures tied to the function they happened in, fixes, decisions, procedures, handoffs), the context compiler with its "why" trail, real agents, **and team coordination**. Claude Code, Codex and OpenCode run tasks in isolated git worktrees, Puff verifies with the project's own tests, records what went wrong, retries with the lesson and escalates. Give it a goal and a planner agent splits it into tasks; independent tasks run in parallel and a task that touches the same code as one already running waits. Tasks that were really run by agents were verified on the demo repo (OpenCode and Codex, both merged with tests passing; a real OpenCode planner turned a goal into three linked tasks). Memory stays correct: editing a function marks what was learned about *that function* "possibly outdated" (not the whole file), a replaced decision is kept but superseded, and a Puff MCP server lets Claude Code and OpenCode read and write memory mid-task. You can add any TypeScript or JavaScript repository as a project and switch between projects in the app or the CLI, and you can talk to Puff: slash commands answer at once, and plain sentences go to a Claude Code orchestrator that can only use Puff's tools (it adds tasks and goals, retries failures, reads the project memory, and asks you before it runs anything). A first benchmark has run (see [Benchmark](#benchmark)); the sample data in the quick start below is seeded, not real.
+> 🚧 Puff is being built during Graph Hacks (15–18 Oct 2026). **Phases P0 to P11 are in:** the code graph, shared memory (failures tied to the function they happened in, fixes, decisions, procedures, handoffs), the context compiler with its "why" trail, real agents, **and team coordination**. Claude Code, Codex and OpenCode run tasks in isolated git worktrees, Puff verifies with the project's own tests, records what went wrong, retries with the lesson and escalates. Give it a goal and a planner agent splits it into tasks; independent tasks run in parallel and a task that touches the same code as one already running waits. Tasks that were really run by agents were verified on the demo repo (OpenCode and Codex, both merged with tests passing; a real OpenCode planner turned a goal into three linked tasks). Memory stays correct: editing a function marks what was learned about *that function* "possibly outdated" (not the whole file), a replaced decision is kept but superseded, and a Puff MCP server lets Claude Code and OpenCode read and write memory mid-task. You can add any TypeScript or JavaScript repository as a project and switch between projects in the app or the CLI, and you can talk to Puff: slash commands answer at once, and plain sentences go to a Claude Code orchestrator that can only use Puff's tools (it adds tasks and goals, retries failures, reads the project memory, and asks you before it runs anything). A first benchmark has run (see [Benchmark](#benchmark)); the sample data in the quick start below is seeded, not real.
 
 **Just want to use it?** Install the Windows app (no source code, Node or npm needed): see [docs/INSTALL.md](docs/INSTALL.md). The rest of this section is for running from a checkout.
 
@@ -311,6 +311,12 @@ npm run puff -- project use my-app
 ```
 
 From then on every command works on the active project; `--repo <folder|name>` picks another for one command. `project set` changes a project's test command or linked folders, and `project remove` forgets a project (its folder is never touched; `--delete-memory` also deletes its graph). In the desktop app the project card at the top of the sidebar does the same: switch, **Add a project…** (with a folder picker and the same checks), settings and remove. Your agents and limits stay shared: `npm run puff -- config init` copies the defaults to `~/.puff/config.yaml` for you to edit.
+
+### Watch the agents work
+
+Open a task and its **Activity** tab shows each step as it happens: the files an agent reads, what it edits, the commands it runs, what it says, and Puff's own steps in between (running the tests, merging, re-testing). A running task opens on it, with a pulse on the tab. The steps are kept with the session, so you can read what an earlier attempt did. In the terminal, `npm run puff -- run` prints the same steps.
+
+Puff also **re-runs the project's tests on the combined result after every merge**. A task that passed in its own worktree can still break the code merged before it. If the combined tests fail twice (the second run rules out a flaky test), Puff undoes the merge with a revert commit, records the failure against the code it broke, and the next attempt starts with that lesson. Set `verify.retestAfterMerge: false` in the config to turn it off.
 
 ### Talk to Puff
 

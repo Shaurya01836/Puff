@@ -46,6 +46,9 @@ escalation: [opencode, codex, claude-code]
 verify:
   testCommand: 'npm test'
   verifierAgent: claude-code
+  # After a task's tests pass and it is merged, run the tests again on the combined result. If they fail
+  # (twice, to rule out a flaky test) the merge is undone with a revert commit and the failure is remembered.
+  retestAfterMerge: true
 
 worktrees:
   # Directories linked into every task worktree from the main checkout (they are git-ignored,

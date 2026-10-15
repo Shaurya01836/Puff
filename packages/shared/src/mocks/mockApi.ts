@@ -2,6 +2,7 @@
 // and by `npm run dev:web` so the renderer runs in a plain browser.
 import type { PuffApi } from '../api';
 import type {
+  ActivityStep,
   ChatMessage,
   MemoryEvent,
   ProjectSummary,
@@ -36,6 +37,21 @@ const NEXT_STATUS: Partial<Record<TaskStatus, TaskStatus>> = {
 };
 
 const clone = <T>(v: T): T => structuredClone(v);
+
+/** What the simulated run says when a task enters a status, so the Activity tab moves in the browser. */
+const SIM_STEPS: Partial<Record<TaskStatus, Array<[ActivityStep['kind'], string, boolean?]>>> = {
+  running: [
+    ['phase', 'An agent started on this task'],
+    ['read', 'Read src/auth/login.ts'],
+    ['edit', 'Edited src/auth/login.ts'],
+  ],
+  verifying: [['phase', 'Running the tests: npm test']],
+  done: [
+    ['phase', 'Tests passed (14 of 14)', true],
+    ['phase', 'Merged. Re-testing the combined result'],
+    ['phase', 'Combined tests passed (14 of 14)', true],
+  ],
+};
 
 export interface MockApiOptions {
   /** Milliseconds between simulated events after `start()` (default 2500) */
@@ -109,6 +125,20 @@ export function createMockApi(opts: MockApiOptions = {}): PuffApi {
     t.updatedAt = Date.now();
     if (t.status === 'ready') delete t.blockedBy;
     emit({ type: 'task:update', task: clone(t) });
+    for (const [kind, text, ok] of SIM_STEPS[t.status] ?? []) {
+      emit({
+        type: 'activity',
+        step: {
+          id: `sim_${++seq}`,
+          taskId: t.id,
+          sessionId: `sim_${t.id}`,
+          at: Date.now(),
+          kind,
+          text,
+          ...(ok === undefined ? {} : { ok }),
+        },
+      });
+    }
     if (t.status === 'done') {
       const event: MemoryEvent = {
         id: `evt_${++seq}`,

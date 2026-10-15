@@ -1,4 +1,5 @@
 import type { AgentName, PuffReport, Role } from '@puff/shared';
+import type { ActivityDraft } from './activity';
 
 export type AgentErrorKind =
   /** Not signed in, expired session, bad API key: nothing wrong with the code */
@@ -52,6 +53,8 @@ export interface RunOptions {
   /** Provider model override; omit to use the CLI's own configuration */
   model?: string;
   signal?: AbortSignal;
+  /** Called for each step the agent takes, as it happens. Without it the agent runs exactly as before. */
+  onActivity?: (step: ActivityDraft) => void;
 }
 
 export interface HarnessAdapter {

@@ -5,7 +5,7 @@
 // agent claims. Harness problems (not signed in, timeout) are recorded as `error` sessions and do
 // not create failure memory, because they say nothing about the code.
 import type { Graph } from 'falkordb';
-import type { AgentName, PuffEvent, Task } from '@puff/shared';
+import type { ActivityStep, AgentName, PuffEvent, Task } from '@puff/shared';
 import { ROLE_FOR_TYPE, type Adapters } from '../agents/adapters';
 import { WRITES_FILES, type HarnessResult } from '../agents/types';
 import type { PuffConfig } from '../config';
@@ -16,11 +16,17 @@ import { recordTestFailures } from '../memory/failures';
 import { getMemoryFeed } from '../queries/explain';
 import { recordSolution } from '../memory/memory';
 import { applyReport } from '../memory/report';
-import { finishSession, listSessions, startSession } from '../memory/sessions';
+import {
+  MAX_STORED_STEPS,
+  finishSession,
+  listSessions,
+  startSession,
+  type SessionResult,
+} from '../memory/sessions';
 import { getTask, updateTask } from '../memory/tasks';
 import { candidateAgents } from './routing';
 import type { SlotPool } from './schedule';
-import { runVerification } from './verify';
+import { runVerification, type Verdict } from './verify';
 
 export interface RunDeps {
   graph: Graph;
@@ -254,6 +260,31 @@ async function runAttempt(
 
   const wt = await repo.createWorktree(`${task.id}-a${n}`, config.worktrees.linkDirs);
   const sessionId = await startSession(graph, { agent, taskId: task.id, role });
+
+  // What happens during this attempt, in order. Each step goes to the UI as it happens and is stored
+  // with the session when it ends, so the task can be read back later.
+  const steps: ActivityStep[] = [];
+  const note = (
+    kind: ActivityStep['kind'],
+    text: string,
+    extra: { path?: string; ok?: boolean } = {},
+  ) => {
+    const step: ActivityStep = {
+      id: `${sessionId}:${steps.length}`,
+      taskId: task.id,
+      sessionId,
+      at: Date.now(),
+      kind,
+      text,
+      ...extra,
+    };
+    steps.push(step);
+    if (steps.length > MAX_STORED_STEPS) steps.shift();
+    deps.emit?.({ type: 'activity', step });
+  };
+  const end = (result: SessionResult) =>
+    finishSession(graph, sessionId, { ...result, activity: steps });
+  note('phase', `${agent} started as ${role}`);
   await emitTask(
     deps,
     await updateTask(graph, task.id, {
@@ -294,7 +325,7 @@ async function runAttempt(
   try {
     release = await deps.slots?.acquire(agent, deps.signal);
   } catch {
-    await finishSession(graph, sessionId, {
+    await end({
       outcome: 'error',
       summary: 'Stopped while waiting for a free agent slot',
     });
@@ -310,6 +341,7 @@ async function runAttempt(
       timeoutMs: config.limits.timeoutMs,
       model: task.model ?? config.harnesses[agent]?.model,
       signal: deps.signal,
+      onActivity: (step) => note(step.kind, step.text, { path: step.path, ok: step.ok }),
     })
     .finally(() => release?.());
   const tokens = { in: res.tokensIn ?? 0, out: res.tokensOut ?? 0 };
@@ -326,7 +358,7 @@ async function runAttempt(
       deps.unavailable ??= new Map();
       deps.unavailable.set(agent, res.error.message);
     }
-    await finishSession(graph, sessionId, {
+    await end({
       outcome: 'error',
       ...facts,
       summary: `${res.error.kind}: ${res.error.message}`,
@@ -358,7 +390,7 @@ async function runAttempt(
         res.reportError ??
         applied?.skippedTasks[0]?.reason ??
         'the answer had no tasks in a <puff-report> block';
-      await finishSession(graph, sessionId, {
+      await end({
         outcome: 'failure',
         ...facts,
         summary: `Planned nothing: ${why}`,
@@ -368,7 +400,7 @@ async function runAttempt(
       log(`✖ ${agent} produced no plan: ${why}`);
       return { summary: summary('failure', `no plan: ${why}`), tokens, skipRetry: true };
     }
-    await finishSession(graph, sessionId, {
+    await end({
       outcome: 'success',
       ...facts,
       summary: summarize(res.output),
@@ -384,7 +416,7 @@ async function runAttempt(
 
   // 3. A writer that changed nothing would "pass" the existing tests. That is not a success.
   if (files.length === 0) {
-    await finishSession(graph, sessionId, {
+    await end({
       outcome: 'failure',
       ...facts,
       summary: `Changed nothing. ${summarize(res.output, 300)}`,
@@ -396,6 +428,7 @@ async function runAttempt(
   }
 
   // 4. Verify with the project's own tests.
+  note('phase', `Running the tests: ${config.verify.testCommand}`);
   await emitTask(deps, await updateTask(graph, task.id, { status: 'verifying' }));
   const verdict = await runVerification(
     wt.path,
@@ -406,18 +439,67 @@ async function runAttempt(
   const tests = verdict.summary
     ? { passed: verdict.summary.passed, total: verdict.summary.total }
     : undefined;
+  const counts = (t?: { passed: number; total: number }) =>
+    t ? ` (${t.passed} of ${t.total})` : '';
+  note(
+    'phase',
+    verdict.ok
+      ? `Tests passed${counts(tests)}`
+      : verdict.kind === 'error'
+        ? `The tests could not run: ${verdict.message}`
+        : `Tests failed${counts(tests)}`,
+    { ok: verdict.ok },
+  );
 
   if (verdict.ok) {
     await repo.commit(wt, `puff: ${task.title}`);
     // Merge and re-index together under the repository lock, so parallel tasks never read the main
     // checkout halfway through each other's merge. The re-index flags memory about changed code as stale.
-    const merge = await repo.serial(async () => {
+    note('phase', 'Merging into the main branch');
+    const landed = await repo.serial(async () => {
       const m = await repo.mergeNow(wt, `Merge puff task ${task.id}: ${task.title}`);
-      if (m.merged) await indexRepo(graph, deps.project);
-      return m;
+      if (!m.merged) return { m };
+      await indexRepo(graph, deps.project);
+      if (!config.verify.retestAfterMerge) return { m };
+
+      // Passing in its own worktree is not the same as passing together with everything merged before it.
+      // This runs while the lock is held, so nothing else lands on the main branch in the meantime.
+      note('phase', 'Merged. Re-testing the combined result');
+      // The tests run in a clean checkout of the merged commit, not in the main folder: that folder also
+      // holds every running task's worktree, and a test runner there would run their unfinished copies too.
+      const combined: Verdict = await repo
+        .withCleanCheckout(`combined-${task.id}`, config.worktrees.linkDirs, async (dir) => {
+          const retest = () =>
+            runVerification(dir, config.verify.testCommand, config.limits.timeoutMs, deps.signal);
+          let result = await retest();
+          if (result.kind === 'tests-failed') {
+            note('phase', 'The combined tests failed. Running them once more to be sure', {
+              ok: false,
+            });
+            result = await retest();
+          }
+          return result;
+        })
+        .catch((err: Error): Verdict => ({
+          ok: false,
+          kind: 'error',
+          output: '',
+          exitCode: null,
+          durationMs: 0,
+          message: `Could not set up a clean checkout: ${err.message}`,
+        }));
+      if (combined.kind !== 'tests-failed') return { m, combined };
+      const undo = await repo.revertMerge(m.sha!);
+      if (undo.reverted) await indexRepo(graph, deps.project);
+      return { m, combined, undo };
     });
+    const merge = landed.m;
+    const combined = landed.combined;
+    const combinedTests = combined?.summary
+      ? { passed: combined.summary.passed, total: combined.summary.total }
+      : tests;
     if (!merge.merged) {
-      await finishSession(graph, sessionId, {
+      await end({
         outcome: 'error',
         ...facts,
         changedFiles: files,
@@ -433,7 +515,59 @@ async function runAttempt(
         stop: true,
       };
     }
-    await finishSession(graph, sessionId, {
+    if (combined?.kind === 'tests-failed') {
+      // Good alone, bad together. Undo the merge (done above) and keep the lesson for the next try.
+      const undone = landed.undo?.reverted === true;
+      note(
+        'phase',
+        undone
+          ? 'Still failing, so the merge was undone with a revert commit'
+          : `Still failing, and the merge could not be undone: ${landed.undo?.reason ?? 'unknown reason'}`,
+        { ok: false },
+      );
+      const recorded = await recordTestFailures(graph, {
+        sessionId,
+        taskId: task.id,
+        output: combined.output,
+        root: deps.project.repoPath,
+        diff,
+        changedFiles: files,
+        fallbackMessage: 'Tests failed after merging with the rest of the code',
+      });
+      const why = recorded[0]?.message ?? 'Tests failed';
+      await end({
+        outcome: undone ? 'failure' : 'error',
+        ...facts,
+        changedFiles: files,
+        summary: `Passed on its own, but the combined tests failed${undone ? ' and the merge was reverted' : ''}: ${why}`,
+      });
+      await emitSession(deps, task.id, sessionId);
+      await cleanup(false); // keep the branch so the attempt can be inspected
+      log(
+        undone
+          ? `✖ ${task.id} broke the combined tests, merge reverted: ${why}`
+          : `✖ ${task.id} broke the combined tests and could not be reverted: ${why}`,
+      );
+      return undone
+        ? {
+            summary: summary('failure', `Broke the combined tests: ${why}`, recorded.length),
+            tokens,
+            tests: combinedTests,
+            failureIds: recorded.map((r) => r.id),
+          }
+        : {
+            summary: summary('error', `Main may be broken (revert failed): ${why}`),
+            tokens,
+            tests: combinedTests,
+            failureIds: recorded.map((r) => r.id),
+            stop: true,
+          };
+    }
+    if (combined?.kind === 'error')
+      note('phase', `Could not re-test the combined result: ${combined.message}`, { ok: false });
+    else if (combined?.ok)
+      note('phase', `Combined tests passed${counts(combinedTests)}`, { ok: true });
+    await end({
       outcome: 'success',
       ...facts,
       changedFiles: files,
@@ -457,14 +591,14 @@ async function runAttempt(
     return {
       summary: summary('success', summarize(res.output, 160)),
       tokens,
-      tests,
+      tests: combinedTests,
       fix: { text: res.report?.notes?.trim() || summarize(res.output, 300), commit: merge.sha },
     };
   }
 
   if (verdict.kind === 'error') {
     // The tests could not run (timeout, crash of the runner): a harness problem, not a lesson.
-    await finishSession(graph, sessionId, {
+    await end({
       outcome: 'error',
       ...facts,
       changedFiles: files,
@@ -486,7 +620,7 @@ async function runAttempt(
     changedFiles: files,
     fallbackMessage: 'Tests failed',
   });
-  await finishSession(graph, sessionId, {
+  await end({
     outcome: 'failure',
     ...facts,
     changedFiles: files,

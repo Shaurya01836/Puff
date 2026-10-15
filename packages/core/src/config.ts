@@ -37,6 +37,12 @@ export const configSchema = z.object({
     .object({
       testCommand: z.string().default('npm test --silent'),
       verifierAgent: z.string().optional(),
+      /**
+       * After a task's tests pass and it is merged, run the tests again on the combined result. If they
+       * fail (twice, to rule out a flaky test), the merge is undone with a revert commit and the failure
+       * is recorded as a lesson. Set to false to skip the second run.
+       */
+      retestAfterMerge: z.boolean().default(true),
     })
     .prefault({}),
   worktrees: z.object({ linkDirs: z.array(z.string()).default(['node_modules']) }).prefault({}),

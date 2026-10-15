@@ -8,6 +8,7 @@ import type { FalkorDB, Graph } from 'falkordb';
 import {
   AGENT_NAMES,
   type AgentName,
+  type PuffEvent,
   type RepoInspection,
   type Role,
   type TaskType,
@@ -717,7 +718,13 @@ program
   .action(async (taskId: string | undefined, o: { agent?: string }) => {
     await withProject(undefined, async ({ graph, project, config }) => {
       const log = (line: string) => console.log(`  ${line}`);
-      const deps = await createRunDeps({ graph, project, config, log });
+      // What each agent does, as it does it (read, edit, command; Puff's own test runs in between)
+      const emit = (e: PuffEvent) => {
+        if (e.type !== 'activity') return;
+        const mark = e.step.ok === false ? '✖' : e.step.kind === 'phase' ? '▶' : '·';
+        console.log(`    ${mark} ${e.step.text}`);
+      };
+      const deps = await createRunDeps({ graph, project, config, log, emit });
       const stop = new AbortController();
       process.once('SIGINT', () => {
         console.log('\nstopping…');

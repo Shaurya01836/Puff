@@ -8,11 +8,12 @@ import type {
   TaskDiffInfo,
   WhyPath,
 } from '@puff/shared';
+import { ActivityFeed } from '@/components/ActivityFeed';
 import { NewTaskDialog, type SymbolOption } from '@/components/NewTaskDialog';
 import { AgentChip, SectionTitle, StatusPill } from '@/components/ui';
 import { puff } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { useLoad } from '@/lib/hooks';
+import { useActivity, useLoad } from '@/lib/hooks';
 import { AGENT_META, NODE_COLORS, formatTokens } from '@/lib/theme';
 
 interface Detail {
@@ -30,7 +31,10 @@ async function loadDetail(taskId: string): Promise<Detail> {
   return { task, sessions, pack, why };
 }
 
-type Tab = 'context' | 'changes' | 'why' | 'sessions';
+type Tab = 'activity' | 'context' | 'changes' | 'why' | 'sessions';
+
+/** The statuses in which an agent (or Puff's own checks) is working on the task right now */
+const WORKING = new Set<Task['status']>(['running', 'verifying']);
 
 export function TaskDetail({
   taskId,
@@ -45,7 +49,9 @@ export function TaskDetail({
   const [tick, setTick] = useState(0);
   const detail = useLoad(() => loadDetail(taskId), [taskId, tick]);
   const diff = useLoad(() => puff.getTaskDiff(taskId), [taskId, tick, detail?.task.status]);
-  const [tab, setTab] = useState<Tab>('context');
+  // The tab the person picked; until they pick one, a task being worked on opens on its activity
+  const [picked, setPicked] = useState<Tab>();
+  const activity = useActivity(taskId, detail?.sessions);
   const [editing, setEditing] = useState(false);
   const [problem, setProblem] = useState<string>();
 
@@ -60,8 +66,24 @@ export function TaskDetail({
     }
   };
   const status = detail?.task.status;
+  const working = status !== undefined && WORKING.has(status);
+  const tab: Tab = picked ?? (working ? 'activity' : 'context');
+  const setTab = setPicked;
+  const stepCount = activity.reduce((n, g) => n + g.steps.length, 0);
   const canEdit = status === 'planned' || status === 'ready' || status === 'failed';
   const canRemove = (status === 'planned' || status === 'ready') && detail?.sessions.length === 0;
+
+  useEffect(
+    () =>
+      puff.onEvent((e) => {
+        if (
+          (e.type === 'task:update' && e.task.id === taskId) ||
+          (e.type === 'session:update' && e.session.taskId === taskId)
+        )
+          setTick((t) => t + 1);
+      }),
+    [taskId],
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !editing && onClose();
@@ -143,6 +165,7 @@ export function TaskDetail({
           <div className="mt-5 flex gap-1">
             {(
               [
+                ['activity', `Activity${stepCount ? ` · ${stepCount}` : ''}`],
                 ['context', 'Context received'],
                 ['changes', `Changes${diff ? ` · ${diff.files.length}` : ''}`],
                 ['why', 'Why?'],
@@ -160,12 +183,16 @@ export function TaskDetail({
                 )}
               >
                 {label}
+                {id === 'activity' && working && (
+                  <span className="ml-1.5 inline-block size-1.5 animate-pulse rounded-full bg-info align-middle" />
+                )}
               </button>
             ))}
           </div>
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          {detail && tab === 'activity' && <ActivityFeed groups={activity} active={working} />}
           {detail && tab === 'context' && <ContextTab task={detail.task} pack={detail.pack} />}
           {detail && tab === 'changes' && <ChangesTab diff={diff} status={detail.task.status} />}
           {detail && tab === 'why' && <WhyTab why={detail.why} />}

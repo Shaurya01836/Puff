@@ -52,6 +52,28 @@ export interface Task {
   updatedAt: number;
 }
 
+/**
+ * What a step was.
+ * `phase` steps are Puff's own (running the tests, merging, re-testing the combined result);
+ * the others are what the agent did.
+ */
+export type ActivityKind = 'read' | 'edit' | 'command' | 'search' | 'message' | 'tool' | 'phase';
+
+/** One step of a session, in the order it happened. */
+export interface ActivityStep {
+  id: string;
+  taskId: string;
+  sessionId: string;
+  at: number;
+  kind: ActivityKind;
+  /** One line a person can read: "Edited src/auth.ts", "Ran npm test" */
+  text: string;
+  /** The file the step is about, relative to the project, when it has one */
+  path?: string;
+  /** false when the step failed (a command that exited non-zero, tests that failed) */
+  ok?: boolean;
+}
+
 export interface SessionInfo {
   id: string;
   taskId: string;
@@ -64,6 +86,8 @@ export interface SessionInfo {
   changedFiles: string[];
   output?: string;
   startedAt: number;
+  /** What the agent and Puff did during this session, oldest first. Kept after the session ends. */
+  activity?: ActivityStep[];
 }
 
 export interface ContextItem {
@@ -217,7 +241,9 @@ export type PuffEvent =
   /** The active project changed (added, switched, removed or its settings changed): reload everything */
   | { type: 'project'; projectId: string }
   /** A chat message was added or changed (an approval was answered): upsert it by id */
-  | { type: 'chat'; message: ChatMessage };
+  | { type: 'chat'; message: ChatMessage }
+  /** One thing an agent (or Puff) just did on a task: a file read, an edit, a command, a test run */
+  | { type: 'activity'; step: ActivityStep };
 
 /** Where the API gets its data. Lets the UI say honestly what is live and what is mock. */
 export interface BackendInfo {

@@ -1,5 +1,6 @@
 // Realistic fixtures for the demo repo (demo/shop-api). Deterministic so screenshots stay stable.
 import type {
+  ActivityStep,
   AgentProfile,
   ContextPack,
   MemoryEvent,
@@ -182,6 +183,23 @@ export const mockTasks: Task[] = [
   }),
 ];
 
+/** Steps for a mock session, one minute apart, so the Activity tab has something to show in the browser. */
+function steps(
+  sessionId: string,
+  taskId: string,
+  list: Array<[ActivityStep['kind'], string, boolean?]>,
+): ActivityStep[] {
+  return list.map(([kind, text, ok], i) => ({
+    id: `${sessionId}:${i}`,
+    taskId,
+    sessionId,
+    at: min(30) + i * 20_000,
+    kind,
+    text,
+    ...(ok === undefined ? {} : { ok }),
+  }));
+}
+
 export const mockSessions: SessionInfo[] = [
   {
     id: 'ses_01',
@@ -208,6 +226,19 @@ export const mockSessions: SessionInfo[] = [
     changedFiles: ['src/middleware/rateLimit.ts', 'test/rateLimit.spec.ts'],
     output: 'Added sliding-window limiter keyed by IP; bucket resets per IP after window.',
     startedAt: min(5),
+    activity: steps('ses_02', 'task_02', [
+      ['phase', 'codex started as coder'],
+      ['message', 'I will add a sliding-window limiter and a test for it.'],
+      ['read', 'Read src/routes/auth.ts'],
+      ['edit', 'Created src/middleware/rateLimit.ts'],
+      ['edit', 'Created test/rateLimit.spec.ts'],
+      ['command', 'Ran npm test'],
+      ['phase', 'Running the tests: npm test'],
+      ['phase', 'Tests passed (14 of 14)', true],
+      ['phase', 'Merging into the main branch'],
+      ['phase', 'Merged. Re-testing the combined result'],
+      ['phase', 'Combined tests passed (14 of 14)', true],
+    ]),
   },
   {
     id: 'ses_03',
@@ -222,6 +253,14 @@ export const mockSessions: SessionInfo[] = [
     output:
       'Logged failed attempts via audit(req.body). 1 test failing: password appears in audit log.',
     startedAt: min(7),
+    activity: steps('ses_03', 'task_07', [
+      ['phase', 'codex started as coder'],
+      ['read', 'Read src/auth/login.ts'],
+      ['read', 'Read src/auth/audit.ts'],
+      ['edit', 'Edited src/auth/login.ts'],
+      ['phase', 'Running the tests: npm test'],
+      ['phase', 'Tests failed (13 of 14)', false],
+    ]),
   },
   {
     id: 'ses_04',

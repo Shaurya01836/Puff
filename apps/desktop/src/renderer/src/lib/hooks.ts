@@ -1,6 +1,47 @@
 import { useEffect, useState } from 'react';
-import type { ChatInfo, ChatMessage, MemoryEvent, Task } from '@puff/shared';
+import type {
+  ActivityStep,
+  ChatInfo,
+  ChatMessage,
+  MemoryEvent,
+  SessionInfo,
+  Task,
+} from '@puff/shared';
 import { puff } from './api';
+
+/** The steps of one attempt: the session it belongs to (once it is known) and what happened, oldest first */
+export interface ActivityGroup {
+  id: string;
+  session?: SessionInfo;
+  steps: ActivityStep[];
+}
+
+/**
+ * What the agents did on a task, one group per attempt. Finished attempts bring their steps with the
+ * session; the running one arrives step by step as `activity` events. The two are merged by step id, so
+ * a step that shows up both ways is shown once.
+ */
+export function useActivity(taskId: string, sessions: SessionInfo[] | undefined): ActivityGroup[] {
+  const [live, setLive] = useState<ActivityStep[]>([]);
+  useEffect(() => {
+    setLive([]);
+    return puff.onEvent((e) => {
+      if (e.type !== 'activity' || e.step.taskId !== taskId) return;
+      setLive((prev) => (prev.some((s) => s.id === e.step.id) ? prev : [...prev, e.step]));
+    });
+  }, [taskId]);
+
+  const groups = new Map<string, ActivityGroup>();
+  for (const s of sessions ?? [])
+    groups.set(s.id, { id: s.id, session: s, steps: [...(s.activity ?? [])] });
+  for (const step of live) {
+    const g = groups.get(step.sessionId) ?? { id: step.sessionId, steps: [] };
+    if (!g.steps.some((x) => x.id === step.id)) g.steps.push(step);
+    groups.set(g.id, g);
+  }
+  for (const g of groups.values()) g.steps.sort((a, b) => a.at - b.at);
+  return [...groups.values()];
+}
 
 /** Load once; re-runs when deps change. */
 export function useLoad<T>(load: () => Promise<T>, deps: unknown[] = []): T | undefined {
