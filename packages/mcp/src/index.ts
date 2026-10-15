@@ -1,9 +1,8 @@
 // Puff MCP server (stdio). Agents that support MCP (Claude Code, OpenCode) call these tools
-// to read and write the shared graph memory. More tools land with each build phase
-// (get_context, impact_of, record_decision, record_failure, record_solution, handoff, why).
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+// to read and write the shared graph memory. The tools themselves live in ./tools.
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { connect, graphName, graphStats, loadDotEnv, projectGraph } from '@puff/core';
+import { connect, graphName, loadConfig, loadDotEnv, projectGraph } from '@puff/core';
+import { createPuffServer } from './tools';
 
 loadDotEnv();
 
@@ -14,33 +13,16 @@ if (!project) {
 }
 
 const db = await connect();
-const graph = projectGraph(db, project);
+if (!(await db.list()).includes(graphName(project))) {
+  console.error(`Graph ${graphName(project)} does not exist. Run: npm run puff -- index <repo>`);
+  process.exit(1);
+}
 
-const server = new McpServer({ name: 'puff', version: '0.1.0' });
-
-server.registerTool(
-  'project_status',
-  {
-    title: 'Project memory status',
-    description:
-      'Counts of code and memory nodes (files, symbols, tasks, failures, decisions…) in the shared Puff graph for this project.',
-  },
-  async () => {
-    if (!(await db.list()).includes(graphName(project))) {
-      return {
-        isError: true,
-        content: [
-          {
-            type: 'text',
-            text: `Graph ${graphName(project)} does not exist. Run puff init first.`,
-          },
-        ],
-      };
-    }
-    const stats = await graphStats(graph);
-    return { content: [{ type: 'text', text: JSON.stringify(stats, null, 2) }] };
-  },
-);
+const server = createPuffServer({
+  graph: projectGraph(db, project),
+  config: await loadConfig(process.env.PUFF_CONFIG),
+  sessionId: process.env.PUFF_SESSION,
+});
 
 await server.connect(new StdioServerTransport());
 // stdout carries the MCP protocol, so diagnostics go to stderr.

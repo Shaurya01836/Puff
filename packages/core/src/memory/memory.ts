@@ -201,6 +201,21 @@ export async function recordDecision(graph: Graph, input: DecisionInput): Promis
   return { id };
 }
 
+/**
+ * A person or agent checked that a failure or decision flagged "possibly outdated" still holds after
+ * the code changed. Clears the flag; superseded decisions stay superseded.
+ */
+export async function confirmMemory(graph: Graph, id: string): Promise<void> {
+  const rows = await run<{ id: string }>(
+    graph,
+    `MATCH (m) WHERE m.id = $id AND labels(m)[0] IN ['Failure', 'Decision']
+     SET m.stale = false, m.confirmedAt = timestamp()
+     RETURN m.id AS id`,
+    { id },
+  );
+  if (!rows.length) throw new Error(`No failure or decision with id ${id}`);
+}
+
 export interface ProcedureInput extends Stamp {
   text: string;
   /** Technology it applies to (e.g. Express). Omit for a project-wide procedure. */

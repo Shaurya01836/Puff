@@ -24,7 +24,8 @@ const git = (cwd: string, ...args: string[]) =>
     encoding: 'utf8',
   }).trim();
 
-describe('GitRepo worktrees', () => {
+// Real git on a real disk: these are slow when other test files run beside them.
+describe('GitRepo worktrees', { timeout: 30_000 }, () => {
   let root: string;
   let repo: GitRepo;
   const tmp: string[] = [];

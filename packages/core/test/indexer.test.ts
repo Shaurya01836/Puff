@@ -1,9 +1,9 @@
-import { cpSync, appendFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { cpSync, appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { connect, loadDotEnv, run } from '../src/db/client';
+import { connect, loadDotEnv, read, run } from '../src/db/client';
 import { graphName } from '../src/ids';
 import { indexRepo, loadSources } from '../src/indexer/index';
 import { parseSource } from '../src/indexer/parser';
@@ -131,13 +131,32 @@ describe.skipIf(!db)('indexRepo against FalkorDB', () => {
 
     await run(
       graph,
-      `MATCH (s:Symbol {id: 'src/auth/login.ts::login'})
-       CREATE (:Failure {id: 'fail_test', message: 'pw logged', stale: false})-[:IN]->(s)`,
+      `MATCH (s:Symbol {id: 'src/auth/login.ts::login'}), (c:Symbol {id: 'src/auth/login.ts::checkUser'})
+       CREATE (:Failure {id: 'fail_test', message: 'pw logged', stale: false})-[:IN]->(s),
+              (:Failure {id: 'fail_check', message: 'wrong user', stale: false})-[:IN]->(c)`,
     );
+    const stale = async () =>
+      (
+        await read<{ id: string }>(
+          graph,
+          `MATCH (f:Failure) WHERE f.stale = true RETURN f.id AS id ORDER BY id`,
+        )
+      ).map((r) => r.id);
+
+    // A comment after every function changes the file but not what any of them does.
     appendFileSync(join(repo, 'src/auth/login.ts'), '\n// edited\n');
+    const commented = await indexRepo(graph, project);
+    expect(commented.changed).toBe(1);
+    expect(commented.staleFlagged).toBe(0);
+    expect(await stale()).toEqual([]);
+
+    // Editing one function flags what we learned about it, and only it.
+    const file = join(repo, 'src/auth/login.ts');
+    writeFileSync(file, readFileSync(file, 'utf8').replace("'login.failed'", "'login.rejected'"));
     const edited = await indexRepo(graph, project);
     expect(edited.changed).toBe(1);
     expect(edited.staleFlagged).toBe(1);
+    expect(await stale()).toEqual(['fail_check']);
 
     const exported = await exportGraph(graph);
     expect(exported.nodes.find((n) => n.id === 'src/auth/login.ts::login')?.kind).toBe('Symbol');
@@ -147,5 +166,14 @@ describe.skipIf(!db)('indexRepo against FalkorDB', () => {
       target: 'src/auth/login.ts::login',
       type: 'IN',
     });
+
+    // Deleting a function flags its memory too.
+    writeFileSync(
+      file,
+      readFileSync(file, 'utf8').replace(/export function login[\s\S]*?\n}\n/, ''),
+    );
+    const removed = await indexRepo(graph, project);
+    expect(removed.staleFlagged).toBe(1);
+    expect(await stale()).toEqual(['fail_check', 'fail_test']);
   });
 });

@@ -60,7 +60,7 @@ Puff stores **references, not code**: path, line range, signature and hash. The 
 |---|---|---|
 | `Project` | `id`, `name`, `repoPath` | Root of the graph |
 | `File` | `path` (unique), `hash`, `lang`, `updatedAt` | A source file. `hash` detects changes. |
-| `Symbol` (+ `:Function` / `:Class` / `:Method`) | `id`, `name`, `file`, `startLine`, `endLine`, `signature`, `kind`, `pagerank?` | A code entity. **No code body is stored.** |
+| `Symbol` (+ `:Function` / `:Class` / `:Method`) | `id`, `name`, `file`, `startLine`, `endLine`, `signature`, `bodyHash`, `kind`, `pagerank?` | A code entity. **No code body is stored.** |
 | `Technology` | `name` | TypeScript, Express, Vitest, Node.js… (from imports + `package.json`) |
 | `Capability` | `name` | `reasoning`, `planning`, `implementation`, `verification`, `simple-edit`, `docs`, `refactor` |
 | `Agent` | `name` (`claude-code` / `codex` / `opencode`), `instances` | A harness type in the pool |
@@ -150,7 +150,7 @@ erDiagram
 2. **Stable IDs + `MERGE`** make re-indexing idempotent.
 3. **Store references, not code.** The repo is the source of truth.
 4. **Never delete memory; supersede it.** History stays queryable.
-5. **Invalidate on code change.** When a file's hash changes, linked memory gets `stale = true`.
+5. **Invalidate on code change.** When a symbol's own code changes (or it is deleted), memory linked to it gets `stale = true`.
 6. **Record "why" when retrieving.** Every `ContextPack` item carries `INCLUDED {reason}`.
 7. **Similarity finds the starting point, the graph supplies the context.** Vector lookup first, then traverse.
 8. **Small, append-mostly writes**, one event per query.
@@ -214,7 +214,7 @@ All queries use parameters (`$name`). Nothing is built by string concatenation.
 | # | Purpose | Used by |
 |---|---|---|
 | Q1 | Index a file (symbols, calls) | indexer |
-| Q2 | Mark memory stale when a file changes | indexer, after merge |
+| Q2 | Mark memory stale when the code it is about changes | indexer, after merge |
 | Q3 | Build context for a task | context compiler |
 | Q4 | Record a ContextPack | context compiler |
 | Q5 | Why did this session get this context? | Why view, MCP `why` |
@@ -263,21 +263,31 @@ MATCH (a:File {path: i.from}), (b:File {path: i.to})
 MERGE (a)-[:IMPORTS]->(b)
 ```
 
-### Q2: Mark memory stale when a file changes
+### Q2: Mark memory stale when the code it is about changes
 
-When a file's hash changes (or the file disappears), every failure and decision anchored to a symbol in it is marked stale, with the time and the file that caused it. This runs **before** the new hash is written. The context compiler then drops stale memory, or labels it "possibly outdated" if nothing fresher exists.
+Staleness is decided **per symbol, not per file**. Each symbol stores `bodyHash`, a hash of its own lines. When a changed file is re-indexed, a symbol whose `bodyHash` differs has every failure and decision anchored to it marked stale, with the time and the symbol that caused it (`staleBecause`). Editing `login` flags what was learned about `login`; the other functions in the same file, a comment added after them, or a reformat of a different function flag nothing. A symbol that was deleted (or whose whole file was deleted) flags its memory too. This runs **before** the new hashes are written. The context compiler then drops stale memory, or labels it "possibly outdated" if nothing fresher exists. A symbol indexed before `bodyHash` existed is only recorded, never flagged.
 
 ```cypher
-UNWIND $files AS file
-MATCH (f:File {path: file.path})
-WHERE f.hash <> file.hash
-MATCH (f)-[:DEFINES]->(:Symbol)<-[:ABOUT|IN]-(m)
+// edited symbols
+UNWIND $syms AS sym
+MATCH (s:Symbol {id: sym.id})
+WHERE s.bodyHash IS NOT NULL AND s.bodyHash <> sym.hash
+MATCH (s)<-[:ABOUT|IN]-(m)
 WHERE coalesce(m.stale, false) = false
-SET m.stale = true, m.staleAt = timestamp(), m.staleBecause = file.path
+SET m.stale = true, m.staleAt = timestamp(), m.staleBecause = s.id
+RETURN count(DISTINCT m) AS flagged
+
+// deleted symbols
+UNWIND $files AS file
+MATCH (:File {path: file.path})-[:DEFINES]->(s:Symbol)
+WHERE NOT s.id IN file.ids AND coalesce(s.removed, false) = false
+MATCH (s)<-[:ABOUT|IN]-(m)
+WHERE coalesce(m.stale, false) = false
+SET m.stale = true, m.staleAt = timestamp(), m.staleBecause = s.id
 RETURN count(DISTINCT m) AS flagged
 ```
 
-Stale memory is revived when it proves itself again: the same failure recurring on the same symbol (Q12) or a fix being recorded for it (Q13) sets `stale = false`.
+Stale memory is revived when it proves itself again: the same failure recurring on the same symbol (Q12) or a fix being recorded for it (Q13) sets `stale = false`. A person or agent who checked that it still holds can clear it directly (`puff confirm <id>`, MCP `confirm_memory`), which sets `stale = false` and `confirmedAt`. A decision that was replaced is not stale, it is `superseded` (Q14), and is never handed out.
 
 ### Q3: Build context for a task (core queries)
 
@@ -473,7 +483,8 @@ RETURN DISTINCT other.id AS id
 
 Two rules are applied on top of the query, in code:
 
-- A task that **writes code but names no targets** has an unknown footprint, so it conflicts with every other writer (and every writer conflicts with it).
+- An **`implement` task that names no targets** has an unknown footprint, so it conflicts with every other writer (and every writer conflicts with it). The planner is told to name targets on every code task for this reason.
+- A **`chore` with no targets** (docs, formatting) is taken to edit files outside the code graph: it runs next to code tasks and only waits for another untargeted chore. If it does touch the same lines as another task, git reports a merge conflict and that task fails cleanly.
 - **Read-only tasks** (plans, reviews) never conflict, so a planner can run next to anything.
 
 While a task waits, the loop stores what it waits for in `Task.blockedBy`, and the board shows "Waiting on task_x (overlapping code)". It is cleared when the task starts.

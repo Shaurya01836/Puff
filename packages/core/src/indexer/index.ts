@@ -33,6 +33,18 @@ async function inBatches<T>(items: T[], fn: (batch: T[]) => Promise<unknown>): P
   for (let i = 0; i < items.length; i += BATCH) await fn(items.slice(i, i + BATCH));
 }
 
+/** Run a counting query per batch and add the counts up. */
+async function inBatchesRead<T>(
+  items: T[],
+  fn: (batch: T[]) => Promise<{ flagged: number }[]>,
+): Promise<number> {
+  let total = 0;
+  for (let i = 0; i < items.length; i += BATCH) {
+    total += (await fn(items.slice(i, i + BATCH)))[0]?.flagged ?? 0;
+  }
+  return total;
+}
+
 async function readDependencies(root: string): Promise<Set<string>> {
   try {
     const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')) as {
@@ -60,6 +72,7 @@ export async function loadSources(root: string): Promise<SourceFile[]> {
         hash: createHash('sha256').update(text).digest('hex'),
         isTest: isTestFile(path),
         parsed: await parseSource(text, lang),
+        text,
       };
     }),
   );
@@ -96,24 +109,48 @@ export async function indexRepo(
   for (const imp of resolved.imports) if (changedPaths.has(imp.to)) affected.add(imp.from);
   for (const path of removedPaths) affected.add(path);
 
-  // Q2: mark memory stale for files whose content changed or disappeared (before hashes are updated).
-  const staleRows = await run<{ flagged: number }>(
-    graph,
-    `UNWIND $files AS file
-     MATCH (f:File {path: file.path})
-     WHERE f.hash <> file.hash
-     MATCH (f)-[:DEFINES]->(:Symbol)<-[:ABOUT|IN]-(m)
+  // Q2: mark memory stale when the code it is about changed. This is per symbol, not per file:
+  // editing `login` flags what we learned about `login`, not about the other functions in the file.
+  // A symbol with no stored body hash (indexed before hashes existed) is only recorded, not flagged.
+  const symbolsByFile = new Map<string, string[]>();
+  for (const sym of resolved.symbols) {
+    if (!symbolsByFile.has(sym.file)) symbolsByFile.set(sym.file, []);
+    symbolsByFile.get(sym.file)!.push(sym.id);
+  }
+  const changedSymbols = resolved.symbols
+    .filter((sym) => changedPaths.has(sym.file) && before.has(sym.file) && sym.bodyHash)
+    .map((sym) => ({ id: sym.id, hash: sym.bodyHash }));
+  const staleBy = (match: string) =>
+    `${match}
+     MATCH (s)<-[:ABOUT|IN]-(m)
      WHERE coalesce(m.stale, false) = false
-     SET m.stale = true, m.staleAt = timestamp(), m.staleBecause = file.path
-     RETURN count(DISTINCT m) AS flagged`,
+     SET m.stale = true, m.staleAt = timestamp(), m.staleBecause = s.id
+     RETURN count(DISTINCT m) AS flagged`;
+  const edited = await inBatchesRead(changedSymbols, (batch) =>
+    run<{ flagged: number }>(
+      graph,
+      staleBy(`UNWIND $syms AS sym
+               MATCH (s:Symbol {id: sym.id})
+               WHERE s.bodyHash IS NOT NULL AND s.bodyHash <> sym.hash`),
+      { syms: batch },
+    ),
+  );
+  // Symbols that were deleted, or whose whole file was deleted.
+  const gone = await run<{ flagged: number }>(
+    graph,
+    staleBy(`UNWIND $files AS file
+             MATCH (:File {path: file.path})-[:DEFINES]->(s:Symbol)
+             WHERE NOT s.id IN file.ids AND coalesce(s.removed, false) = false`),
     {
       files: [
-        ...changed.filter((s) => before.has(s.path)).map((s) => ({ path: s.path, hash: s.hash })),
-        ...removedPaths.map((path) => ({ path, hash: '' })),
+        ...changed
+          .filter((s) => before.has(s.path))
+          .map((s) => ({ path: s.path, ids: symbolsByFile.get(s.path) ?? [] })),
+        ...removedPaths.map((path) => ({ path, ids: [] as string[] })),
       ],
     },
   );
-  const staleFlagged = staleRows[0]?.flagged ?? 0;
+  const staleFlagged = edited + (gone[0]?.flagged ?? 0);
 
   // Drop outgoing edges of affected files; they are rewritten below from the fresh parse.
   const affectedList = [...affected];
@@ -133,11 +170,6 @@ export async function indexRepo(
   );
 
   // Symbols that no longer exist are flagged, not deleted: memory linked to them keeps its anchor.
-  const symbolsByFile = new Map<string, string[]>();
-  for (const sym of resolved.symbols) {
-    if (!symbolsByFile.has(sym.file)) symbolsByFile.set(sym.file, []);
-    symbolsByFile.get(sym.file)!.push(sym.id);
-  }
   await run(
     graph,
     `UNWIND $files AS file
@@ -165,13 +197,14 @@ export async function indexRepo(
     isTest: s.isTest,
     symbols: resolved.symbols
       .filter((sym) => sym.file === s.path)
-      .map(({ id, name, kind, startLine, endLine, signature }) => ({
+      .map(({ id, name, kind, startLine, endLine, signature, bodyHash }) => ({
         id,
         name,
         kind,
         startLine,
         endLine,
         signature,
+        bodyHash,
       })),
   }));
   await inBatches(fileRows, (files) =>
@@ -187,7 +220,8 @@ export async function indexRepo(
        UNWIND file.symbols AS sym
        MERGE (s:Symbol {id: sym.id})
        SET s.name = sym.name, s.kind = sym.kind, s.file = file.path, s.startLine = sym.startLine,
-           s.endLine = sym.endLine, s.signature = sym.signature, s.removed = false
+           s.endLine = sym.endLine, s.signature = sym.signature, s.bodyHash = sym.bodyHash,
+           s.removed = false
        MERGE (f)-[:DEFINES]->(s)`,
       { projectId: project.slug, files },
     ),

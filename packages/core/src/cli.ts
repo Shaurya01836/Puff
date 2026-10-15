@@ -1,6 +1,7 @@
 // Puff CLI: everything the desktop app does, without Electron. Run with `npm run puff -- <command>`.
 import { readFile } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import type { FalkorDB, Graph } from 'falkordb';
 import { AGENT_NAMES, type AgentName, type Role, type TaskType } from '@puff/shared';
@@ -12,6 +13,7 @@ import { graphName, slugify } from './ids';
 import { indexRepo } from './indexer/index';
 import { recordTestFailures } from './memory/failures';
 import {
+  confirmMemory,
   recordDecision,
   recordFailure,
   recordHandoff,
@@ -456,6 +458,37 @@ program
           `${new Date(e.at).toLocaleTimeString()}  ${e.type.replaceAll('_', ' ').padEnd(20)} ${e.text.slice(0, 110)}`,
         );
       }
+    });
+  });
+
+program
+  .command('confirm')
+  .description('clear "possibly outdated" on a failure or decision you checked still holds')
+  .argument('<id>', 'failure or decision id')
+  .action(async (id: string) => {
+    await withProject(undefined, async ({ graph }) => {
+      await confirmMemory(graph, id);
+      console.log(`✔ ${id} is no longer marked possibly outdated`);
+    });
+  });
+
+program
+  .command('mcp-config')
+  .description('print the config that lets Claude Code or OpenCode use this project over MCP')
+  .action(async () => {
+    await withProject(undefined, async ({ project }) => {
+      const entry = fileURLToPath(new URL('../../mcp/src/index.ts', import.meta.url));
+      const env = {
+        FALKORDB_URL: process.env.FALKORDB_URL ?? 'falkor://localhost:6379',
+        PUFF_PROJECT: project.slug,
+      };
+      console.log(
+        JSON.stringify(
+          { mcpServers: { puff: { command: 'npx', args: ['tsx', entry], env } } },
+          null,
+          2,
+        ),
+      );
     });
   });
 

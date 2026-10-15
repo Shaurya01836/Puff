@@ -46,6 +46,13 @@ const escapeHtml = (s: string): string => s.replace(/[&<>"']/g, (c) => `&#${c.ch
 const idOf = (v: unknown): string =>
   typeof v === 'object' && v !== null ? String((v as { id: string }).id) : String(v);
 
+/** Failures and decisions can go out of date (their code changed) or be replaced (decisions). */
+function memoryStateOf(n: GraphNode): 'outdated' | 'superseded' | undefined {
+  if (n.props?.status === 'superseded') return 'superseded';
+  if (n.props?.stale === true) return 'outdated';
+  return undefined;
+}
+
 function nodeColor(n: GraphNode): string {
   if (n.kind === 'Agent') {
     const agent = n.id.replace('agent:', '') as AgentName;
@@ -170,8 +177,9 @@ export function MemoryGraph({
       const lit = isLit(node.id);
       const group = NODE_GROUPS[node.kind];
 
+      const memoryState = memoryStateOf(node);
       ctx.save();
-      ctx.globalAlpha = lit ? 1 : 0.12;
+      ctx.globalAlpha = lit ? (memoryState === 'superseded' ? 0.45 : 1) : 0.12;
       if (group === 'memory' || node.kind === 'Agent') {
         ctx.shadowColor = color;
         ctx.shadowBlur = node.kind === 'Failure' ? 18 : 10;
@@ -185,6 +193,17 @@ export function MemoryGraph({
       }
       ctx.fill();
       ctx.shadowBlur = 0;
+
+      if (memoryState === 'outdated') {
+        // dashed amber ring: the code this memory is about has changed since
+        ctx.strokeStyle = '#f5b83d';
+        ctx.lineWidth = 1.2 / scale;
+        ctx.setLineDash([2 / scale, 2 / scale]);
+        ctx.beginPath();
+        ctx.arc(x, y, r + 2.5, 0, 2 * Math.PI);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
 
       if (node.id === selected?.id || node.highlight) {
         ctx.strokeStyle = '#e7ecf6';
@@ -370,6 +389,18 @@ export function MemoryGraph({
               </button>
             </div>
             <div className="mt-2 text-sm font-medium">{selected.label}</div>
+            {memoryStateOf(selected) && (
+              <div
+                className="mt-1.5 inline-block rounded bg-warn/10 px-1.5 py-0.5 text-[11px] text-warn"
+                title={
+                  memoryStateOf(selected) === 'outdated'
+                    ? 'The code this is about changed after it was recorded. It is shown to agents labelled "possibly outdated".'
+                    : 'Replaced by a newer decision. Kept for history, not given to agents.'
+                }
+              >
+                {memoryStateOf(selected) === 'outdated' ? 'possibly outdated' : 'superseded'}
+              </div>
+            )}
             <div className="mt-1 font-mono text-[11px] break-all text-ink-3">{selected.id}</div>
             <div className="mt-3 flex items-center justify-between text-xs text-ink-3">
               <span>{neighbours.get(selected.id)?.size ?? 0} connections</span>

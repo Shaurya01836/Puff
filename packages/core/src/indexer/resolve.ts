@@ -1,4 +1,5 @@
 // Turn per-file parse results into graph facts: symbols, resolved calls, file imports, technologies.
+import { createHash } from 'node:crypto';
 import { posix } from 'node:path';
 import { symbolId } from '../ids';
 import type { ParsedFile, SymbolKind } from './parser';
@@ -10,6 +11,8 @@ export interface SourceFile {
   hash: string;
   isTest: boolean;
   parsed: ParsedFile;
+  /** Source text, used to hash each symbol's body */
+  text?: string;
 }
 
 export interface SymbolFact {
@@ -20,7 +23,17 @@ export interface SymbolFact {
   startLine: number;
   endLine: number;
   signature: string;
+  /** Hash of the symbol's own lines: memory goes stale when this changes, not when the file does */
+  bodyHash: string;
 }
+
+const bodyHashOf = (lines: string[] | undefined, start: number, end: number): string =>
+  lines
+    ? createHash('sha256')
+        .update(lines.slice(start - 1, end).join('\n'))
+        .digest('hex')
+        .slice(0, 16)
+    : '';
 
 export interface CallFact {
   from: string;
@@ -111,6 +124,7 @@ export function resolveRepo(sources: SourceFile[], dependencies: Set<string>): R
   for (const s of sources) {
     const defs = new Map<string, string>();
     const classes = new Set<string>();
+    const lines = s.text?.split(/\r?\n/);
     for (const d of s.parsed.defs) {
       const id = symbolId(s.path, d.name);
       if (defs.has(d.name)) continue; // overloads / redeclarations: first wins
@@ -124,6 +138,7 @@ export function resolveRepo(sources: SourceFile[], dependencies: Set<string>): R
         startLine: d.startLine,
         endLine: d.endLine,
         signature: d.signature,
+        bodyHash: bodyHashOf(lines, d.startLine, d.endLine),
       });
     }
     defsByFile.set(s.path, defs);

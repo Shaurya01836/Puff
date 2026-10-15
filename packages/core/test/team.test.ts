@@ -352,12 +352,26 @@ describe.skipIf(!ready)('coordination (fake agents, real git, real FalkorDB)', (
     expect(await overlappingTasks(f.graph, (await getTask(f.graph, noTargets.id))!)).toEqual([
       running.id,
     ]);
+    // a docs chore with no targets edits files outside the code graph: it runs next to code tasks
+    const docs = await f.task('Document the route', { type: 'chore', targets: [] });
+    expect(await overlappingTasks(f.graph, (await getTask(f.graph, docs.id))!)).toEqual([]);
     // and a running task with unknown footprint blocks everything that writes
     await updateTask(f.graph, running.id, { status: 'done' });
     await updateTask(f.graph, noTargets.id, { status: 'running' });
     expect(await overlappingTasks(f.graph, (await getTask(f.graph, unrelated.id))!)).toEqual([
       noTargets.id,
     ]);
+    expect(await overlappingTasks(f.graph, (await getTask(f.graph, docs.id))!)).toEqual([
+      noTargets.id,
+    ]);
+    // two docs chores still take turns
+    await updateTask(f.graph, noTargets.id, { status: 'done' });
+    await updateTask(f.graph, docs.id, { status: 'running' });
+    const moreDocs = await f.task('Fix README typos', { type: 'chore', targets: [] });
+    expect(await overlappingTasks(f.graph, (await getTask(f.graph, moreDocs.id))!)).toEqual([
+      docs.id,
+    ]);
+    expect(await overlappingTasks(f.graph, (await getTask(f.graph, unrelated.id))!)).toEqual([]);
   }, 60_000);
 
   it('Q9: when two schedulers race for one task, exactly one wins', async () => {

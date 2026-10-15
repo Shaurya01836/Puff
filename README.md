@@ -226,7 +226,7 @@ Puff is built in **phases**. Each phase ends with a checkpoint: a working build 
 | **P2 Memory + context** ✅ | Memory writes, stack trace → symbol mapping, context compiler, ContextPack | A recorded failure lands on the right function |
 | **P3 Three agents, one loop** ✅ | Claude Code + Codex + OpenCode adapters, worktrees, verify, retry | Session 2 avoids session 1's mistake |
 | **P4 Team coordination** ✅ | Goal-to-tasks planner, overlap-aware parallel runs, Team timeline, New task dialog | 3 agents in parallel, one waits on overlap |
-| **P5 Correctness + Why** | Stale flags, supersede, Why view, MCP server | Editing code marks memory stale |
+| **P5 Correctness + Why** ✅ | Stale flags per function, supersede, confirm, Why view, MCP server | Editing code marks memory stale |
 | **P6 Benchmark** | Benchmark runner, savings screen | Real numbers on screen |
 | **P7 Stretch** | PageRank, vector search, generic adapter, Electron packaging | Each one ships independently |
 
@@ -236,7 +236,7 @@ Details: [docs/ARCHITECTURE.md → Build phases](docs/ARCHITECTURE.md#build-phas
 
 ## Quick start
 
-> 🚧 Puff is being built during Graph Hacks (15–18 Oct 2026). **Phases P0 to P4 are in:** the code graph, shared memory (failures tied to the function they happened in, fixes, decisions, procedures, handoffs), the context compiler with its "why" trail, real agents, **and team coordination**. Claude Code, Codex and OpenCode run tasks in isolated git worktrees, Puff verifies with the project's own tests, records what went wrong, retries with the lesson and escalates. Give it a goal and a planner agent splits it into tasks; independent tasks run in parallel and a task that touches the same code as one already running waits. Tasks that were really run by agents were verified on the demo repo (OpenCode and Codex, both merged with tests passing; a real OpenCode planner turned a goal into three linked tasks). Not yet: stale flags and the MCP server (P5), the benchmark numbers (P6), and the sample data below is seeded, not real.
+> 🚧 Puff is being built during Graph Hacks (15–18 Oct 2026). **Phases P0 to P5 are in:** the code graph, shared memory (failures tied to the function they happened in, fixes, decisions, procedures, handoffs), the context compiler with its "why" trail, real agents, **and team coordination**. Claude Code, Codex and OpenCode run tasks in isolated git worktrees, Puff verifies with the project's own tests, records what went wrong, retries with the lesson and escalates. Give it a goal and a planner agent splits it into tasks; independent tasks run in parallel and a task that touches the same code as one already running waits. Tasks that were really run by agents were verified on the demo repo (OpenCode and Codex, both merged with tests passing; a real OpenCode planner turned a goal into three linked tasks). Memory stays correct: editing a function marks what was learned about *that function* "possibly outdated" (not the whole file), a replaced decision is kept but superseded, and a Puff MCP server lets Claude Code and OpenCode read and write memory mid-task. Not yet: the benchmark numbers (P6), and the sample data below is seeded, not real.
 
 **Prerequisites:** Node 22.12+, Docker (or [falkordblite](docs/ARCHITECTURE.md#option-b-no-docker-falkordblite)), git. Agent CLIs (`claude`, `codex`, `opencode`) are needed from phase P3.
 
@@ -351,7 +351,9 @@ npm run dev
 | `npm run puff -- goal "…"` · `team` | Add a planning task for a goal · print the team timeline |
 | `npm run puff -- seed [--force]` · `reset-memory` | Sample data for the demo · clear tasks and memory (keeps the code graph) |
 | `npm run puff -- <init|status|graphs>` | Graph setup and inspection |
-| `npm run mcp` | Puff MCP server over stdio (needs `PUFF_PROJECT`) |
+| `npm run puff -- confirm <id>` | Clear "possibly outdated" on a failure or decision you checked still holds |
+| `npm run mcp` | Puff MCP server over stdio (needs `PUFF_PROJECT`; optional `PUFF_SESSION`). Tools: `get_context`, `impact_of`, `find_symbols`, `record_decision` / `record_failure` / `record_solution`, `confirm_memory`, `handoff`, `why` |
+| `npm run puff -- mcp-config` | Print the MCP config to point Claude Code or OpenCode at this project |
 | `npm run typecheck` · `npm test` · `npm run format` | Checks (also run in CI) |
 | `npm run build:desktop` | Package the installable app (.exe / .dmg / AppImage) |
 

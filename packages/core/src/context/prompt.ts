@@ -105,7 +105,7 @@ export function renderPrompt(i: PromptInput): string {
         `- At most ${i.maxTasks ?? 8} tasks. A title says what to change and how to tell it worked.`,
         '- "type": implement (change code and add or update its tests), chore (docs, formatting), verify (review only).',
         '- Write tests together with the code they cover; do not make tests a separate task.',
-        '- "targets": function names from the CODE MAP (or "path::name"). For new code that does not exist yet, name the closest existing function it will sit next to or call.',
+        '- "targets": REQUIRED on every implement task: function names from the CODE MAP (or "path::name"). For new code that does not exist yet, name the closest existing function it will sit next to or call. A task with no targets cannot run next to any other code change. Leave it empty only for a chore that edits docs.',
         '- "dependsOn": 0-based positions of EARLIER tasks in your list. Tasks that change the same function MUST depend on each other, so they never run at the same time. Independent tasks should not depend on each other, so they can run in parallel.',
         '',
       );

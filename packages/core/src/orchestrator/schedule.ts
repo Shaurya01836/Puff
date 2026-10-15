@@ -11,9 +11,24 @@ export const IN_FLIGHT = ['running', 'verifying', 'retrying', 'escalated'] as co
 const WRITES = new Set<Task['type']>(['implement', 'chore']);
 
 /**
+ * A task that names no targets has an unknown footprint. If it is a `chore` (docs, formatting) it is
+ * taken to touch files outside the code graph, so it only waits for another untargeted chore. If it
+ * is an `implement` task, it could touch anything, so it waits for every other writer (and every
+ * writer waits for it).
+ */
+function unknownFootprint(a: Task, b: Task): boolean {
+  const aOpen = a.targets.length === 0;
+  const bOpen = b.targets.length === 0;
+  if (!aOpen && !bOpen) return false;
+  const wideOpen = (t: Task, open: boolean) => open && t.type === 'implement';
+  if (wideOpen(a, aOpen) || wideOpen(b, bOpen)) return true;
+  return aOpen && bOpen; // two untargeted chores
+}
+
+/**
  * Q8: in-flight tasks that overlap this one. Overlap means a shared target, or targets one CALLS hop
- * apart. A task that writes code but names no targets has an unknown footprint, so it conflicts with
- * every other writer. Read-only tasks (plans, reviews) never conflict.
+ * apart. See `unknownFootprint` for tasks that name no targets. Read-only tasks (plans, reviews)
+ * never conflict.
  */
 export async function overlappingTasks(graph: Graph, task: Task): Promise<string[]> {
   if (!WRITES.has(task.type)) return [];
@@ -37,7 +52,7 @@ export async function overlappingTasks(graph: Graph, task: Task): Promise<string
     for (const r of rows) blockers.add(r.id);
   }
   for (const other of inFlight) {
-    if (task.targets.length === 0 || other.targets.length === 0) blockers.add(other.id);
+    if (unknownFootprint(task, other)) blockers.add(other.id);
   }
   // only count tasks that really are in flight and write code
   return [...blockers].filter((id) => inFlight.some((t) => t.id === id)).sort();

@@ -1,6 +1,6 @@
 // The P2 checkpoint as an executable story, against a real FalkorDB: session 1 fails on a trap,
 // the failure lands on the right function, and a fresh session 2 is handed the lesson.
-import { appendFileSync, cpSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { appendFileSync, cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -356,9 +356,20 @@ describe.skipIf(!db)('memory and context against FalkorDB', () => {
   });
 
   it('flags memory stale when its code changes, labels it if nothing fresher exists, and drops it otherwise', async () => {
-    appendFileSync(join(project.repoPath, 'src/auth/login.ts'), '\n// edited by a later change\n');
+    // a comment after the functions changes the file, not what any function does
+    const loginFile = join(project.repoPath, 'src/auth/login.ts');
+    appendFileSync(loginFile, '\n// edited by a later change\n');
+    expect((await indexRepo(graph, project)).staleFlagged).toBe(0);
+
+    // changing the functions themselves flags what was learned about them
+    writeFileSync(
+      loginFile,
+      readFileSync(loginFile, 'utf8')
+        .replace("'login.success'", "'login.ok'")
+        .replace("'login.failed'", "'login.rejected'"),
+    );
     const stats = await indexRepo(graph, project);
-    expect(stats.staleFlagged).toBeGreaterThanOrEqual(2); // the failure and the decisions in login.ts
+    expect(stats.staleFlagged).toBeGreaterThanOrEqual(2); // the failure and the decisions
 
     const pack = await compileContext(graph, taskB, { role: 'coder', preview: true });
     // every memory is stale now, so they are kept but labelled
