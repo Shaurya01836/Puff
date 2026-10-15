@@ -223,7 +223,7 @@ Puff is built in **phases**. Each phase ends with a checkpoint: a working build 
 |---|---|---|
 | **P0 Foundation** ✅ | Monorepo, shared types/API/mocks, FalkorDB + indexes | UI renders mocks; project graph is created on start |
 | **P1 Code graph** ✅ | Indexer, impact query, demo repo, live graph view | Demo repo visible as a graph |
-| **P2 Memory + context** | Memory writes, stack trace → symbol mapping, context compiler, ContextPack | A recorded failure lands on the right function |
+| **P2 Memory + context** ✅ | Memory writes, stack trace → symbol mapping, context compiler, ContextPack | A recorded failure lands on the right function |
 | **P3 Three agents, one loop** | Claude Code + Codex + OpenCode adapters, worktrees, verify, retry | Session 2 avoids session 1's mistake |
 | **P4 Team coordination** | Planner, routing, scheduling, escalation, live board | 3 agents in parallel, one waits on overlap |
 | **P5 Correctness + Why** | Stale flags, supersede, Why view, MCP server | Editing code marks memory stale |
@@ -236,7 +236,7 @@ Details: [docs/ARCHITECTURE.md → Build phases](docs/ARCHITECTURE.md#build-phas
 
 ## Quick start
 
-> 🚧 Puff is being built during Graph Hacks (15–18 Oct 2026). **Phases P0 and P1 are in:** FalkorDB setup, the tree-sitter code indexer, the impact query, the synthetic demo repo, the MCP server, and the desktop app showing the live code graph (tasks and memory are still mock data until P2 and P3).
+> 🚧 Puff is being built during Graph Hacks (15–18 Oct 2026). **Phases P0, P1 and P2 are in:** the code graph, shared memory (failures tied to the function they happened in, fixes, decisions, procedures, handoffs), the context compiler with its "why" trail, and a desktop app that shows all of it live. Agents are not wired in yet (that is P3), so the sample tasks and sessions below are seeded, and clearly flagged as sample data.
 
 **Prerequisites:** Node 22.12+, Docker (or [falkordblite](docs/ARCHITECTURE.md#option-b-no-docker-falkordblite)), git. Agent CLIs (`claude`, `codex`, `opencode`) are needed from phase P3.
 
@@ -265,7 +265,23 @@ npm run puff -- index demo/shop-api
 Try the impact query:
 
 ```bash
-npm run puff -- impact login demo/shop-api
+npm run puff -- impact login
+```
+
+Write sample tasks, sessions and memory for the demo repo (flagged `seeded`, so the UI says it is sample data):
+
+```bash
+npm run puff -- seed --force
+```
+
+See what a fresh agent would be handed for the running task, and why each item is in it:
+
+```bash
+npm run puff -- task list
+```
+
+```bash
+npm run puff -- context <taskId>
 ```
 
 Open the desktop app:
@@ -280,15 +296,21 @@ npm run dev
 |---|---|
 | `npm run dev` | Electron app with hot reload |
 | `npm run dev:web` | Same UI in a normal browser at <http://localhost:5173>, backed by mocks (fastest for UI work) |
-| `npm run puff -- index demo/shop-api` | Parse the repo with tree-sitter and write it to the graph (incremental; `--force` rewrites all) |
-| `npm run puff -- impact login demo/shop-api` | What may break if a symbol changes (callers up to 3 hops) |
-| `npm run puff -- symbols cart demo/shop-api` | Find symbols by name |
+| `npm run puff -- index` | Parse the repo with tree-sitter and write it to the graph (incremental; `--force` rewrites all) |
+| `npm run puff -- impact login` | What may break if a symbol changes (callers up to 3 hops) |
+| `npm run puff -- symbols cart` | Find symbols by name |
+| `npm run puff -- task add "…" -t login` / `task list` | Create and list tasks (targets are symbols) |
+| `npm run puff -- context <taskId> [--agent codex]` | The context an agent would receive, with a reason per item. With `--agent` it starts a session and records the pack |
+| `npm run puff -- failure add --session <id> --test-output <file> [--diff <file>]` | Record failures from real test output; each is located in code (stack, diff, targets) |
+| `npm run puff -- fix add` · `decision add` · `procedure add` · `handoff` | Record fixes, decisions (with `--supersedes`), procedures and handoff notes |
+| `npm run puff -- why <taskId>` · `memory` | Why a task went to its agent and why each context item was included · the memory feed |
+| `npm run puff -- seed [--force]` · `reset-memory` | Sample data for the demo · clear tasks and memory (keeps the code graph) |
 | `npm run puff -- <init|status|graphs>` | Graph setup and inspection |
 | `npm run mcp` | Puff MCP server over stdio (needs `PUFF_PROJECT`) |
 | `npm run typecheck` · `npm test` · `npm run format` | Checks (also run in CI) |
 | `npm run build:desktop` | Package the installable app (.exe / .dmg / AppImage) |
 
-**UI work:** screens live in `apps/desktop/src/renderer/src/screens`. They only talk to `puff` (`lib/api.ts`), which is the `PuffApi` from `packages/shared`. Until the backend lands, every call returns mock data from `packages/shared/src/mocks`, and **Start** simulates live task and memory events.
+**UI work:** screens live in `apps/desktop/src/renderer/src/screens`. They only talk to `puff` (`lib/api.ts`), which is the `PuffApi` from `packages/shared`. Inside Electron they are served live from FalkorDB (the badge in the top bar says what is still sample data). In the browser-only mode (`npm run dev:web`) every call returns mock data from `packages/shared/src/mocks`. **Run team** stays disabled until agents are wired in (P3).
 
 Setup, configuration and deployment details: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#deployment)**.
 

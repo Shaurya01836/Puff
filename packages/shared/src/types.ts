@@ -7,7 +7,7 @@ export type TaskType = 'plan' | 'implement' | 'verify' | 'chore';
 export type Complexity = 'low' | 'medium' | 'high';
 export type TaskStatus =
   'planned' | 'ready' | 'running' | 'verifying' | 'failed' | 'retrying' | 'escalated' | 'done';
-export type MemoryKind = 'Failure' | 'Solution' | 'Decision' | 'Procedure' | 'Symbol';
+export type MemoryKind = 'Failure' | 'Solution' | 'Decision' | 'Procedure' | 'Symbol' | 'Handoff';
 export type FailureKind = 'test' | 'type' | 'lint' | 'runtime' | 'review';
 export type SessionOutcome = 'running' | 'success' | 'failure' | 'error';
 
@@ -154,6 +154,8 @@ export interface BackendInfo {
   graphName?: string;
   /** Parts of the API that still return mock data in live mode */
   mockParts: string[];
+  /** True when the graph holds sample tasks and memory written by `puff seed`, not real agent runs */
+  seeded?: boolean;
   /** Why live mode is unavailable, when mode is mock */
   error?: string;
 }

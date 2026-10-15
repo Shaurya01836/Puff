@@ -10,6 +10,7 @@ export function TopBar({
   onToggleRun,
   onGoal,
   badge,
+  runBlockedReason,
 }: {
   title: string;
   subtitle: string;
@@ -17,6 +18,8 @@ export function TopBar({
   onToggleRun: () => void;
   onGoal: (goal: string) => Promise<void>;
   badge?: string;
+  /** When set, the run button is disabled and this explains why */
+  runBlockedReason?: string;
 }) {
   const [goal, setGoal] = useState('');
   const [busy, setBusy] = useState(false);
@@ -62,7 +65,10 @@ export function TopBar({
         {badge && <MockBadge label={badge} />}
         <button
           onClick={onToggleRun}
+          disabled={!!runBlockedReason}
+          title={runBlockedReason ? `Not available yet: ${runBlockedReason}` : undefined}
           className={cn(
+            'disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none',
             'inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold transition-all',
             running
               ? 'border border-line-strong bg-surface-2 text-ink hover:bg-surface-3'

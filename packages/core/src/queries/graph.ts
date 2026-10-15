@@ -4,7 +4,7 @@ import type { GraphData, GraphEdge, GraphNode } from '@puff/shared';
 import { read } from '../db/client';
 
 /** UI node ids: labels without an `id` property get a readable prefix so ids never collide. */
-function uiId(label: string, key: string): string {
+export function uiId(label: string, key: string): string {
   switch (label) {
     case 'Agent':
       return `agent:${key}`;
@@ -17,7 +17,7 @@ function uiId(label: string, key: string): string {
   }
 }
 
-function uiLabel(label: string, props: Record<string, unknown>): string {
+export function uiLabel(label: string, props: Record<string, unknown>): string {
   switch (label) {
     case 'File':
       return (
@@ -36,6 +36,10 @@ function uiLabel(label: string, props: Record<string, unknown>): string {
     case 'Decision':
     case 'Procedure':
       return String(props.text ?? props.id);
+    case 'Session':
+      return `${props.role ?? 'session'} · ${props.outcome ?? ''}`;
+    case 'Handoff':
+      return 'Handoff';
     default:
       return String(props.name ?? props.id ?? props.path ?? label);
   }

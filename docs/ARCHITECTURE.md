@@ -106,10 +106,11 @@ puff/
 │  ├─ shared/                  types.ts, api.ts, mocks/ (frozen contract)
 │  ├─ core/
 │  │  ├─ src/db/               connection, graph init, indexes
-│  │  ├─ src/queries/          one file per query group (Q1–Q18)
+│  │  ├─ src/queries/          code (impact, symbol lookup), graph export for the UI, explain (Why, feed, agent stats)
 │  │  ├─ src/indexer/          walk → hash → parse → resolve → write
-│  │  ├─ src/memory/           sessions, failures, decisions, handoffs
-│  │  ├─ src/context/          compiler + prompt templates
+│  │  ├─ src/memory/           tasks, sessions, memory writes, locate (failure → code), failures, puff-report
+│  │  ├─ src/context/          prompt.ts (pure rendering) + compiler.ts (graph → ranked, budgeted ContextPack)
+│  │  ├─ src/seed/             demo memory seed (flagged seeded)
 │  │  ├─ src/agents/           adapters, router, pool
 │  │  ├─ src/orchestrator/     loop, scheduler, state machine, verify
 │  │  ├─ src/git/              worktree manager, diff, merge
@@ -537,7 +538,11 @@ npm run puff -- index demo/shop-api
 ```
 
 ```bash
-npm run puff -- goal "Add rate limiting to login and update docs"
+npm run puff -- seed --force
+```
+
+```bash
+npm run puff -- context <taskId>
 ```
 
 ### Scripts
@@ -545,15 +550,15 @@ npm run puff -- goal "Add rate limiting to login and update docs"
 | Script | Does |
 |---|---|
 | `npm run dev` | Electron app with hot reload |
-| `npm run puff -- <cmd>` | Headless CLI: `index`, `goal`, `run`, `why`, `graph` |
-| `npm run seed` | Load the demo repo + baseline memory into a fresh graph |
-| `npm run reset-graph` | Drop and recreate the project graph (keeps other projects) |
+| `npm run puff -- <cmd>` | Headless CLI: `init`, `index`, `symbols`, `impact`, `task`, `context`, `session`, `failure`, `fix`, `decision`, `procedure`, `handoff`, `memory`, `why`, `seed`, `reset-memory` (`goal` and `run` arrive with the orchestrator) |
+| `npm run puff -- seed --force` | Load sample tasks, sessions and memory for the demo repo (flagged `seeded`) |
+| `npm run puff -- reset-memory` | Development only: delete tasks, sessions and memory, keeping the code graph |
 | `npm run bench` | Run the benchmark → `bench/results.json` |
 | `npm run build:desktop` | Package the Electron app (electron-builder) |
 
 ### Data lifecycle
 
-- **Graph:** persisted in the `falkordb-data` volume. `reset-graph` affects one project only.
+- **Graph:** persisted in the `falkordb-data` volume. `reset-memory` clears memory but keeps the code graph.
 - **Worktrees:** created under `.puff/worktrees/<taskId>`, removed after merge or after a failed task is escalated.
 - **Inspecting:** the FalkorDB browser at <http://localhost:3000> runs any query from [GRAPH_SCHEMA.md](GRAPH_SCHEMA.md).
 
@@ -590,7 +595,7 @@ Every phase ends with a **checkpoint**: a working build, committed. The next pha
 |---|---|---|---|---|
 | **P0 Foundation** | Thu afternoon | Monorepo, `packages/shared` contract + mocks, docker-compose, graph init + indexes | electron-vite shell, design tokens, mascot, Board on mocks | UI renders mocks; `puff init` creates the graph |
 | **P1 Code graph** ✅ | Thu night | Indexer (Q1), impact (Q6), technologies, demo repo skeleton | Memory graph screen on real data | Demo repo visible as a graph; impact query returns files |
-| **P2 Memory + context** | Fri morning | Memory writes (Q11–Q15), stack trace → symbol, context compiler + ContextPack (Q3–Q5), `<puff-report>` parsing | Task detail on mocks | A recorded failure lands on the right function |
+| **P2 Memory + context** ✅ | Fri morning | Memory writes (Q11–Q15), stack trace → symbol, context compiler + ContextPack (Q3–Q5), `<puff-report>` parsing | Task detail on mocks | A recorded failure lands on the right function |
 | **P3 Three agents, one loop** | Fri afternoon | Claude Code + Codex + OpenCode adapters, worktrees, verify, retry once | Task detail on real data | **Session 2 avoids session 1's mistake** |
 | **P4 Team coordination** | Fri night | Planner goal split, routing (Q10), scheduling (Q7–Q9), escalation, event bus | Board live, mascot states wired | A goal runs across 3 agents; one task waits on overlap |
 | **P5 Correctness + Why** | Sat morning | Stale on hash change, supersede, MCP server | Why view, memory feed | Editing code marks memory stale; Why shows the path |

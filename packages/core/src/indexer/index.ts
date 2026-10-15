@@ -104,7 +104,7 @@ export async function indexRepo(
      WHERE f.hash <> file.hash
      MATCH (f)-[:DEFINES]->(:Symbol)<-[:ABOUT|IN]-(m)
      WHERE coalesce(m.stale, false) = false
-     SET m.stale = true
+     SET m.stale = true, m.staleAt = timestamp(), m.staleBecause = file.path
      RETURN count(DISTINCT m) AS flagged`,
     {
       files: [

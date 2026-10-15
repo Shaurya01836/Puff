@@ -17,7 +17,8 @@ interface Detail {
 async function loadDetail(taskId: string): Promise<Detail> {
   const [{ task, sessions }, why] = await Promise.all([puff.getTask(taskId), puff.getWhy(taskId)]);
   const latest = sessions.at(-1);
-  const pack = latest ? await puff.getContextPack(latest.id) : undefined;
+  // A session that has not been given context yet has no pack; that is fine, not an error.
+  const pack = latest ? await puff.getContextPack(latest.id).catch(() => undefined) : undefined;
   return { task, sessions, pack, why };
 }
 

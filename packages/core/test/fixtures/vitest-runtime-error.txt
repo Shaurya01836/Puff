@@ -1,0 +1,51 @@
+
+ RUN  v3.2.7 /work/shop-api
+
+ ❯ test/cart.spec.ts (6 tests | 2 failed)
+   ✓ cart > adds items and reserves stock
+   ✓ cart > refuses more than is in stock
+   ✓ cart > releases stock when a line is removed
+   × cart > applies the discount before tax
+     → tax table unavailable
+   ✓ cart routes > requires a session
+   × cart routes > adds an item through the API
+     → expected 201 "Created", got 500 "Internal Server Error"
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/cart.spec.ts > cart > applies the discount before tax
+Error: tax table unavailable
+ ❯ taxFor src/cart/tax.ts:5:30
+      3| /** Tax on an amount in cents, rounded to the nearest cent. */
+      4| export function taxFor(amountCents: number): number {
+      5|   if (amountCents > 0) throw new Error('tax table unavailable');
+       |                              ^
+      6|   return Math.round(amountCents * config.taxRate);
+      7| }
+ ❯ cartTotal src/cart/cart.ts:67:20
+ ❯ test/cart.spec.ts:32:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  test/cart.spec.ts > cart routes > adds an item through the API
+Error: expected 201 "Created", got 500 "Internal Server Error"
+ ❯ test/cart.spec.ts:53:8
+     51|       .post('/cart/items')
+     52|       .send({ productId: 'p_sticker', quantity: 2 })
+     53|       .expect(201);
+       |        ^
+     54|     expect(res.body.totals.subtotalCents).toBe(998);
+     55|   });
+ ❯ Test._assertStatus node_modules/supertest/lib/test.js:404:14
+ ❯ node_modules/supertest/lib/test.js:460:13
+ ❯ Test._assertFunction node_modules/supertest/lib/test.js:437:13
+ ❯ Test.assert node_modules/supertest/lib/test.js:302:23
+ ❯ localAssert node_modules/supertest/lib/test.js:220:38
+ ❯ Server.<anonymous> node_modules/supertest/lib/test.js:227:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 4 passed (6)
+

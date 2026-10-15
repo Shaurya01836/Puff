@@ -21,7 +21,7 @@ const TITLES: Record<Screen, { title: string; subtitle: string }> = {
 function badgeFor(info?: BackendInfo): string | undefined {
   if (!info) return undefined;
   if (info.mode === 'mock') return 'Mock data';
-  return info.mockParts.length ? 'Live graph · tasks mocked' : undefined;
+  return info.seeded ? 'Live graph · sample memory' : undefined;
 }
 
 export function App() {
@@ -32,7 +32,9 @@ export function App() {
 
   const info = useLoad(() => puff.getBackendInfo(), []);
   const projectId = info?.projectId ?? MOCK_PROJECT_ID;
-  const tasksMocked = info?.mode !== 'live' || info.mockParts.includes('tasks');
+  const live = info?.mode === 'live';
+  const savingsMocked = !live || info.mockParts.includes('savings');
+  const runBlocked = live ? info.mockParts.find((p) => p.startsWith('orchestrator')) : undefined;
 
   const tasks = useTasks(projectId);
   const agents = useLoad(() => puff.listAgents(projectId), [projectId]);
@@ -87,17 +89,18 @@ export function App() {
           onToggleRun={toggleRun}
           onGoal={createGoal}
           badge={badgeFor(info)}
+          runBlockedReason={runBlocked?.replace(/^orchestrator: /, '')}
         />
         <div className="min-h-0 flex-1 overflow-auto">
           {screen === 'graph' && (
             <MemoryGraph
               projectId={projectId}
               graph={graph}
-              feedIsSample={info?.mode !== 'live' || info.mockParts.includes('memory feed')}
+              feedIsSample={!live || info.seeded === true}
             />
           )}
           {screen === 'board' && <Board tasks={tasks} onOpen={setOpenTask} />}
-          {screen === 'agents' && <Agents agents={agents} savings={savings} mock={tasksMocked} />}
+          {screen === 'agents' && <Agents agents={agents} savings={savings} mock={savingsMocked} />}
         </div>
       </main>
       {openTask && <TaskDetail taskId={openTask} onClose={closeTask} />}

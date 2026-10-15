@@ -1,7 +1,10 @@
 # Scripts
 
-Planned helpers (added in later phases):
+Seeding and resetting live in the CLI, not in separate scripts:
 
-- `seed.ts`: load the demo repo and baseline memory into a fresh graph
-- `reset-graph.ts`: drop and recreate one project graph
+- `npm run puff -- seed --force`: load sample tasks, sessions and memory for the demo repo
+- `npm run puff -- reset-memory`: delete tasks, sessions and memory, keeping the code graph
+
+Planned (phase P6):
+
 - `run-benchmark.ts`: run benchmark tasks with and without Puff, write `bench/results.json`
