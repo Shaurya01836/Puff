@@ -4,11 +4,11 @@ Puff installs like any desktop app. You do not need the source code, Node or npm
 
 ## What you need first
 
-| Need | Why | Without it |
-|---|---|---|
-| **Docker Desktop**, running | Puff's memory lives in FalkorDB, a graph database. Puff starts it in Docker for you (one button). | You can run FalkorDB yourself on port 6379 instead. |
-| **At least one agent CLI**, signed in: `claude`, `codex` or `opencode` | These are the agents Puff drives. | You can still add a project and explore its graph. |
-| **git** | Agents work in separate git worktrees. | A folder that is not a git repository can be set up by Puff when you agree. |
+| Need                                                                   | Why                                                                                               | Without it                                                                  |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| **Docker Desktop**, running                                            | Puff's memory lives in FalkorDB, a graph database. Puff starts it in Docker for you (one button). | You can run FalkorDB yourself on port 6379 instead.                         |
+| **At least one agent CLI**, signed in: `claude`, `codex` or `opencode` | These are the agents Puff drives.                                                                 | You can still add a project and explore its graph.                          |
+| **git**                                                                | Agents work in separate git worktrees.                                                            | A folder that is not a git repository can be set up by Puff when you agree. |
 
 Install the agent CLIs with npm and sign in once by running each one:
 
@@ -25,18 +25,19 @@ npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
 ## First run
 
 - **Setup screen.** If the database is not reachable, Puff says so and shows what it found: whether Docker is installed and running, and which agent CLIs are on your PATH. **Start the database** runs FalkorDB in a Docker container named `puff-falkordb` (the first time downloads the image, a few minutes). If port 6379 is taken, Puff picks the next free port and remembers it in `~/.puff/.env`. Nothing is started until you press the button.
+- **Agent tools.** The setup and welcome screens list each agent CLI with whether it is installed and signed in (asked of the CLI itself: `claude auth status`, `codex login status`). Next to a Claude Code or Codex that is not signed in there is a **Sign in** button: it starts the CLI's own sign-in, which opens your browser on the provider's page. If the page shows a one-time code, paste it into the box under the button. Puff never sees your password or token. OpenCode's sign-in asks which provider you use, so do that in a terminal (`opencode auth login`).
 - **Welcome screen.** Press **Add a project…** and choose a folder. Puff checks it first (git, TypeScript or JavaScript files, a test command), tells you what will work, and indexes it.
 - **Ask Puff** (Ctrl+K) talks to the project; **Run team** starts the agents.
 
 ## Where things are kept
 
-| What | Where |
-|---|---|
-| Your projects and which one is open | `~/.puff/projects.json` |
-| Your own settings (database port) | `~/.puff/.env` |
-| Your own agent configuration, if you create one | `~/.puff/config.yaml` (`puff config init` writes a copy of the default to edit) |
-| The default agent configuration, grammars and benchmark results | Inside the installed app (its `resources` folder) |
-| The memory itself | The `puff-falkordb` Docker volume, one graph per project (`puff_<project>`) |
+| What                                                            | Where                                                                           |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Your projects and which one is open                             | `~/.puff/projects.json`                                                         |
+| Your own settings (database port)                               | `~/.puff/.env`                                                                  |
+| Your own agent configuration, if you create one                 | `~/.puff/config.yaml` (`puff config init` writes a copy of the default to edit) |
+| The default agent configuration, grammars and benchmark results | Inside the installed app (its `resources` folder)                               |
+| The memory itself                                               | The `puff-falkordb` Docker volume, one graph per project (`puff_<project>`)     |
 
 Uninstalling removes the app. It leaves `~/.puff` and the database volume alone, because that is your data.
 
@@ -55,4 +56,4 @@ The script (`apps/desktop/scripts/package.mjs`) builds the app, stages the built
 - Windows only; the installer is not code-signed.
 - Updating means running a newer installer; there is no auto-update.
 - Claude Code must be installed and signed in for the Ask Puff chat to answer plain sentences. Slash commands work without it.
-- The setup screen shows whether each agent CLI is installed, not whether it is signed in.
+- Sign-in status is known for Claude Code and Codex; for OpenCode it shows as installed only.

@@ -4,6 +4,7 @@ import {
   CircleX,
   CornerDownLeft,
   LoaderCircle,
+  LogIn,
   MessageSquare,
   Play,
   RotateCcw,
@@ -132,10 +133,20 @@ export function ChatPanel({
         </button>
       </header>
 
-      {info && !info.ready && (
-        <p className="border-b border-warn/20 bg-warn/10 px-5 py-2.5 text-[12px] leading-snug text-warn">
-          {info.note ?? `${info.brain} is not available.`}
-        </p>
+      {info && (!info.ready || info.needsSignIn) && (
+        <div className="border-b border-warn/20 bg-warn/10 px-5 py-2.5 text-[12px] leading-snug text-warn">
+          <p>{info.note ?? `${info.brain} is not available.`}</p>
+          {info.needsSignIn && (
+            <button
+              onClick={() => onSend('/login')}
+              disabled={busy}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-warn/20 px-2.5 py-1 text-xs font-semibold text-warn hover:bg-warn/30 disabled:opacity-50"
+            >
+              <LogIn className="size-3.5" />
+              Sign in
+            </button>
+          )}
+        </div>
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4" aria-live="polite">

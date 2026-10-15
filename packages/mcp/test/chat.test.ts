@@ -534,6 +534,73 @@ describe.skipIf(!db)('the chat session (real tools, scripted agent)', () => {
     expect(session.history.at(-1)!.ok).toBe(true);
   }, 60_000);
 
+  it('/login opens the sign-in and reports its end; /code hands over the one-time code without keeping it', async () => {
+    const { chat } = await fixture();
+    const received: string[] = [];
+    let finish!: (r: { ok: boolean; message: string }) => void;
+    const signIn = {
+      start: async (agent: string) => ({
+        agent: agent as 'claude-code',
+        url: 'https://claude.com/cai/oauth/authorize?code=true',
+        done: new Promise<{ ok: boolean; message: string }>((r) => (finish = r)),
+      }),
+      submitCode: (code: string) => {
+        received.push(code);
+        return true;
+      },
+    };
+    const brain = new ScriptedBrain(async () => 'should not be asked');
+    const session = chat(brain, { signIn });
+
+    await session.send('/login');
+    const opened = session.history.at(-1) as ChatMessage;
+    expect(opened).toMatchObject({ role: 'system', ok: true });
+    expect(opened.text).toMatch(/Opening your browser to sign in to Claude Code/);
+    expect(opened.text).toContain('https://claude.com/cai/oauth/authorize?code=true');
+    expect(opened.text).toMatch(/\/code <the code>/);
+
+    await session.send('/code secret-123');
+    expect(received).toEqual(['secret-123']);
+    expect(session.history.at(-2)!.text).toBe('/code ••••••'); // what the person typed is not kept
+    expect(JSON.stringify(session.history)).not.toContain('secret-123');
+    expect(session.history.at(-1)!.text).toMatch(/Code sent/);
+
+    // the sign-in ends later, on its own: its result arrives as a message
+    finish({ ok: true, message: 'Signed in to Claude Code.' });
+    await sleep(20);
+    expect(session.history.at(-1)).toMatchObject({
+      role: 'system',
+      ok: true,
+      text: 'Signed in to Claude Code.',
+    });
+    expect(brain.inputs).toHaveLength(0); // none of this reached the agent
+  }, 60_000);
+
+  it('/login says so when it cannot: no sign-in available, an agent Puff cannot sign in, a code with nothing waiting', async () => {
+    const { chat } = await fixture();
+    const none = chat(new ScriptedBrain(async () => 'x'));
+    await none.send('/login');
+    expect(none.history.at(-1)).toMatchObject({ ok: false });
+    expect(none.history.at(-1)!.text).toMatch(/not available here.*terminal/s);
+
+    const waiting = chat(new ScriptedBrain(async () => 'x'), {
+      signIn: {
+        start: async () => {
+          throw new Error('should not be called');
+        },
+        submitCode: () => false,
+      },
+    });
+    await waiting.send('/login opencode');
+    expect(waiting.history.at(-1)!.text).toMatch(/claude-code or codex, not "opencode"/);
+    await waiting.send('/code 123');
+    expect(waiting.history.at(-1)).toMatchObject({ ok: false });
+    expect(waiting.history.at(-1)!.text).toMatch(/No sign-in is waiting/);
+    expect(JSON.stringify(waiting.history)).not.toContain('123');
+    await waiting.send('/code');
+    expect(waiting.history.at(-1)!.text).toMatch(/Type the code after the command/);
+  }, 60_000);
+
   it('refuses a second message while one is being answered', async () => {
     const { chat } = await fixture();
     let release!: () => void;
@@ -554,6 +621,7 @@ describe.skipIf(!db)('the chat session (real tools, scripted agent)', () => {
       brain: 'Scripted',
       ready: true,
       note: undefined,
+      needsSignIn: false,
       autoApprove: false,
     });
     const missing = chat(new ClaudeCodeBrain('puff-no-such-command-xyz'));

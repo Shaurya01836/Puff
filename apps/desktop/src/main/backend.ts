@@ -44,6 +44,7 @@ import {
   savingsFromBench,
   setActiveProject,
   setWasmDirectory,
+  SignInManager,
   startDatabase,
   updateProject as updateInRegistry,
   userEnvPath,
@@ -121,12 +122,14 @@ export async function createBackend(appDir: string, hooks: BackendHooks = {}): P
   let live: Omit<PuffApi, 'onEvent'> | undefined;
   let error: string | undefined;
   let harnesses: Record<string, { command: string }> = DEFAULT_HARNESSES;
+  // Signing in to the agent CLIs (the buttons and the chat's /login share this one)
+  const signIn = new SignInManager((agent) => harnesses[agent]?.command, emit);
 
   const connectLive = async () => {
     // A database port remembered by an earlier setup (~/.puff/.env) is picked up here
     loadDotEnv(userEnvPath());
     try {
-      const built = await buildLive(appDir, hooks, emit);
+      const built = await buildLive(appDir, hooks, emit, signIn);
       live = built.api;
       harnesses = built.harnesses;
       error = undefined;
@@ -168,6 +171,13 @@ export async function createBackend(appDir: string, hooks: BackendHooks = {}): P
   }
   api.getSetupStatus = setupStatus;
   api.retrySetup = retrySetup;
+  api.startSignIn = async (agent) => {
+    const started = await signIn.start(agent);
+    return { url: started.url };
+  };
+  api.submitSignInCode = async (code) => {
+    if (!signIn.submitCode(code)) throw new Error('No sign-in is waiting for a code.');
+  };
   api.startDatabase = async () => {
     await startDatabase((line) => console.log(`[puff] ${line}`));
     return retrySetup();
@@ -184,6 +194,7 @@ async function buildLive(
   appDir: string,
   hooks: BackendHooks,
   emit: (e: PuffEvent) => void,
+  signIn: SignInManager,
 ): Promise<{ api: Omit<PuffApi, 'onEvent'>; harnesses: Record<string, { command: string }> }> {
   const mock = createMockApi();
   const packaged = hooks.resourcesDir !== undefined;
@@ -240,6 +251,7 @@ async function buildLive(
       controller,
       brain: new ClaudeCodeBrain(claude?.command ?? 'claude'),
       projects,
+      signIn,
       model: claude?.model,
       autoApprove: process.env.PUFF_CHAT_AUTO_APPROVE === '1',
       emit,

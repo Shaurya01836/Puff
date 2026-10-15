@@ -4,7 +4,15 @@ import { Mascot } from '@/components/Mascot';
 import { AgentChecklist } from '@/screens/Setup';
 
 /** Shown when no project has been added yet: the one thing to do, and what Puff needs. */
-export function Welcome({ onAdd, agents }: { onAdd: () => void; agents?: AgentCliStatus[] }) {
+export function Welcome({
+  onAdd,
+  agents,
+  onRefresh,
+}: {
+  onAdd: () => void;
+  agents?: AgentCliStatus[];
+  onRefresh?: () => void;
+}) {
   return (
     <div className="grid h-full place-items-center p-10">
       <div className="flex max-w-lg flex-col items-center text-center">
@@ -45,7 +53,7 @@ export function Welcome({ onAdd, agents }: { onAdd: () => void; agents?: AgentCl
           </li>
           {agents && (
             <li className="rounded-xl border border-line bg-surface p-4">
-              <AgentChecklist agents={agents} />
+              <AgentChecklist agents={agents} onChanged={onRefresh} />
             </li>
           )}
         </ul>

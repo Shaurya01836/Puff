@@ -1,4 +1,5 @@
 import type {
+  AgentName,
   AgentProfile,
   BackendInfo,
   ChatInfo,
@@ -32,6 +33,13 @@ export interface PuffApi {
   startDatabase(): Promise<SetupStatus>;
   /** Try to connect again, for example after the person started the database themselves */
   retrySetup(): Promise<SetupStatus>;
+  /**
+   * Start an agent's own sign-in: it opens the browser on the provider's login page. Puff never sees the
+   * password. The result says where to go if the browser did not open; the end arrives as a `signin` event.
+   */
+  startSignIn(agent: AgentName): Promise<{ url?: string }>;
+  /** The one-time code some sign-ins show in the browser, given to the sign-in that is waiting for it */
+  submitSignInCode(code: string): Promise<void>;
   /** Every project Puff knows about, the active one marked */
   listProjects(): Promise<ProjectSummary[]>;
   /** What Puff finds in a folder, before it is added: problems, what blocks agents, warnings */
@@ -106,6 +114,8 @@ export const PUFF_INVOKE_METHODS = [
   'getSetupStatus',
   'startDatabase',
   'retrySetup',
+  'startSignIn',
+  'submitSignInCode',
   'listProjects',
   'inspectProject',
   'addProject',

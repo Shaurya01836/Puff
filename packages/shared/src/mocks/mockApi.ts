@@ -60,7 +60,7 @@ export interface MockApiOptions {
   databaseDown?: boolean;
 }
 
-const sampleSetup = (databaseOk: boolean): SetupStatus => ({
+const sampleSetup = (databaseOk: boolean, claudeSignedIn = true): SetupStatus => ({
   databaseOk,
   databaseUrl: 'falkor://localhost:6379',
   databaseError: databaseOk
@@ -74,6 +74,8 @@ const sampleSetup = (databaseOk: boolean): SetupStatus => ({
       installed: true,
       version: '2.1.0 (Claude Code)',
       installHint: '',
+      signedIn: claudeSignedIn ? 'signed-in' : 'signed-out',
+      canSignIn: true,
     },
     {
       id: 'codex',
@@ -81,7 +83,14 @@ const sampleSetup = (databaseOk: boolean): SetupStatus => ({
       installed: false,
       installHint: 'npm install -g @openai/codex, then run `codex` once to sign in',
     },
-    { id: 'opencode', command: 'opencode', installed: true, version: '1.4.3', installHint: '' },
+    {
+      id: 'opencode',
+      command: 'opencode',
+      installed: true,
+      version: '1.4.3',
+      installHint: '',
+      signedIn: 'unknown',
+    },
   ],
   homePath: '~/.puff',
 });
@@ -89,6 +98,8 @@ const sampleSetup = (databaseOk: boolean): SetupStatus => ({
 export function createMockApi(opts: MockApiOptions = {}): PuffApi {
   const tickMs = opts.tickMs ?? 2500;
   let databaseUp = !opts.databaseDown;
+  // In the setup preview Claude Code starts signed out, so the Sign in flow can be tried
+  let claudeSignedIn = !opts.databaseDown;
   const tasks = clone(mockTasks);
   const feed = clone(mockMemoryEvents);
   const listeners = new Set<(e: PuffEvent) => void>();
@@ -242,15 +253,27 @@ export function createMockApi(opts: MockApiOptions = {}): PuffApi {
       };
     },
     async getSetupStatus() {
-      return sampleSetup(databaseUp);
+      return sampleSetup(databaseUp, claudeSignedIn);
     },
     async startDatabase() {
       await new Promise((r) => setTimeout(r, 1500));
       databaseUp = true;
-      return sampleSetup(true);
+      return sampleSetup(true, claudeSignedIn);
+    },
+    async startSignIn() {
+      return { url: 'https://claude.com/cai/oauth/authorize?code=true' };
+    },
+    async submitSignInCode() {
+      claudeSignedIn = true;
+      emit({
+        type: 'signin',
+        agent: 'claude-code',
+        ok: true,
+        message: 'Signed in to Claude Code.',
+      });
     },
     async retrySetup() {
-      return sampleSetup(databaseUp);
+      return sampleSetup(databaseUp, claudeSignedIn);
     },
     async listProjects() {
       return clone(projects);

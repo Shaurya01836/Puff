@@ -46,6 +46,8 @@ export function App() {
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  /** Bumped when a sign-in finished, so the agent list is read again */
+  const [setupTick, setSetupTick] = useState(0);
   const [settingsFor, setSettingsFor] = useState<ProjectSummary>();
   /** Bumped when the active project changes (added, switched, removed, edited): everything reloads */
   const [projectTick, setProjectTick] = useState(0);
@@ -58,7 +60,7 @@ export function App() {
   const setup = useLoad(
     () =>
       info?.needsSetup || info?.noProject ? puff.getSetupStatus() : Promise.resolve(undefined),
-    [info?.needsSetup, info?.noProject, projectTick],
+    [info?.needsSetup, info?.noProject, projectTick, setupTick],
   );
   const projectId = info?.projectId ?? MOCK_PROJECT_ID;
   const live = info?.mode === 'live';
@@ -188,6 +190,7 @@ export function App() {
     return (
       <Setup
         status={setup}
+        onRefresh={() => setSetupTick((t) => t + 1)}
         onStart={async () => {
           await puff.startDatabase();
           reloadProjects();
@@ -231,7 +234,13 @@ export function App() {
           }
         />
         <div className="min-h-0 flex-1 overflow-auto">
-          {info?.noProject && <Welcome onAdd={() => setImportOpen(true)} agents={setup?.agents} />}
+          {info?.noProject && (
+            <Welcome
+              onAdd={() => setImportOpen(true)}
+              agents={setup?.agents}
+              onRefresh={() => setSetupTick((t) => t + 1)}
+            />
+          )}
           {!info?.noProject && screen === 'graph' && (
             <MemoryGraph
               projectId={projectId}

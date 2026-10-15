@@ -12,14 +12,23 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
+  SIGN_IN_AGENTS,
   parseClaude,
   resolveExecutable,
   runProcess,
   runSlashCommand,
+  signInState,
   type ProjectController,
   type ProjectHooks,
+  type SignInManager,
 } from '@puff/core';
-import { parseSlashCommand, type ChatInfo, type ChatMessage, type PuffEvent } from '@puff/shared';
+import {
+  parseSlashCommand,
+  type AgentName,
+  type ChatInfo,
+  type ChatMessage,
+  type PuffEvent,
+} from '@puff/shared';
 import { registerControlTools, type ChatAction } from './control';
 import { hostMcp, type McpHost } from './http';
 import { createPuffServer } from './tools';
@@ -190,6 +199,8 @@ export interface ChatSessionOptions {
   brain: ChatBrain;
   /** Lets slash commands list and switch projects (the app knows how; a plain CLI chat does not) */
   projects?: ProjectHooks;
+  /** Starts the agents' own sign-in for /login and /code. Without it those commands say they are unavailable. */
+  signIn?: Pick<SignInManager, 'start' | 'submitCode'>;
   /** Model for the orchestrator agent; default: the agent's own */
   model?: string;
   /** Runs the orchestrator asks for start without asking the person first */
@@ -209,7 +220,7 @@ export function describeBrainError(
   error: { kind: string; message: string },
 ): string {
   if (error.kind === 'auth')
-    return `${brain} is not signed in. Run \`claude\` in a terminal, type /login, then try again. Slash commands work meanwhile. (${error.message})`;
+    return `${brain} is not signed in. Type /login here (it opens your browser), then try again. Slash commands work meanwhile. (${error.message})`;
   if (error.kind === 'unavailable')
     return `${brain} could not be started: ${error.message}. Slash commands still work.`;
   if (error.kind === 'timeout' || error.kind === 'aborted') return error.message;
@@ -233,10 +244,22 @@ export class ChatSession {
 
   async info(): Promise<ChatInfo> {
     const status = await this.opts.brain.available();
+    // Installed is not the same as signed in: ask the CLI, so the panel can offer the Sign in button
+    let note = status.note;
+    let needsSignIn = false;
+    if (status.ok && this.opts.signIn && this.opts.brain.name === 'Claude Code') {
+      const command = this.opts.controller.config.harnesses['claude-code']?.command ?? 'claude';
+      if ((await signInState('claude-code', command)) === 'signed-out') {
+        needsSignIn = true;
+        note =
+          'Claude Code is not signed in. Press Sign in (or type /login); it opens your browser. Slash commands work meanwhile.';
+      }
+    }
     return {
       brain: this.opts.brain.name,
       ready: status.ok,
-      note: status.note,
+      note,
+      needsSignIn,
       autoApprove: this.opts.autoApprove === true,
     };
   }
@@ -316,14 +339,74 @@ export class ChatSession {
     }
   }
 
+  /** /login [agent]: open the provider's login page. The end of the sign-in arrives as its own message. */
+  private async startSignIn(args: string): Promise<void> {
+    const manager = this.opts.signIn;
+    if (!manager)
+      return void this.push({
+        role: 'system',
+        ok: false,
+        text: 'Signing in is not available here. Run the agent (for example `claude`) in a terminal and sign in there.',
+      });
+    const word = args.trim().toLowerCase();
+    const agent: AgentName | undefined =
+      word === '' || word === 'claude' || word === 'claude-code'
+        ? 'claude-code'
+        : word === 'codex'
+          ? 'codex'
+          : undefined;
+    if (!agent)
+      return void this.push({
+        role: 'system',
+        ok: false,
+        text: `I can sign in to claude-code or codex, not "${args.trim()}". Sign in to other agents with their own command in a terminal.`,
+      });
+    try {
+      const started = await manager.start(agent);
+      this.push({
+        role: 'system',
+        ok: true,
+        text: [
+          `Opening your browser to sign in to ${SIGN_IN_AGENTS[agent]!.label}. Approve it there.`,
+          started.url ? `If it did not open, go to: ${started.url}` : '',
+          'If the page shows a one-time code, type it here as /code <the code>. Puff does not keep it.',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      });
+      void started.done.then((r) => this.push({ role: 'system', ok: r.ok, text: r.message }));
+    } catch (err) {
+      this.push({ role: 'system', ok: false, text: (err as Error).message });
+    }
+  }
+
+  /** /code <code>: hand the one-time code to the sign-in that is waiting for it */
+  private submitCode(code: string): void {
+    const sent = this.opts.signIn?.submitCode(code) ?? false;
+    this.push({
+      role: 'system',
+      ok: sent,
+      text: sent
+        ? 'Code sent. Waiting for the sign-in to finish…'
+        : code.trim()
+          ? 'No sign-in is waiting for a code. Type /login first.'
+          : 'Type the code after the command: /code <the code>.',
+    });
+  }
+
   async send(text: string): Promise<void> {
     const said = text.trim();
     if (!said) return;
     if (this.busy) throw new Error('Still working on your last message.');
-    this.push({ role: 'user', text: said });
+    const command = parseSlashCommand(said);
+    // A one-time sign-in code is not kept in the conversation
+    this.push({ role: 'user', text: command?.name === 'code' ? '/code ••••••' : said });
+
+    if (command?.name === 'login') return this.startSignIn(command.args);
+    if (command?.name === 'code') return this.submitCode(command.args);
 
     // Slash commands: instant and free, and they never reach the agent.
-    if (parseSlashCommand(said)) {
+    if (command) {
       const r = await runSlashCommand(this.opts.controller, said, this.opts.projects);
       this.push({ role: 'system', ok: r.ok, text: r.text });
       return;

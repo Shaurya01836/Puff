@@ -44,3 +44,4 @@ export * from './control/summary';
 export * from './control/controller';
 export * from './control/commands';
 export * from './setup/setup';
+export * from './setup/auth';

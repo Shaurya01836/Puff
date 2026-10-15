@@ -17,6 +17,7 @@ import {
   loadRegistry,
   openProject,
   ProjectController,
+  SignInManager,
   slugify,
   type ProjectEntry,
 } from '@puff/core';
@@ -89,6 +90,7 @@ async function main(): Promise<void> {
     controller,
     brain: new ClaudeCodeBrain(claude?.command ?? 'claude'),
     model: claude?.model,
+    signIn: new SignInManager((agent) => opened.config.harnesses[agent]?.command, emit),
     autoApprove: process.env.PUFF_CHAT_AUTO_APPROVE === '1',
     emit,
   });

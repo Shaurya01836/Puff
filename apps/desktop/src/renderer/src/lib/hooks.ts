@@ -102,6 +102,8 @@ export function useChat(projectKey: string) {
     puff.chatHistory().then((h) => alive && setMessages(h));
     puff.chatInfo().then((i) => alive && setInfo(i));
     const off = puff.onEvent((e) => {
+      // A sign-in ending changes whether the agent can answer
+      if (e.type === 'signin') puff.chatInfo().then((i) => alive && setInfo(i));
       if (e.type !== 'chat') return;
       setMessages((prev) => {
         const i = prev.findIndex((m) => m.id === e.message.id);
@@ -135,6 +137,8 @@ export function useChat(projectKey: string) {
       setBusy(true);
       await run(() => puff.chatSend(text));
       setBusy(false);
+      // An answer can change what the panel should say (Claude Code turned out not to be signed in)
+      puff.chatInfo().then(setInfo);
     },
     approve: (id: string, approve: boolean) => run(() => puff.chatApprove(id, approve)),
     reset: async () => {

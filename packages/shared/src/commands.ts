@@ -31,6 +31,12 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   },
   { name: 'diff', usage: '/diff <task>', summary: 'What a task changed' },
   { name: 'index', usage: '/index', summary: 'Re-read the code into the graph' },
+  {
+    name: 'login',
+    usage: '/login [agent]',
+    summary: 'Sign in to Claude Code (or codex); opens your browser',
+  },
+  { name: 'code', usage: '/code <code>', summary: 'Give the one-time code your browser showed' },
   { name: 'projects', usage: '/projects', summary: 'List projects' },
   { name: 'project', usage: '/project <name>', summary: 'Switch to another project' },
 ];

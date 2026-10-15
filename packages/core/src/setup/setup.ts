@@ -6,10 +6,11 @@ import { mkdir } from 'node:fs/promises';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import type { AgentCliStatus, SetupStatus } from '@puff/shared';
+import { AGENT_NAMES, type AgentCliStatus, type AgentName, type SetupStatus } from '@puff/shared';
 import { runProcess } from '../agents/spawn';
 import { connect, DEFAULT_FALKORDB_URL } from '../db/client';
 import { puffHome } from '../paths';
+import { SIGN_IN_AGENTS, signInState } from './auth';
 
 /** The container Puff starts (the same name docker-compose.yml uses, so a developer's database is reused) */
 export const FALKORDB_CONTAINER = 'puff-falkordb';
@@ -62,6 +63,11 @@ async function agentStatus(id: string, command: string): Promise<AgentCliStatus>
     installed,
     version: installed && version ? version : undefined,
     installHint: INSTALL_HINTS[id] ?? `Install ${command} and make sure it is on your PATH`,
+    signedIn:
+      installed && AGENT_NAMES.includes(id as AgentName)
+        ? await signInState(id as AgentName, command)
+        : undefined,
+    canSignIn: id in SIGN_IN_AGENTS,
   };
 }
 

@@ -243,7 +243,9 @@ export type PuffEvent =
   /** A chat message was added or changed (an approval was answered): upsert it by id */
   | { type: 'chat'; message: ChatMessage }
   /** One thing an agent (or Puff) just did on a task: a file read, an edit, a command, a test run */
-  | { type: 'activity'; step: ActivityStep };
+  | { type: 'activity'; step: ActivityStep }
+  /** A sign-in that Puff started has ended (the person finished it in the browser, or it failed) */
+  | { type: 'signin'; agent: AgentName; ok: boolean; message: string };
 
 /** Where the API gets its data. Lets the UI say honestly what is live and what is mock. */
 export interface BackendInfo {
@@ -275,7 +277,14 @@ export interface AgentCliStatus {
   version?: string;
   /** How to install it (and sign in), shown when it is missing */
   installHint: string;
+  /** Whether it is signed in, asked of the CLI itself. Only set for an installed agent. */
+  signedIn?: SignInState;
+  /** Puff can start this agent's sign-in (opens the browser) */
+  canSignIn?: boolean;
 }
+
+/** signed-in / signed-out as the CLI says; unknown when the CLI has no cheap way to tell */
+export type SignInState = 'signed-in' | 'signed-out' | 'unknown';
 
 /** What the first-run setup screen shows */
 export interface SetupStatus {
@@ -321,6 +330,8 @@ export interface ChatInfo {
   /** Slash commands always work; this says whether the agent can be asked (it is installed) */
   ready: boolean;
   note?: string;
+  /** The agent is installed but not signed in: the chat offers a Sign in button */
+  needsSignIn?: boolean;
   /** Runs the orchestrator asks for start without asking the person first */
   autoApprove: boolean;
 }
