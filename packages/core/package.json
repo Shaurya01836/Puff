@@ -15,7 +15,10 @@
     "@puff/shared": "*",
     "commander": "^15.0.0",
     "falkordb": "^6.8.0",
+    "ignore": "^7.0.12",
+    "tree-sitter-wasms": "^0.1.13",
     "ulid": "^3.0.2",
+    "web-tree-sitter": "0.22.6",
     "yaml": "^2.9.1",
     "zod": "^4.6.7"
   }

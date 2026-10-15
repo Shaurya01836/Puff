@@ -144,6 +144,20 @@ export type PuffEvent =
   | { type: 'session:update'; session: SessionInfo }
   | { type: 'memory'; event: MemoryEvent };
 
+/** Where the API gets its data. Lets the UI say honestly what is live and what is mock. */
+export interface BackendInfo {
+  /** live = graph comes from FalkorDB; mock = everything comes from fixtures */
+  mode: 'live' | 'mock';
+  projectId: string;
+  projectName: string;
+  repoPath?: string;
+  graphName?: string;
+  /** Parts of the API that still return mock data in live mode */
+  mockParts: string[];
+  /** Why live mode is unavailable, when mode is mock */
+  error?: string;
+}
+
 /** Structured block agents append to their final answer: <puff-report>{...}</puff-report> */
 export interface PuffReport {
   decisions?: { symbol: string; text: string; supersedes?: string }[];

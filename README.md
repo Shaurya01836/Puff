@@ -222,7 +222,7 @@ Puff is built in **phases**. Each phase ends with a checkpoint: a working build 
 | Phase | Builds | Checkpoint |
 |---|---|---|
 | **P0 Foundation** ✅ | Monorepo, shared types/API/mocks, FalkorDB + indexes | UI renders mocks; project graph is created on start |
-| **P1 Code graph** | Indexer, impact query, demo repo, live graph view | Demo repo visible as a graph |
+| **P1 Code graph** ✅ | Indexer, impact query, demo repo, live graph view | Demo repo visible as a graph |
 | **P2 Memory + context** | Memory writes, stack trace → symbol mapping, context compiler, ContextPack | A recorded failure lands on the right function |
 | **P3 Three agents, one loop** | Claude Code + Codex + OpenCode adapters, worktrees, verify, retry | Session 2 avoids session 1's mistake |
 | **P4 Team coordination** | Planner, routing, scheduling, escalation, live board | 3 agents in parallel, one waits on overlap |
@@ -236,7 +236,7 @@ Details: [docs/ARCHITECTURE.md → Build phases](docs/ARCHITECTURE.md#build-phas
 
 ## Quick start
 
-> 🚧 Puff is being built during Graph Hacks (15–18 Oct 2026). **Phase P0 is in:** the monorepo, shared contract, FalkorDB setup, CLI, MCP server and the desktop app running on mock data. Agents and the code indexer arrive in the next phases.
+> 🚧 Puff is being built during Graph Hacks (15–18 Oct 2026). **Phases P0 and P1 are in:** FalkorDB setup, the tree-sitter code indexer, the impact query, the synthetic demo repo, the MCP server, and the desktop app showing the live code graph (tasks and memory are still mock data until P2 and P3).
 
 **Prerequisites:** Node 22.12+, Docker (or [falkordblite](docs/ARCHITECTURE.md#option-b-no-docker-falkordblite)), git. Agent CLIs (`claude`, `codex`, `opencode`) are needed from phase P3.
 
@@ -256,10 +256,16 @@ npm run db:up
 
 > If port 6379 is already used by another Redis, copy `.env.example` to `.env` and set `FALKORDB_PORT=6380` and `FALKORDB_URL=falkor://localhost:6380`. Puff detects a plain Redis and tells you.
 
-Create the project graph, indexes and agent pool (safe to re-run):
+Index the demo repo into its graph: creates `puff_shop_api`, the indexes and the agent pool, then parses every file (safe to re-run; only changed files are rewritten):
 
 ```bash
-npm run puff -- init demo --name shop-api
+npm run puff -- index demo/shop-api
+```
+
+Try the impact query:
+
+```bash
+npm run puff -- impact login demo/shop-api
 ```
 
 Open the desktop app:
@@ -274,7 +280,10 @@ npm run dev
 |---|---|
 | `npm run dev` | Electron app with hot reload |
 | `npm run dev:web` | Same UI in a normal browser at <http://localhost:5173>, backed by mocks (fastest for UI work) |
-| `npm run puff -- <init|status|graphs>` | Headless CLI |
+| `npm run puff -- index demo/shop-api` | Parse the repo with tree-sitter and write it to the graph (incremental; `--force` rewrites all) |
+| `npm run puff -- impact login demo/shop-api` | What may break if a symbol changes (callers up to 3 hops) |
+| `npm run puff -- symbols cart demo/shop-api` | Find symbols by name |
+| `npm run puff -- <init|status|graphs>` | Graph setup and inspection |
 | `npm run mcp` | Puff MCP server over stdio (needs `PUFF_PROJECT`) |
 | `npm run typecheck` · `npm test` · `npm run format` | Checks (also run in CI) |
 | `npm run build:desktop` | Package the installable app (.exe / .dmg / AppImage) |

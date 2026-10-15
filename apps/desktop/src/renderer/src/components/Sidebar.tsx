@@ -1,6 +1,6 @@
-import { Bot, Columns3, Database, Network } from 'lucide-react';
-import type { ComponentType } from 'react';
-import type { AgentProfile } from '@puff/shared';
+import { useState, type ComponentType } from 'react';
+import { Bot, Columns3, Database, Network, RefreshCw } from 'lucide-react';
+import type { AgentProfile, BackendInfo } from '@puff/shared';
 import { cn } from '@/lib/cn';
 import { AGENT_META } from '@/lib/theme';
 import { Mascot, MASCOT_LINES, type MascotState } from './Mascot';
@@ -24,17 +24,17 @@ export function Sidebar({
   onScreen,
   mascot,
   agents,
-  projectId,
+  info,
+  onReindex,
   counts,
-  mock,
 }: {
   screen: Screen;
   onScreen: (s: Screen) => void;
   mascot: MascotState;
   agents?: AgentProfile[];
-  projectId: string;
+  info?: BackendInfo;
+  onReindex: () => Promise<string>;
   counts: Partial<Record<Screen, number>>;
-  mock: boolean;
 }) {
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-line bg-surface/70">
@@ -48,26 +48,7 @@ export function Sidebar({
         </div>
       </div>
 
-      <div className="mx-3 mb-4 rounded-xl border border-line bg-surface-2/70 px-3 py-2.5">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium">shop-api</span>
-          {mock ? (
-            <span className="inline-flex items-center gap-1.5 text-[11px] text-warn">
-              <span className="size-1.5 rounded-full bg-warn" />
-              mock
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 text-[11px] text-good">
-              <span className="size-1.5 animate-breathe rounded-full bg-good" />
-              live
-            </span>
-          )}
-        </div>
-        <div className="mt-1 flex items-center gap-1.5 font-mono text-[11px] text-ink-3">
-          <Database className="size-3" />
-          puff_{projectId}
-        </div>
-      </div>
+      <ProjectCard info={info} onReindex={onReindex} />
 
       <nav className="flex flex-col gap-0.5 px-3">
         {NAV.map(({ id, label, hint, icon: Icon }) => {
@@ -129,5 +110,68 @@ export function Sidebar({
         </div>
       </div>
     </aside>
+  );
+}
+
+function ProjectCard({
+  info,
+  onReindex,
+}: {
+  info?: BackendInfo;
+  onReindex: () => Promise<string>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string>();
+  const live = info?.mode === 'live';
+
+  const reindex = async () => {
+    setBusy(true);
+    try {
+      setResult(await onReindex());
+    } catch (err) {
+      setResult(`Index failed: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mx-3 mb-4 rounded-xl border border-line bg-surface-2/70 px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-sm font-medium">{info?.projectName ?? '…'}</span>
+        {live ? (
+          <span className="inline-flex items-center gap-1.5 text-[11px] text-good">
+            <span className="size-1.5 animate-breathe rounded-full bg-good" />
+            live graph
+          </span>
+        ) : (
+          <span
+            className="inline-flex items-center gap-1.5 text-[11px] text-warn"
+            title={info?.error ?? 'Running on mock data'}
+          >
+            <span className="size-1.5 rounded-full bg-warn" />
+            mock
+          </span>
+        )}
+      </div>
+      <div className="mt-1 flex items-center gap-1.5 font-mono text-[11px] text-ink-3">
+        <Database className="size-3 shrink-0" />
+        <span className="truncate">{info?.graphName ?? `puff_${info?.projectId ?? ''}`}</span>
+        {live && (
+          <button
+            onClick={reindex}
+            disabled={busy}
+            className="ml-auto rounded p-0.5 text-ink-3 hover:bg-surface-3 hover:text-ink disabled:opacity-60"
+            title="Re-index the repository"
+          >
+            <RefreshCw className={cn('size-3', busy && 'animate-spin')} />
+          </button>
+        )}
+      </div>
+      {result && <div className="mt-1.5 text-[11px] text-ink-2">{result}</div>}
+      {!live && info?.error && (
+        <div className="mt-1.5 line-clamp-3 text-[11px] text-warn/80">{info.error}</div>
+      )}
+    </div>
   );
 }

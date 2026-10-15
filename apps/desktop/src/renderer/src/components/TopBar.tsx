@@ -9,14 +9,14 @@ export function TopBar({
   running,
   onToggleRun,
   onGoal,
-  mock,
+  badge,
 }: {
   title: string;
   subtitle: string;
   running: boolean;
   onToggleRun: () => void;
   onGoal: (goal: string) => Promise<void>;
-  mock: boolean;
+  badge?: string;
 }) {
   const [goal, setGoal] = useState('');
   const [busy, setBusy] = useState(false);
@@ -59,7 +59,7 @@ export function TopBar({
       </form>
 
       <div className="flex shrink-0 items-center gap-3">
-        {mock && <MockBadge />}
+        {badge && <MockBadge label={badge} />}
         <button
           onClick={onToggleRun}
           className={cn(

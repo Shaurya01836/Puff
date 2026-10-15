@@ -68,7 +68,16 @@ function useSize<T extends HTMLElement>() {
   return [ref, size] as const;
 }
 
-export function MemoryGraph({ projectId, graph }: { projectId: string; graph?: GraphData }) {
+export function MemoryGraph({
+  projectId,
+  graph,
+  feedIsSample,
+}: {
+  projectId: string;
+  graph?: GraphData;
+  /** Feed still comes from mocks (memory goes live in P2) */
+  feedIsSample: boolean;
+}) {
   const [ref, size] = useSize<HTMLDivElement>();
   const fg = useRef<ForceGraphMethods<GNode, GraphEdge> | undefined>(undefined);
   const fitted = useRef(false);
@@ -124,11 +133,23 @@ export function MemoryGraph({ projectId, graph }: { projectId: string; graph?: G
     return c;
   }, [source]);
 
+  // Agents and capabilities float apart until sessions link them to code, so fit the view to
+  // code and memory whenever there is any, and to everything otherwise.
+  const fit = useCallback(
+    (ms: number) => {
+      const anchored = data.nodes.some((n) => NODE_GROUPS[n.kind] !== 'work' || n.kind === 'Task');
+      fg.current?.zoomToFit(ms, 70, (n) =>
+        anchored ? n.kind !== 'Agent' && n.kind !== 'Capability' : true,
+      );
+    },
+    [data],
+  );
+
   // Fit once the layout settles; the timer covers remounts where the engine stops early.
   useEffect(() => {
     fitted.current = false;
     const t = setTimeout(() => {
-      fg.current?.zoomToFit(500, 70);
+      fit(500);
       fitted.current = true;
     }, 1600);
     return () => clearTimeout(t);
@@ -240,7 +261,7 @@ export function MemoryGraph({ projectId, graph }: { projectId: string; graph?: G
               d3VelocityDecay={0.3}
               onEngineStop={() => {
                 if (!fitted.current) {
-                  fg.current?.zoomToFit(500, 70);
+                  fit(500);
                   fitted.current = true;
                 }
               }}
@@ -287,7 +308,7 @@ export function MemoryGraph({ projectId, graph }: { projectId: string; graph?: G
             </button>
           ))}
           <button
-            onClick={() => fg.current?.zoomToFit(400, 70)}
+            onClick={() => fit(400)}
             className="ml-1 rounded-lg p-1.5 text-ink-3 hover:bg-surface-3 hover:text-ink"
             title="Fit to view"
           >
@@ -367,10 +388,16 @@ export function MemoryGraph({ projectId, graph }: { projectId: string; graph?: G
       <Panel className="flex min-h-0 flex-col p-4">
         <SectionTitle
           right={
-            <span className="inline-flex items-center gap-1.5 text-[11px] text-memory">
-              <span className="size-1.5 animate-breathe rounded-full bg-memory" />
-              live
-            </span>
+            feedIsSample ? (
+              <span className="rounded-full bg-warn/10 px-2 py-0.5 text-[11px] text-warn">
+                sample
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-[11px] text-memory">
+                <span className="size-1.5 animate-breathe rounded-full bg-memory" />
+                live
+              </span>
+            )
           }
         >
           Memory feed

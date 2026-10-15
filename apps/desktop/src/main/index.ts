@@ -5,7 +5,7 @@ import { IPC_EVENT_CHANNEL, PUFF_INVOKE_METHODS, ipcChannel, type PuffApi } from
 import { createBackend } from './backend';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const backend = createBackend();
+let backend: PuffApi;
 
 function registerIpc(api: PuffApi): void {
   for (const method of PUFF_INVOKE_METHODS) {
@@ -22,7 +22,7 @@ function createWindow(): BrowserWindow {
     minHeight: 640,
     show: false,
     title: 'Puff',
-    backgroundColor: '#0e0b1a',
+    backgroundColor: '#070a12',
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(here, '../preload/index.mjs'),
@@ -51,7 +51,8 @@ function createWindow(): BrowserWindow {
   return win;
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  backend = await createBackend(here);
   registerIpc(backend);
   createWindow();
   app.on('activate', () => {

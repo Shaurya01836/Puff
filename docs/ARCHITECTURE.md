@@ -80,7 +80,7 @@ flowchart TB
 | Desktop | Electron + **electron-vite** | Same Node backend; the UI is a Vite React app first |
 | UI | React, Tailwind, shadcn/ui | |
 | Graph viz | `react-force-graph` | Force layout, handles a few thousand nodes |
-| Tests | Vitest (Puff) · Jest (demo repo) | |
+| Tests | Vitest (Puff and the demo repo) | |
 
 ### Supported operating systems
 
@@ -561,7 +561,7 @@ npm run puff -- goal "Add rate limiting to login and update docs"
 
 ## Demo repo and benchmark
 
-**`demo/shop-api`** is our own synthetic Express + TypeScript project: auth (login, session, tokens), users, products, cart, middleware and a Jest test suite. It has **seeded traps**:
+**`demo/shop-api`** is our own synthetic Express + TypeScript project: auth (login, session, tokens), users, products, cart, orders, middleware and a Vitest + Supertest suite (38 files, 25 tests). It has **seeded traps** (full list in `demo/TRAPS.md`, kept outside the repo copy agents see):
 
 - `login` must never log passwords
 - tokens must never go to `localStorage`
@@ -589,7 +589,7 @@ Every phase ends with a **checkpoint**: a working build, committed. The next pha
 | Phase | When | Backend | UI | Checkpoint |
 |---|---|---|---|---|
 | **P0 Foundation** | Thu afternoon | Monorepo, `packages/shared` contract + mocks, docker-compose, graph init + indexes | electron-vite shell, design tokens, mascot, Board on mocks | UI renders mocks; `puff init` creates the graph |
-| **P1 Code graph** | Thu night | Indexer (Q1), impact (Q6), technologies, demo repo skeleton | Memory graph screen on real data | Demo repo visible as a graph; impact query returns files |
+| **P1 Code graph** ✅ | Thu night | Indexer (Q1), impact (Q6), technologies, demo repo skeleton | Memory graph screen on real data | Demo repo visible as a graph; impact query returns files |
 | **P2 Memory + context** | Fri morning | Memory writes (Q11–Q15), stack trace → symbol, context compiler + ContextPack (Q3–Q5), `<puff-report>` parsing | Task detail on mocks | A recorded failure lands on the right function |
 | **P3 Three agents, one loop** | Fri afternoon | Claude Code + Codex + OpenCode adapters, worktrees, verify, retry once | Task detail on real data | **Session 2 avoids session 1's mistake** |
 | **P4 Team coordination** | Fri night | Planner goal split, routing (Q10), scheduling (Q7–Q9), escalation, event bus | Board live, mascot states wired | A goal runs across 3 agents; one task waits on overlap |

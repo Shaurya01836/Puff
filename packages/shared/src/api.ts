@@ -1,5 +1,6 @@
 import type {
   AgentProfile,
+  BackendInfo,
   ContextPack,
   GraphData,
   MemoryEvent,
@@ -15,6 +16,8 @@ import type {
  * in the browser-only dev mode (`npm run dev:web`) the renderer falls back to the mock implementation.
  */
 export interface PuffApi {
+  /** Live or mock, current project, and which parts are still mocked */
+  getBackendInfo(): Promise<BackendInfo>;
   openProject(repoPath: string): Promise<{ projectId: string }>;
   indexProject(projectId: string): Promise<{ files: number; symbols: number; calls: number }>;
   listTasks(projectId: string): Promise<Task[]>;
@@ -39,6 +42,7 @@ export type PuffInvokeMethod = Exclude<keyof PuffApi, 'onEvent'>;
 
 /** Every invoke method, used by preload and main to wire IPC without listing channels twice. */
 export const PUFF_INVOKE_METHODS = [
+  'getBackendInfo',
   'openProject',
   'indexProject',
   'listTasks',

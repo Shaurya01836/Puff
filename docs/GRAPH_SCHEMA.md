@@ -61,7 +61,7 @@ Puff stores **references, not code**: path, line range, signature and hash. The 
 | `Project` | `id`, `name`, `repoPath` | Root of the graph |
 | `File` | `path` (unique), `hash`, `lang`, `updatedAt` | A source file. `hash` detects changes. |
 | `Symbol` (+ `:Function` / `:Class` / `:Method`) | `id`, `name`, `file`, `startLine`, `endLine`, `signature`, `kind`, `pagerank?` | A code entity. **No code body is stored.** |
-| `Technology` | `name` | Express, Jest, React, Postgres… |
+| `Technology` | `name` | TypeScript, Express, Vitest, Node.js… (from imports + `package.json`) |
 | `Capability` | `name` | `reasoning`, `planning`, `implementation`, `verification`, `simple-edit`, `docs`, `refactor` |
 | `Agent` | `name` (`claude-code` / `codex` / `opencode`), `instances` | A harness type in the pool |
 | `Task` | `id`, `title`, `type`, `complexity`, `status`, `claimedBy?`, `createdAt` | A unit of work |
@@ -321,7 +321,7 @@ MATCH (m:Failure {id: item.id})
 CREATE (cp)-[:INCLUDED {reason: item.reason}]->(m)
 ```
 
-Example reasons: `"failed in login() 2 sessions ago"`, `"caller of target: may break"`, `"active decision about Session.start"`, `"procedure for Jest"`.
+Example reasons: `"failed in login() 2 sessions ago"`, `"caller of target: may break"`, `"active decision about Session.start"`, `"procedure for Vitest"`.
 
 ### Q5: Why did this session get this context?
 
@@ -497,7 +497,7 @@ SET node.pagerank = score
 
 The link between memory and code is only as good as this step, so here it is in full:
 
-1. **Run the tests** in the task's worktree and capture the output (Jest prints stack traces).
+1. **Run the tests** in the task's worktree and capture the output (Vitest prints stack traces).
 2. **Parse stack frames** (`at fn (src/auth/login.ts:31:7)`) into `(path, line)` pairs and drop frames from `node_modules` or tests.
 3. **Find the innermost symbol** whose `file = path AND startLine <= line <= endLine`:
 

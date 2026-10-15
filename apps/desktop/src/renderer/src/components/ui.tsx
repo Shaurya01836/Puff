@@ -142,13 +142,13 @@ export function Kbd({ children }: { children: ReactNode }) {
   );
 }
 
-export function MockBadge() {
+export function MockBadge({ label = 'Mock data' }: { label?: string }) {
   return (
     <span
       className="rounded-full border border-warn/25 bg-warn/10 px-2.5 py-1 text-[11px] font-medium text-warn"
       title="Data comes from packages/shared/src/mocks until the backend lands"
     >
-      Mock data
+      {label}
     </span>
   );
 }

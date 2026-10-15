@@ -84,6 +84,14 @@ export function createMockApi(opts: MockApiOptions = {}): PuffApi {
   };
 
   return {
+    async getBackendInfo() {
+      return {
+        mode: 'mock',
+        projectId: MOCK_PROJECT_ID,
+        projectName: 'shop-api',
+        mockParts: ['everything'],
+      };
+    },
     async openProject() {
       return { projectId: MOCK_PROJECT_ID };
     },
