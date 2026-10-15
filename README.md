@@ -228,7 +228,13 @@ Puff is built in **phases**. Each phase ends with a checkpoint: a working build 
 | **P4 Team coordination** ✅ | Goal-to-tasks planner, overlap-aware parallel runs, Team timeline, New task dialog | 3 agents in parallel, one waits on overlap |
 | **P5 Correctness + Why** ✅ | Stale flags per function, supersede, confirm, Why view, MCP server | Editing code marks memory stale |
 | **P6 Benchmark** ✅ | Benchmark runner, savings screen | Real numbers on screen |
-| **P7 Stretch** | PageRank, vector search, generic adapter, Electron packaging | Each one ships independently |
+| **P7 Land it** ✅ | Real benchmark numbers, every new screen checked, committed | Savings screen shows measured results |
+| **P8 Projects** ✅ | Add any repo from the app or CLI, switch between projects, per-project settings, import checks | Add a second repo, index it, switch back |
+| **P9 Command center** | Command bar and a chat with an orchestrator agent (Claude Code), task actions | "Add a /health endpoint and run it" typed in chat |
+| **P10 Installer** | Windows installer, first-run setup (database, agent CLIs) | Install, add a project, run a task without the source folder |
+| **P11 Watch agents** | Live view of what each agent does, re-test after every merge | You see files read, edits and commands as they happen |
+| **P12 Ship** | One-command demo story, clean-clone test, screenshots | Fresh clone to running demo in minutes |
+| **Stretch** | PageRank (hotspots, done), similar failures (done), vector search, Python support | Each one ships independently |
 
 Details: [docs/ARCHITECTURE.md → Build phases](docs/ARCHITECTURE.md#build-phases).
 
@@ -236,7 +242,7 @@ Details: [docs/ARCHITECTURE.md → Build phases](docs/ARCHITECTURE.md#build-phas
 
 ## Quick start
 
-> 🚧 Puff is being built during Graph Hacks (15–18 Oct 2026). **Phases P0 to P6 are in:** the code graph, shared memory (failures tied to the function they happened in, fixes, decisions, procedures, handoffs), the context compiler with its "why" trail, real agents, **and team coordination**. Claude Code, Codex and OpenCode run tasks in isolated git worktrees, Puff verifies with the project's own tests, records what went wrong, retries with the lesson and escalates. Give it a goal and a planner agent splits it into tasks; independent tasks run in parallel and a task that touches the same code as one already running waits. Tasks that were really run by agents were verified on the demo repo (OpenCode and Codex, both merged with tests passing; a real OpenCode planner turned a goal into three linked tasks). Memory stays correct: editing a function marks what was learned about *that function* "possibly outdated" (not the whole file), a replaced decision is kept but superseded, and a Puff MCP server lets Claude Code and OpenCode read and write memory mid-task. A first benchmark has run (see [Benchmark](#benchmark)); the sample data in the quick start below is seeded, not real.
+> 🚧 Puff is being built during Graph Hacks (15–18 Oct 2026). **Phases P0 to P8 are in:** the code graph, shared memory (failures tied to the function they happened in, fixes, decisions, procedures, handoffs), the context compiler with its "why" trail, real agents, **and team coordination**. Claude Code, Codex and OpenCode run tasks in isolated git worktrees, Puff verifies with the project's own tests, records what went wrong, retries with the lesson and escalates. Give it a goal and a planner agent splits it into tasks; independent tasks run in parallel and a task that touches the same code as one already running waits. Tasks that were really run by agents were verified on the demo repo (OpenCode and Codex, both merged with tests passing; a real OpenCode planner turned a goal into three linked tasks). Memory stays correct: editing a function marks what was learned about *that function* "possibly outdated" (not the whole file), a replaced decision is kept but superseded, and a Puff MCP server lets Claude Code and OpenCode read and write memory mid-task. You can add any TypeScript or JavaScript repository as a project and switch between projects in the app or the CLI. A first benchmark has run (see [Benchmark](#benchmark)); the sample data in the quick start below is seeded, not real.
 
 **Prerequisites:** Node 22.12+, Docker (or [falkordblite](docs/ARCHITECTURE.md#option-b-no-docker-falkordblite)), git. Agent CLIs (`claude`, `codex`, `opencode`) are needed from phase P3.
 
@@ -283,6 +289,26 @@ npm run puff -- task list
 ```bash
 npm run puff -- context <taskId>
 ```
+
+### Your own projects
+
+The app and the CLI share one list of projects (`~/.puff/projects.json`). Each project is a folder, its own graph (`puff_<name>`), and its own test command. Add one:
+
+```bash
+npm run puff -- project add C:\work\my-app
+```
+
+Puff looks at the folder first and tells you what will work: whether it is a git repository (agents need one, because they work in separate git worktrees), how many TypeScript/JavaScript files it can read, which test command it found in `package.json`, and what it cannot read (Python, Go and other languages are not understood yet). If the folder is not a git repository, `--init-git` runs `git init` and makes a first commit, only when you ask. Then:
+
+```bash
+npm run puff -- project list
+```
+
+```bash
+npm run puff -- project use my-app
+```
+
+From then on every command works on the active project; `--repo <folder|name>` picks another for one command. `project set` changes a project's test command or linked folders, and `project remove` forgets a project (its folder is never touched; `--delete-memory` also deletes its graph). In the desktop app the project card at the top of the sidebar does the same: switch, **Add a project…** (with a folder picker and the same checks), settings and remove. Your agents and limits stay shared: `npm run puff -- config init` copies the defaults to `~/.puff/config.yaml` for you to edit.
 
 ### Run real agents
 
@@ -338,6 +364,8 @@ npm run dev
 |---|---|
 | `npm run dev` | Electron app with hot reload |
 | `npm run dev:web` | Same UI in a normal browser at <http://localhost:5173>, backed by mocks (fastest for UI work) |
+| `npm run puff -- project add <folder>` · `list` · `use <name>` · `info` · `set` · `remove` | Manage the projects Puff knows about (see [Your own projects](#your-own-projects)) |
+| `npm run puff -- config init` · `config path` | Copy the default configuration to `~/.puff/config.yaml` · show which file is used |
 | `npm run puff -- index` | Parse the repo with tree-sitter and write it to the graph (incremental; `--force` rewrites all) |
 | `npm run puff -- impact login` | What may break if a symbol changes (callers up to 3 hops) |
 | `npm run puff -- symbols cart` | Find symbols by name |

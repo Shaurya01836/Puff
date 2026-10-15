@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { BackendInfo, GraphData, Task } from '@puff/shared';
+import type { BackendInfo, GraphData, ProjectSummary, Task } from '@puff/shared';
 import { MOCK_PROJECT_ID } from '@puff/shared/mocks';
 import type { MascotState } from '@/components/Mascot';
 import { Sidebar, type Screen } from '@/components/Sidebar';
@@ -8,11 +8,13 @@ import { Notice } from '@/components/ui';
 import { puff } from '@/lib/api';
 import { useLoad, useTasks } from '@/lib/hooks';
 import { NewTaskDialog, type SymbolOption } from '@/components/NewTaskDialog';
+import { ImportProjectDialog, ProjectSettingsDialog } from '@/components/ProjectDialogs';
 import { Agents } from '@/screens/Agents';
 import { Board } from '@/screens/Board';
 import { MemoryGraph } from '@/screens/MemoryGraph';
 import { Team } from '@/screens/Team';
 import { TaskDetail } from '@/screens/TaskDetail';
+import { Welcome } from '@/screens/Welcome';
 
 const TITLES: Record<Screen, { title: string; subtitle: string }> = {
   graph: { title: 'Memory graph', subtitle: 'Code and what the team learned about it' },
@@ -40,10 +42,15 @@ export function App() {
   const [graph, setGraph] = useState<GraphData>();
   const [notice, setNotice] = useState<NoticeState>();
   const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [settingsFor, setSettingsFor] = useState<ProjectSummary>();
+  /** Bumped when the active project changes (added, switched, removed, edited): everything reloads */
+  const [projectTick, setProjectTick] = useState(0);
   /** Bumped when agents finish a session, so the agent pool and stats reload */
   const [agentsTick, setAgentsTick] = useState(0);
 
-  const info = useLoad(() => puff.getBackendInfo(), []);
+  const info = useLoad(() => puff.getBackendInfo(), [projectTick]);
+  const projects = useLoad(() => puff.listProjects(), [projectTick]);
   const projectId = info?.projectId ?? MOCK_PROJECT_ID;
   const live = info?.mode === 'live';
   const savingsMocked = !live || info.mockParts.includes('savings');
@@ -80,6 +87,14 @@ export function App() {
       if (e.type === 'memory') {
         clearTimeout(graphTimer.current);
         graphTimer.current = setTimeout(() => void loadGraph(), 1200);
+      }
+      if (e.type === 'project') {
+        // A different project (or different settings): forget what belonged to the old one.
+        setOpenTask(undefined);
+        setRunning(false);
+        setGraph(undefined);
+        setNotice(undefined);
+        setProjectTick((t) => t + 1);
       }
       if (e.type === 'run') {
         setRunning(e.running);
@@ -137,6 +152,16 @@ export function App() {
 
   const closeTask = useCallback(() => setOpenTask(undefined), []);
 
+  const reloadProjects = () => setProjectTick((t) => t + 1);
+  const switchProject = async (id: string) => {
+    try {
+      await puff.switchProject(id);
+      reloadProjects();
+    } catch (err) {
+      setNotice({ tone: 'bad', text: (err as Error).message });
+    }
+  };
+
   return (
     <div className="flex h-full">
       <Sidebar
@@ -145,7 +170,11 @@ export function App() {
         mascot={mascot}
         agents={agents}
         info={info}
+        projects={projects}
         onReindex={reindex}
+        onSwitchProject={switchProject}
+        onAddProject={() => setImportOpen(true)}
+        onProjectSettings={setSettingsFor}
         counts={{ board: tasks.filter((t) => t.status !== 'done').length }}
       />
       <main className="flex min-w-0 flex-1 flex-col">
@@ -156,19 +185,26 @@ export function App() {
           onGoal={createGoal}
           onNewTask={() => setNewTaskOpen(true)}
           badge={badgeFor(info)}
-          runBlockedReason={live ? info.runBlocked : undefined}
+          runBlockedReason={
+            info?.noProject ? 'Add a project first.' : live ? info.runBlocked : undefined
+          }
         />
         <div className="min-h-0 flex-1 overflow-auto">
-          {screen === 'graph' && (
+          {info?.noProject && <Welcome onAdd={() => setImportOpen(true)} />}
+          {!info?.noProject && screen === 'graph' && (
             <MemoryGraph
               projectId={projectId}
               graph={graph}
               feedIsSample={!live || info.seeded === true}
             />
           )}
-          {screen === 'board' && <Board tasks={tasks} onOpen={setOpenTask} />}
-          {screen === 'team' && <Team events={timeline} onOpenTask={setOpenTask} />}
-          {screen === 'agents' && <Agents agents={agents} savings={savings} mock={savingsMocked} />}
+          {!info?.noProject && screen === 'board' && <Board tasks={tasks} onOpen={setOpenTask} />}
+          {!info?.noProject && screen === 'team' && (
+            <Team events={timeline} onOpenTask={setOpenTask} />
+          )}
+          {!info?.noProject && screen === 'agents' && (
+            <Agents agents={agents} savings={savings} mock={savingsMocked} />
+          )}
         </div>
       </main>
       {newTaskOpen && (
@@ -176,6 +212,33 @@ export function App() {
           symbols={symbols}
           onClose={() => setNewTaskOpen(false)}
           onCreate={createTask}
+        />
+      )}
+      {importOpen && (
+        <ImportProjectDialog
+          onClose={() => setImportOpen(false)}
+          onPick={() => puff.pickDirectory()}
+          onInspect={(path) => puff.inspectProject(path)}
+          onAdd={async (input) => {
+            const added = await puff.addProject(input);
+            reloadProjects();
+            setScreen('graph');
+            setNotice({ tone: 'good', text: `${added.name} added and indexed.` });
+          }}
+        />
+      )}
+      {settingsFor && (
+        <ProjectSettingsDialog
+          project={settingsFor}
+          onClose={() => setSettingsFor(undefined)}
+          onSave={async (patch) => {
+            await puff.updateProject(settingsFor.id, patch);
+            reloadProjects();
+          }}
+          onRemove={async (deleteMemory) => {
+            await puff.removeProject(settingsFor.id, { deleteMemory });
+            reloadProjects();
+          }}
         />
       )}
       {openTask && <TaskDetail taskId={openTask} onClose={closeTask} />}

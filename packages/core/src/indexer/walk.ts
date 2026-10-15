@@ -29,10 +29,33 @@ async function loadIgnore(root: string): Promise<Ignore> {
   return ig;
 }
 
-/** Repo-relative POSIX paths of every source file Puff can parse, respecting .gitignore. */
-export async function listSourceFiles(root: string): Promise<string[]> {
+/** Source languages Puff cannot read yet, by file extension, so a person is told instead of surprised. */
+const OTHER_LANGUAGES = new Set([
+  'py',
+  'go',
+  'rs',
+  'java',
+  'kt',
+  'rb',
+  'php',
+  'cs',
+  'swift',
+  'c',
+  'cpp',
+]);
+
+export interface RepoFiles {
+  /** Repo-relative POSIX paths of every source file Puff can parse */
+  supported: string[];
+  /** Files in languages Puff cannot read yet, counted by extension */
+  unsupported: Record<string, number>;
+}
+
+/** Walk the repository once, respecting .gitignore, and sort files into readable and not. */
+export async function scanRepoFiles(root: string): Promise<RepoFiles> {
   const ig = await loadIgnore(root);
-  const out: string[] = [];
+  const supported: string[] = [];
+  const unsupported: Record<string, number> = {};
 
   async function walk(dir: string): Promise<void> {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -40,12 +63,23 @@ export async function listSourceFiles(root: string): Promise<string[]> {
       const rel = relative(root, abs).split(sep).join('/');
       if (ig.ignores(entry.isDirectory() ? `${rel}/` : rel)) continue;
       if (entry.isDirectory()) await walk(abs);
-      else if (entry.isFile() && langForPath(rel)) out.push(rel);
+      else if (entry.isFile()) {
+        if (langForPath(rel)) supported.push(rel);
+        else {
+          const ext = /\.([a-z]+)$/i.exec(entry.name)?.[1]?.toLowerCase();
+          if (ext && OTHER_LANGUAGES.has(ext)) unsupported[ext] = (unsupported[ext] ?? 0) + 1;
+        }
+      }
     }
   }
 
   await walk(root);
-  return out.sort();
+  return { supported: supported.sort(), unsupported };
+}
+
+/** Repo-relative POSIX paths of every source file Puff can parse, respecting .gitignore. */
+export async function listSourceFiles(root: string): Promise<string[]> {
+  return (await scanRepoFiles(root)).supported;
 }
 
 export const isTestFile = (path: string): boolean =>

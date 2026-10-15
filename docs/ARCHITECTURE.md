@@ -286,6 +286,30 @@ The desktop app's **New task** dialog (and `puff task add`) lets a person choose
 
 Agents work in git worktrees, so a project must be the root of its own repository. `demo/shop-api` lives inside Puff's repository, so `npm run puff -- demo setup` copies it to `~/.puff/demo/shop-api` (a fresh repository with one commit, `node_modules` linked), and writes `PUFF_REPO` to your local `.env`. It is deliberately **outside the Puff checkout**: an agent working there cannot wander up into Puff's own files, such as `demo/TRAPS.md`, which lists the seeded traps. `--force` recreates it from scratch.
 
+### Projects (`projects/`, `paths.ts`)
+
+A project is a folder, a graph and a few settings. The list lives in **`~/.puff/projects.json`** (override the folder with `PUFF_HOME`), so the desktop app and the CLI always agree. Each entry: `slug` (the graph is `puff_<slug>`), `name`, `repoPath`, `addedAt`, and optional `testCommand` and `linkDirs`. One project is **active**; commands and the app work on it unless told otherwise.
+
+| Piece | What it does |
+|---|---|
+| `registry.ts` | Read and write the list (atomic: temporary file, then rename). Adding the same folder again updates it. Two folders with the same name get different slugs (`api`, `api_2`) so they never share a graph. A corrupt file is reported, never guessed at. |
+| `inspect.ts` | Look at a folder before adding it (below). `initRepo` makes a folder a git repository, only when the person asked. |
+| `open.ts` | Apply a project's settings over the shared configuration, create its graph, index it the first time only. |
+
+**What inspecting a folder says.** Three levels, so the app can be honest instead of just refusing:
+
+- **Problems** stop it being added: the folder does not exist, it is a file, or Puff can read nothing in it (it only reads TypeScript and JavaScript for now; if it finds Python, Go and so on it says so).
+- **Run blockers** allow adding and exploring, but agents cannot run: not a git repository, no commits, or inside another repository (Puff works in git worktrees, so the folder must be the top of its own repository). Where it can be fixed, Puff offers to run `git init` and a first commit (and a `.gitignore` for `node_modules` if there is none). Nothing is changed unless the person ticks it.
+- **Warnings** are worth knowing: uncommitted changes (a finished task will not merge into a dirty checkout), no test script (or the `npm init` placeholder), dependencies not installed, files in languages Puff cannot read.
+
+The test command is detected from `package.json` (`pnpm test`, `yarn test`, `bun test` or `npm test`, chosen by the lockfile).
+
+**Settings layers.** The user's own configuration (agents, models, routing, limits) is shared by every project: `$PUFF_CONFIG`, else `~/.puff/config.yaml`, else the `puff.config.yaml` of a Puff checkout (`puff config init` copies the default to `~/.puff/config.yaml`). A project's own `testCommand` and `linkDirs` are applied on top (`applyProject`). Everything else is shared.
+
+**Switching.** The desktop backend keeps one open project (graph, merged config, and the orchestrator for it). Switching, adding and removing are refused while agents are running. A `project` event tells the UI to reload everything, so nothing from the old project stays on screen. When there is no project at all (a fresh install), the app shows a welcome screen and every read returns empty. A development checkout of Puff seeds the list from `$PUFF_REPO` or its bundled demo when the list is empty.
+
+**Which project a CLI command uses:** the folder, name or id given (as an argument or `--repo`), else the active project, else `$PUFF_REPO`, else the current folder.
+
 ### Who writes what
 
 | Written by | What |
@@ -601,7 +625,9 @@ Create a free instance and set `FALKORDB_URL` to its connection string. Puff onl
 |---|---|---|
 | `FALKORDB_URL` | `falkor://localhost:6379` | Database connection |
 | `PUFF_PROJECT` | from the opened repo | Graph name suffix (`puff_<project>`) |
-| `PUFF_CONFIG` | `./puff.config.yaml` | Harness and routing config |
+| `PUFF_CONFIG` | `~/.puff/config.yaml`, else `./puff.config.yaml` | Harness and routing config |
+| `PUFF_HOME` | `~/.puff` | Where Puff keeps its own files: the project list, the user config, the demo copy |
+| `PUFF_REPO` | — | Project folder used when no project is active (the development default) |
 | `PUFF_WORKTREES` | `<repo>/.puff/worktrees` | Where task worktrees are created |
 | `CODEX_HOME` | `~/.codex` | Codex config dir (used for MCP config if enabled) |
 | `OPENCODE_CONFIG` | — | OpenCode config override |
@@ -682,8 +708,14 @@ Every phase ends with a **checkpoint**: a working build, committed. The next pha
 | **P3 Three agents, one loop** ✅ | Fri afternoon | Claude Code + Codex + OpenCode adapters, worktrees, verify, retry once | Task detail on real data | **Session 2 avoids session 1's mistake** |
 | **P4 Team coordination** ✅ | Fri night | Planner goal split, routing (Q10), scheduling (Q7–Q9), escalation, event bus | Board live, mascot states wired | A goal runs across 3 agents; one task waits on overlap |
 | **P5 Correctness + Why** ✅ | Sat morning | Stale on hash change, supersede, MCP server | Why view, memory feed | Editing code marks memory stale; Why shows the path |
-| **P6 Benchmark** | Sat afternoon | Benchmark runner (sessions recorded since P3), `results.json` | Savings meter | Real numbers on screen |
-| **P7 Stretch** | Sat evening, until the 22:00 freeze | PageRank routing (Q18), vector failures (Q17), generic CLI adapter | Electron packaging, polish | Each item ships independently |
+| **P6 Benchmark** ✅ | Sat afternoon | Benchmark runner (sessions recorded since P3), `results.json` | Savings meter | Real numbers on screen |
+| **P7 Land it** ✅ | Sat evening | Benchmark numbers in README and docs | Every new screen checked | Savings screen shows measured results |
+| **P8 Projects** ✅ | Sat night | Project registry, folder inspection, git setup on request, per-project settings, `puff project` | Project switcher, Add a project dialog, welcome screen | Add a second repo, index it, switch back |
+| **P9 Command center** | planned | Orchestrator agent with Puff control tools over MCP, task actions | Command bar and chat panel | A sentence in chat creates and runs tasks |
+| **P10 Installer** | planned | Packaged backend without `.env`, first-run checks | Windows installer, setup screen | Install, add a project, run a task without the source folder |
+| **P11 Watch agents** | planned | Stream agent events, re-test after merge | Live activity in Task detail | You see what an agent does as it does it |
+| **P12 Ship** | planned | One-command demo story, clean-clone test | Screenshots, video | Fresh clone to running demo |
+| **Stretch** | any time | PageRank hotspots and similar failures (done); vector failures, Python support | Polish | Each item ships independently | PageRank routing (Q18), vector failures (Q17), generic CLI adapter | Electron packaging, polish | Each item ships independently |
 | **Ship** | Sun | README numbers, setup from a clean clone | Demo video, blog | Submit by 20:00 |
 
 ---

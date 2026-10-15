@@ -1,7 +1,9 @@
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { parse } from 'yaml';
 import { z } from 'zod';
+import { userConfigPath } from './paths';
 
 const harnessSchema = z.object({
   command: z.string().min(1),
@@ -54,6 +56,23 @@ export function parseConfig(text: string): PuffConfig {
     throw new Error(`Config refers to unknown harness(es): ${unknown.join(', ')}`);
   }
   return config;
+}
+
+/**
+ * Which configuration file to use: $PUFF_CONFIG, else the user's own (~/.puff/config.yaml), else the
+ * nearest puff.config.yaml above any of `startDirs` (how a checkout of Puff finds its own).
+ */
+export function findConfigFile(startDirs: string[] = [process.cwd()]): string | undefined {
+  if (process.env.PUFF_CONFIG) return resolve(process.env.PUFF_CONFIG);
+  if (existsSync(userConfigPath())) return userConfigPath();
+  for (const start of startDirs) {
+    for (let dir = resolve(start); ; dir = dirname(dir)) {
+      const candidate = join(dir, 'puff.config.yaml');
+      if (existsSync(candidate)) return candidate;
+      if (dirname(dir) === dir) break;
+    }
+  }
+  return undefined;
 }
 
 export async function loadConfig(

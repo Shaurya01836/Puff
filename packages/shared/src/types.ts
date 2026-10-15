@@ -211,7 +211,9 @@ export type PuffEvent =
   | { type: 'session:update'; session: SessionInfo }
   | { type: 'memory'; event: MemoryEvent }
   /** The team started or stopped working; `message` summarises how a run ended or why it could not start */
-  | { type: 'run'; running: boolean; message?: string; tone?: 'good' | 'warn' | 'bad' };
+  | { type: 'run'; running: boolean; message?: string; tone?: 'good' | 'warn' | 'bad' }
+  /** The active project changed (added, switched, removed or its settings changed): reload everything */
+  | { type: 'project'; projectId: string };
 
 /** Where the API gets its data. Lets the UI say honestly what is live and what is mock. */
 export interface BackendInfo {
@@ -229,6 +231,66 @@ export interface BackendInfo {
   seeded?: boolean;
   /** Why live mode is unavailable, when mode is mock */
   error?: string;
+  /** Live, but no project has been added yet: the app shows its welcome screen */
+  noProject?: boolean;
+}
+
+/** A project Puff knows about: a repository, its graph, and the settings that differ per project. */
+export interface ProjectSummary {
+  /** The slug: also the graph name suffix (`puff_<id>`) */
+  id: string;
+  name: string;
+  repoPath: string;
+  active: boolean;
+  /** The folder no longer exists */
+  missing: boolean;
+  /** Overrides the default test command for this project */
+  testCommand?: string;
+  /** Overrides which folders are linked into task worktrees */
+  linkDirs?: string[];
+  addedAt: number;
+  /** Counts from the project's graph; absent when it could not be read */
+  files?: number;
+  symbols?: number;
+  tasks?: number;
+}
+
+/** What Puff found out about a folder before it is added as a project. */
+export interface RepoInspection {
+  /** Absolute path that was inspected */
+  path: string;
+  /** Folder name, the default project name */
+  name: string;
+  exists: boolean;
+  isDirectory: boolean;
+  git: {
+    isRepo: boolean;
+    /** The folder is the top of its own repository (needed for agent runs) */
+    isRoot: boolean;
+    /** The top of the repository the folder is inside, when it is inside one */
+    root?: string;
+    hasCommits: boolean;
+    /** Uncommitted changes in the main checkout: a task merge would be refused */
+    dirty: boolean;
+    branch?: string;
+  };
+  /** From package.json: what verification would run */
+  testCommand?: string;
+  packageManager?: 'npm' | 'pnpm' | 'yarn' | 'bun';
+  hasNodeModules: boolean;
+  files: {
+    /** Source files Puff can read (TypeScript and JavaScript) */
+    supported: number;
+    /** Files in languages Puff cannot read yet, by extension (e.g. py, go) */
+    unsupported: Record<string, number>;
+  };
+  /** Stops the folder from being added */
+  problems: string[];
+  /** Allows adding, but agents cannot run until it is fixed */
+  runBlockers: string[];
+  warnings: string[];
+  /** Puff can run `git init` and make a first commit here if the person agrees */
+  canInitGit: boolean;
 }
 
 /** A task proposed by the planner, or requested by any agent that noticed more work is needed. */

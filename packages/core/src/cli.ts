@@ -1,11 +1,19 @@
 // Puff CLI: everything the desktop app does, without Electron. Run with `npm run puff -- <command>`.
-import { readFile } from 'node:fs/promises';
-import { basename, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { copyFile, mkdir, readFile } from 'node:fs/promises';
+import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import type { FalkorDB, Graph } from 'falkordb';
-import { AGENT_NAMES, type AgentName, type Role, type TaskType } from '@puff/shared';
-import { loadConfig, type PuffConfig } from './config';
+import {
+  AGENT_NAMES,
+  type AgentName,
+  type RepoInspection,
+  type Role,
+  type TaskType,
+} from '@puff/shared';
+import { findConfigFile, loadConfig, type PuffConfig } from './config';
+import { userConfigPath } from './paths';
 import { compileContext } from './context/compiler';
 import { connect, loadDotEnv, projectGraph } from './db/client';
 import { graphStats, initProjectGraph, type ProjectInfo } from './db/init';
@@ -28,6 +36,24 @@ import { hotspots, similarFailures } from './queries/insights';
 import { clearMemory, seedDemoMemory } from './seed/demo';
 import { createAdapters } from './agents/adapters';
 import { setupDemoWorkspace } from './git/demo';
+import { inspectRepo, initRepo } from './projects/inspect';
+import {
+  applyProject,
+  deleteProjectMemory,
+  openProject,
+  projectCounts,
+  toProjectInfo,
+} from './projects/open';
+import {
+  activeProject,
+  addProject,
+  findProject,
+  loadRegistry,
+  removeProject,
+  setActiveProject,
+  updateProject,
+  type ProjectEntry,
+} from './projects/registry';
 import { Orchestrator, createRunDeps } from './orchestrator/orchestrator';
 import { runTask, type TaskRunResult } from './orchestrator/run';
 
@@ -36,12 +62,15 @@ loadDotEnv();
 const program = new Command()
   .name('puff')
   .description('Shared graph memory for a team of coding agents')
-  .option('-c, --config <path>', 'config file', process.env.PUFF_CONFIG ?? 'puff.config.yaml')
+  .option(
+    '-c, --config <path>',
+    'config file (default: $PUFF_CONFIG, else ~/.puff/config.yaml, else puff.config.yaml)',
+    process.env.PUFF_CONFIG,
+  )
   .option('--db <url>', 'FalkorDB url (default: $FALKORDB_URL or falkor://localhost:6379)')
   .option(
     '-r, --repo <path>',
-    'repository (default: $PUFF_REPO or .)',
-    process.env.PUFF_REPO ?? '.',
+    'project folder, name or id (default: the active project, else $PUFF_REPO, else .)',
   )
   .option('-n, --name <name>', 'project name (default: repo folder name)');
 
@@ -50,6 +79,38 @@ interface Ctx {
   graph: Graph;
   project: ProjectInfo;
   config: PuffConfig;
+}
+
+const cliDir = dirname(fileURLToPath(import.meta.url));
+
+/** The user's configuration: -c, else $PUFF_CONFIG, else ~/.puff/config.yaml, else the puff.config.yaml near here. */
+async function userConfig(): Promise<PuffConfig> {
+  const path =
+    program.opts<{ config?: string }>().config ?? findConfigFile([process.cwd(), cliDir]);
+  if (!path) throw new Error('No Puff configuration found. Run: npm run puff -- config init');
+  return loadConfig(path);
+}
+
+/**
+ * Which project a command works on: the folder given (as an argument or --repo), else the
+ * active project from `puff project use`, else $PUFF_REPO, else the current folder. A folder, name or id that is
+ * a registered project brings its settings with it.
+ */
+async function resolveProject(
+  repoArg?: string,
+): Promise<{ project: ProjectInfo; entry?: ProjectEntry }> {
+  const opts = program.opts<{ repo?: string; name?: string }>();
+  const reg = await loadRegistry();
+  const pick = (given: string) => {
+    const entry = findProject(reg, given);
+    return entry && !opts.name
+      ? { project: toProjectInfo(entry), entry }
+      : { project: projectFrom(given, opts.name) };
+  };
+  if (repoArg ?? opts.repo) return pick((repoArg ?? opts.repo)!);
+  const active = activeProject(reg);
+  if (active) return { project: toProjectInfo(active), entry: active };
+  return pick(process.env.PUFF_REPO ?? '.');
 }
 
 function projectFrom(repo: string, name?: string): ProjectInfo {
@@ -67,15 +128,13 @@ async function withProject<T>(
   fn: (ctx: Ctx) => Promise<T>,
   { init = false }: { init?: boolean } = {},
 ): Promise<T> {
-  const opts = program.opts<{ config: string; db?: string; repo: string; name?: string }>();
-  const repo = repoArg ?? opts.repo;
-  const config = await loadConfig(opts.config);
-  const project = projectFrom(repo, opts.name);
-  const db = await connect(opts.db);
+  const { project, entry } = await resolveProject(repoArg);
+  const config = applyProject(await userConfig(), entry);
+  const db = await connect(program.opts<{ db?: string }>().db);
   try {
     if (!init && !(await db.list()).includes(graphName(project.slug))) {
       throw new Error(
-        `${graphName(project.slug)} does not exist yet. Run: npm run puff -- index ${repo}`,
+        `${graphName(project.slug)} does not exist yet. Run: npm run puff -- index ${project.repoPath}`,
       );
     }
     const graph = init
@@ -588,7 +647,7 @@ program
   .command('agents')
   .description('check which agent CLIs are installed and runnable (does not call any model)')
   .action(async () => {
-    const config = await loadConfig(program.opts<{ config: string }>().config);
+    const config = await userConfig();
     for (const [name, adapter] of Object.entries(createAdapters(config))) {
       const r = await adapter!.available();
       console.log(`${r.ok ? '✔' : '✖'} ${name.padEnd(12)} ${r.detail}`);
@@ -682,6 +741,222 @@ program
     });
   });
 
+// ---------------------------------------------------------------------------------------------
+// Projects
+
+function describeInspection(info: RepoInspection): void {
+  console.log(info.path);
+  if (!info.exists || !info.isDirectory) {
+    for (const p of info.problems) console.log(`  ✖ ${p}`);
+    return;
+  }
+  const g = info.git;
+  const gitLine = !g.isRepo
+    ? 'not a repository'
+    : !g.isRoot
+      ? `inside ${g.root}`
+      : `${g.hasCommits ? `branch ${g.branch ?? '(detached)'}` : 'no commits'}${g.dirty ? ', uncommitted changes' : ', clean'}`;
+  const other = Object.entries(info.files.unsupported)
+    .map(([ext, n]) => `${n} .${ext}`)
+    .join(', ');
+  console.log(`  git:    ${gitLine}`);
+  console.log(
+    `  code:   ${info.files.supported} TypeScript/JavaScript files${other ? ` (not read: ${other})` : ''}`,
+  );
+  console.log(`  tests:  ${info.testCommand ?? 'no test command detected'}`);
+  for (const p of info.problems) console.log(`  ✖ ${p}`);
+  for (const b of info.runBlockers) console.log(`  ⛔ agents cannot run: ${b}`);
+  for (const w of info.warnings) console.log(`  ⚠ ${w}`);
+}
+
+const projects = program.command('project').description('the projects Puff knows about');
+
+projects
+  .command('add')
+  .description('add a folder as a project and index its code')
+  .argument('<path>', 'the project folder')
+  .option('--test-command <cmd>', 'how to run its tests (default: detected from package.json)')
+  .option('--init-git', 'if it is not a git repository, run git init and make a first commit')
+  .option('--no-index', 'register only, index later')
+  .option('--use', 'make it the active project')
+  .action(
+    async (
+      path: string,
+      o: { testCommand?: string; initGit?: boolean; index: boolean; use?: boolean },
+    ) => {
+      let info = await inspectRepo(path);
+      if (info.problems.length) {
+        describeInspection(info);
+        process.exitCode = 1;
+        return;
+      }
+      if (o.initGit && info.canInitGit) {
+        const r = await initRepo(path);
+        console.log(`✔ created ${r.created.join(', ')} in ${info.path}`);
+        info = await inspectRepo(path);
+      }
+      const { entry, created } = await addProject({
+        repoPath: path,
+        name: program.opts<{ name?: string }>().name,
+        testCommand: o.testCommand ?? info.testCommand,
+      });
+      if (o.use) await setActiveProject(entry.slug);
+      console.log(`✔ ${created ? 'added' : 'updated'} ${entry.name} (${graphName(entry.slug)})`);
+      describeInspection(info);
+      if (info.canInitGit && !o.initGit)
+        console.log('  To let agents run here: npm run puff -- project add <path> --init-git');
+
+      if (o.index) {
+        const db = await connect(program.opts<{ db?: string }>().db);
+        try {
+          const opened = await openProject(db, entry, await userConfig());
+          console.log(
+            opened.indexed
+              ? `✔ indexed ${opened.indexed.files} files, ${opened.indexed.symbols} symbols in ${opened.indexed.durationMs} ms`
+              : '✔ already indexed',
+          );
+        } finally {
+          await db.close();
+        }
+      }
+    },
+  );
+
+projects
+  .command('list')
+  .description('list projects; * marks the active one')
+  .action(async () => {
+    const reg = await loadRegistry();
+    if (!reg.projects.length) {
+      console.log('No projects yet. Add one: npm run puff -- project add <path>');
+      return;
+    }
+    const db = await connect(program.opts<{ db?: string }>().db).catch(() => undefined);
+    try {
+      for (const p of reg.projects) {
+        const counts = db ? await projectCounts(db, p.slug) : undefined;
+        const detail = counts
+          ? `  (${counts.files} files, ${counts.symbols} symbols, ${counts.tasks} tasks)`
+          : '';
+        const missing = existsSync(p.repoPath) ? '' : '  ✖ folder is missing';
+        console.log(
+          `${p.slug === reg.active ? '*' : ' '} ${p.slug.padEnd(18)} ${p.repoPath}${detail}${missing}`,
+        );
+      }
+    } finally {
+      await db?.close();
+    }
+  });
+
+projects
+  .command('use')
+  .description('make a project the active one (what commands work on by default)')
+  .argument('<project>', 'id, name or folder')
+  .action(async (ref: string) => {
+    const entry = findProject(await loadRegistry(), ref);
+    if (!entry) throw new Error(`No project "${ref}". See: npm run puff -- project list`);
+    await setActiveProject(entry.slug);
+    console.log(`✔ ${entry.name} is now the active project`);
+  });
+
+projects
+  .command('info')
+  .description('what Puff finds in a project folder (default: the active project)')
+  .argument('[project]', 'id, name or folder')
+  .action(async (ref?: string) => {
+    const reg = await loadRegistry();
+    const entry = ref ? findProject(reg, ref) : activeProject(reg);
+    const info = await inspectRepo(entry?.repoPath ?? ref ?? '.');
+    if (entry) {
+      const tests = entry.testCommand ? `, tests: ${entry.testCommand}` : '';
+      const links = entry.linkDirs ? `, linked folders: ${entry.linkDirs.join(', ')}` : '';
+      console.log(`${entry.name} (${graphName(entry.slug)})${tests}${links}`);
+    }
+    describeInspection(info);
+  });
+
+projects
+  .command('set')
+  .description("change a project's own settings")
+  .argument('<project>', 'id, name or folder')
+  .option('--rename <name>', 'new name')
+  .option('--test-command <cmd>', 'how to run its tests')
+  .option('--clear-test-command', 'go back to the shared default')
+  .option(
+    '--link-dirs <dirs>',
+    'comma-separated folders linked into task worktrees (e.g. node_modules)',
+  )
+  .action(
+    async (
+      ref: string,
+      o: { rename?: string; testCommand?: string; clearTestCommand?: boolean; linkDirs?: string },
+    ) => {
+      const entry = findProject(await loadRegistry(), ref);
+      if (!entry) throw new Error(`No project "${ref}"`);
+      const updated = await updateProject(entry.slug, {
+        name: o.rename,
+        testCommand: o.clearTestCommand ? null : o.testCommand,
+        linkDirs: o.linkDirs
+          ?.split(',')
+          .map((d) => d.trim())
+          .filter(Boolean),
+      });
+      console.log(
+        `✔ ${updated.name}: tests ${updated.testCommand ?? '(default)'}, linked folders ${updated.linkDirs?.join(', ') ?? '(default)'}`,
+      );
+    },
+  );
+
+projects
+  .command('remove')
+  .description('forget a project (its folder is never touched)')
+  .argument('<project>', 'id, name or folder')
+  .option('--delete-memory', "also delete the project's graph: all its tasks and memory")
+  .action(async (ref: string, o: { deleteMemory?: boolean }) => {
+    const entry = findProject(await loadRegistry(), ref);
+    if (!entry) throw new Error(`No project "${ref}"`);
+    await removeProject(entry.slug);
+    if (o.deleteMemory) {
+      const db = await connect(program.opts<{ db?: string }>().db);
+      try {
+        await deleteProjectMemory(db, entry.slug);
+      } finally {
+        await db.close();
+      }
+    }
+    console.log(
+      `✔ removed ${entry.name}${o.deleteMemory ? ' and its memory' : `; its memory (${graphName(entry.slug)}) was kept`}`,
+    );
+  });
+
+const configCmd = program
+  .command('config')
+  .description("Puff's own configuration (agents, limits)");
+
+configCmd
+  .command('path')
+  .description('which configuration file is used')
+  .action(() => {
+    const path = program.opts<{ config?: string }>().config;
+    console.log(path ?? findConfigFile([process.cwd(), cliDir]) ?? '(none found)');
+  });
+
+configCmd
+  .command('init')
+  .description('copy the default configuration to ~/.puff/config.yaml, where you can edit it')
+  .option('-f, --force', 'overwrite an existing file')
+  .action(async (o: { force?: boolean }) => {
+    const target = userConfigPath();
+    if (existsSync(target) && !o.force)
+      throw new Error(`${target} already exists. Use --force to replace it.`);
+    const source = resolve(cliDir, '../../../puff.config.yaml');
+    if (!existsSync(source))
+      throw new Error(`Could not find the default configuration at ${source}`);
+    await mkdir(dirname(target), { recursive: true });
+    await copyFile(source, target);
+    console.log(`✔ wrote ${target}`);
+  });
+
 program
   .command('bench')
   .description(
@@ -707,7 +982,7 @@ program
       const { mkdir, writeFile } = await import('node:fs/promises');
       const { dirname } = await import('node:path');
       const { runBenchmark, summarizeBench } = await import('./bench/runner');
-      const config = await loadConfig(program.opts<{ config: string }>().config);
+      const config = await userConfig();
       const db = await connect(program.opts<{ db?: string }>().db);
       const controller = new AbortController();
       process.once('SIGINT', () => controller.abort());
@@ -778,6 +1053,10 @@ demo
       await writeFile('.env', next);
       console.log(`  .env now has ${line}`);
     }
+    // Register it as a project (named shop-api, so it keeps the demo's graph) and make it the active one.
+    const { entry } = await addProject({ repoPath: ws.path, name: 'shop-api' });
+    await setActiveProject(entry.slug);
+    console.log(`  registered as project ${entry.slug} and made active`);
     console.log(
       `\nNext:\n  npm run puff -- index      # index the new copy (same graph, same code)\n  npm run puff -- agents     # see which agent CLIs are ready\n  npm run puff -- run        # run the ready tasks`,
     );

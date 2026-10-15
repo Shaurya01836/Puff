@@ -1,6 +1,6 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BrowserWindow, app, ipcMain, shell } from 'electron';
+import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron';
 import { IPC_EVENT_CHANNEL, PUFF_INVOKE_METHODS, ipcChannel, type PuffApi } from '@puff/shared';
 import { createBackend } from './backend';
 
@@ -52,7 +52,17 @@ function createWindow(): BrowserWindow {
 }
 
 app.whenReady().then(async () => {
-  backend = await createBackend(here);
+  backend = await createBackend(here, {
+    // The system "choose a folder" dialog, over whichever window the person is using.
+    pickDirectory: async () => {
+      const parent = BrowserWindow.getFocusedWindow() ?? undefined;
+      const options = { title: 'Choose a project folder', properties: ['openDirectory' as const] };
+      const result = parent
+        ? await dialog.showOpenDialog(parent, options)
+        : await dialog.showOpenDialog(options);
+      return result.canceled ? undefined : result.filePaths[0];
+    },
+  });
   registerIpc(backend);
   createWindow();
   app.on('activate', () => {

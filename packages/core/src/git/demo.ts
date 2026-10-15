@@ -5,11 +5,11 @@
 // there cannot wander up into Puff's own files, such as demo/TRAPS.md that lists the seeded traps.
 import { existsSync } from 'node:fs';
 import { cp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { puffHome } from '../paths';
 import { git, removeLink } from './repo';
 
-export const puffHome = (): string => resolve(process.env.PUFF_HOME ?? join(homedir(), '.puff'));
+export { puffHome };
 
 export const defaultDemoWorkspace = (): string => join(puffHome(), 'demo', 'shop-api');
 

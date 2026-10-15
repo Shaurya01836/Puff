@@ -1,7 +1,14 @@
 // In-memory PuffApi backed by fixtures. Used by the UI until the real backend lands,
 // and by `npm run dev:web` so the renderer runs in a plain browser.
 import type { PuffApi } from '../api';
-import type { MemoryEvent, PuffEvent, Task, TaskStatus } from '../types';
+import type {
+  MemoryEvent,
+  ProjectSummary,
+  PuffEvent,
+  RepoInspection,
+  Task,
+  TaskStatus,
+} from '../types';
 import {
   MOCK_PROJECT_ID,
   mockAgents,
@@ -84,17 +91,133 @@ export function createMockApi(opts: MockApiOptions = {}): PuffApi {
     }
   };
 
+  const projects: ProjectSummary[] = [
+    {
+      id: MOCK_PROJECT_ID,
+      name: 'shop-api',
+      repoPath: 'C:/work/shop-api',
+      active: true,
+      missing: false,
+      addedAt: Date.now() - 864e5,
+      files: 38,
+      symbols: 78,
+      tasks: 8,
+      testCommand: 'npm test',
+    },
+    {
+      id: 'billing_service',
+      name: 'billing-service',
+      repoPath: 'C:/work/billing-service',
+      active: false,
+      missing: false,
+      addedAt: Date.now() - 36e5,
+      files: 112,
+      symbols: 340,
+      tasks: 0,
+    },
+  ];
+
+  /** Stand-in for looking at a folder: a few words in the path pick which situation to show. */
+  const sampleInspection = (repoPath: string): RepoInspection => {
+    const path = repoPath.replaceAll('\\', '/');
+    const name = path.split('/').filter(Boolean).pop() ?? 'project';
+    const python = /python|\.py/i.test(path);
+    const noGit = /nogit/i.test(path);
+    return {
+      path,
+      name,
+      exists: true,
+      isDirectory: true,
+      git: {
+        isRepo: !noGit,
+        isRoot: !noGit,
+        hasCommits: !noGit,
+        dirty: /dirty/i.test(path),
+        branch: noGit ? undefined : 'main',
+      },
+      testCommand: python ? undefined : 'npm test',
+      packageManager: python ? undefined : 'npm',
+      hasNodeModules: true,
+      files: { supported: python ? 0 : 42, unsupported: python ? { py: 17 } : { py: 2 } },
+      problems: python
+        ? ['Puff reads TypeScript and JavaScript for now, and found only py files here.']
+        : [],
+      runBlockers: noGit
+        ? [
+            'Not a git repository. Agents work in git worktrees, so Puff can set one up (git init and a first commit) if you agree.',
+          ]
+        : [],
+      warnings: [
+        ...(python
+          ? []
+          : [
+              'Puff reads TypeScript and JavaScript only. These files will not be in the code graph: 2 .py.',
+            ]),
+        ...(/dirty/i.test(path)
+          ? [
+              'There are uncommitted changes. Agents can run, but a finished task will not be merged until the main checkout is clean.',
+            ]
+          : []),
+      ],
+      canInitGit: noGit,
+    };
+  };
+
   return {
     async getBackendInfo() {
       return {
         mode: 'mock',
-        projectId: MOCK_PROJECT_ID,
-        projectName: 'shop-api',
+        projectId: projects.find((p) => p.active)?.id ?? MOCK_PROJECT_ID,
+        projectName: projects.find((p) => p.active)?.name ?? 'shop-api',
         mockParts: ['everything'],
       };
     },
-    async openProject() {
-      return { projectId: MOCK_PROJECT_ID };
+    async listProjects() {
+      return clone(projects);
+    },
+    async inspectProject(repoPath) {
+      return sampleInspection(repoPath);
+    },
+    async addProject({ repoPath, name, testCommand }) {
+      const info = sampleInspection(repoPath);
+      if (info.problems.length) throw new Error(info.problems[0]);
+      const project: ProjectSummary = {
+        id: (name ?? info.name).toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+        name: name ?? info.name,
+        repoPath: info.path,
+        active: true,
+        missing: false,
+        testCommand,
+        addedAt: Date.now(),
+        files: info.files.supported,
+        symbols: info.files.supported * 3,
+        tasks: 0,
+      };
+      projects.forEach((p) => (p.active = false));
+      projects.push(project);
+      emit({ type: 'project', projectId: project.id });
+      return clone(project);
+    },
+    async switchProject(projectId) {
+      projects.forEach((p) => (p.active = p.id === projectId));
+      emit({ type: 'project', projectId });
+    },
+    async updateProject(projectId, patch) {
+      const p = projects.find((x) => x.id === projectId);
+      if (!p) throw new Error(`Unknown project ${projectId}`);
+      if (patch.name) p.name = patch.name;
+      if (patch.testCommand !== undefined) p.testCommand = patch.testCommand ?? undefined;
+      if (patch.linkDirs !== undefined) p.linkDirs = patch.linkDirs ?? undefined;
+      return clone(p);
+    },
+    async removeProject(projectId) {
+      const i = projects.findIndex((p) => p.id === projectId);
+      if (i >= 0) projects.splice(i, 1);
+      if (!projects.some((p) => p.active) && projects[0]) projects[0].active = true;
+      emit({ type: 'project', projectId: projects.find((p) => p.active)?.id ?? '' });
+    },
+    async pickDirectory() {
+      return 'C:/work/new-project';
     },
     async indexProject() {
       const symbols = mockGraph.nodes.filter((n) => n.kind === 'Symbol').length;

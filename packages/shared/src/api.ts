@@ -4,7 +4,9 @@ import type {
   ContextPack,
   GraphData,
   MemoryEvent,
+  ProjectSummary,
   PuffEvent,
+  RepoInspection,
   Savings,
   SessionInfo,
   Task,
@@ -19,7 +21,30 @@ import type {
 export interface PuffApi {
   /** Live or mock, current project, and which parts are still mocked */
   getBackendInfo(): Promise<BackendInfo>;
-  openProject(repoPath: string): Promise<{ projectId: string }>;
+  /** Every project Puff knows about, the active one marked */
+  listProjects(): Promise<ProjectSummary[]>;
+  /** What Puff finds in a folder, before it is added: problems, what blocks agents, warnings */
+  inspectProject(repoPath: string): Promise<RepoInspection>;
+  /**
+   * Add a folder as a project, index it, and make it the active project. With `initGit`, a folder that is
+   * not a git repository (or has no commits) first gets `git init` and a first commit: the person agreed.
+   */
+  addProject(input: {
+    repoPath: string;
+    name?: string;
+    testCommand?: string;
+    initGit?: boolean;
+  }): Promise<ProjectSummary>;
+  /** Make another project the active one. Refused while agents are running. */
+  switchProject(projectId: string): Promise<void>;
+  updateProject(
+    projectId: string,
+    patch: { name?: string; testCommand?: string | null; linkDirs?: string[] | null },
+  ): Promise<ProjectSummary>;
+  /** Forget a project; its folder is never touched. `deleteMemory` also deletes its graph. */
+  removeProject(projectId: string, opts?: { deleteMemory?: boolean }): Promise<void>;
+  /** Ask the person for a folder (the system dialog). Undefined when they cancel or there is no dialog. */
+  pickDirectory(): Promise<string | undefined>;
   indexProject(projectId: string): Promise<{ files: number; symbols: number; calls: number }>;
   listTasks(projectId: string): Promise<Task[]>;
   /** Planner splits a goal into tasks */
@@ -46,7 +71,13 @@ export type PuffInvokeMethod = Exclude<keyof PuffApi, 'onEvent'>;
 /** Every invoke method, used by preload and main to wire IPC without listing channels twice. */
 export const PUFF_INVOKE_METHODS = [
   'getBackendInfo',
-  'openProject',
+  'listProjects',
+  'inspectProject',
+  'addProject',
+  'switchProject',
+  'updateProject',
+  'removeProject',
+  'pickDirectory',
   'indexProject',
   'listTasks',
   'createGoal',

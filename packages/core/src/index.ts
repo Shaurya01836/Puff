@@ -34,3 +34,7 @@ export * from './memory/plan';
 export * from './orchestrator/schedule';
 export * from './bench/tasks';
 export * from './bench/runner';
+export { userConfigPath, projectsPath } from './paths';
+export * from './projects/registry';
+export * from './projects/inspect';
+export * from './projects/open';
