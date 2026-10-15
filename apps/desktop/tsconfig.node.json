@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "types": ["node"] },
+  "include": ["electron.vite.config.ts", "vite.web.config.ts", "src/main", "src/preload"]
+}

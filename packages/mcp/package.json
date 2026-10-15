@@ -1,0 +1,19 @@
+{
+  "name": "@puff/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Puff MCP server: exposes graph memory tools to Claude Code and OpenCode.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@puff/core": "*",
+    "zod": "^4.6.7"
+  }
+}

@@ -1,0 +1,14 @@
+services:
+  falkordb:
+    image: falkordb/falkordb:latest
+    container_name: puff-falkordb
+    ports:
+      # Override in .env if 6379 is taken (e.g. a local Redis): FALKORDB_PORT=6380
+      - '${FALKORDB_PORT:-6379}:6379' # database (Redis protocol)
+      - '${FALKORDB_BROWSER_PORT:-3000}:3000' # FalkorDB browser UI
+    volumes:
+      - falkordb-data:/data
+    restart: unless-stopped
+
+volumes:
+  falkordb-data: {}

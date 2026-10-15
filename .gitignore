@@ -1,0 +1,21 @@
+node_modules/
+dist/
+out/
+release/
+coverage/
+*.tsbuildinfo
+.env
+.env.local
+
+# Puff runtime
+.puff/
+bench/results*.json
+puff-mcp.json
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.log

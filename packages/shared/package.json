@@ -1,0 +1,14 @@
+{
+  "name": "@puff/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Puff shared contract: types, PuffApi, IPC channels and mock fixtures.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./mocks": "./src/mocks/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  }
+}

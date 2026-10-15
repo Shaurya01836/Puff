@@ -1,0 +1,63 @@
+import { FalkorDB, type Graph } from 'falkordb';
+import { graphName } from '../ids';
+
+export const DEFAULT_FALKORDB_URL = 'falkor://localhost:6379';
+
+/** Load `.env` from the working directory if present (Node's built-in loader; real env vars win). */
+export function loadDotEnv(path = '.env'): void {
+  try {
+    process.loadEnvFile(path);
+  } catch {
+    // no .env file: rely on the real environment
+  }
+}
+
+export async function connect(
+  url = process.env.FALKORDB_URL ?? DEFAULT_FALKORDB_URL,
+): Promise<FalkorDB> {
+  let db: FalkorDB;
+  try {
+    db = await FalkorDB.connect({ url, socket: { connectTimeout: 5000 } });
+  } catch (err) {
+    throw new Error(
+      `Could not connect to FalkorDB at ${url}. Is it running? (npm run db:up)\n  ${(err as Error).message}`,
+    );
+  }
+  // A plain Redis on the same port accepts the connection but has no GRAPH.* commands.
+  try {
+    await db.list();
+  } catch (err) {
+    await db.close().catch(() => {});
+    if (/unknown command/i.test((err as Error).message)) {
+      throw new Error(
+        `${url} is a Redis server without the FalkorDB module (another Redis is using the port?).\n` +
+          `  Run FalkorDB on a free port: set FALKORDB_PORT=6380 and FALKORDB_URL=falkor://localhost:6380 in .env, then npm run db:up`,
+      );
+    }
+    throw err;
+  }
+  return db;
+}
+
+export const projectGraph = (db: FalkorDB, projectSlug: string): Graph =>
+  db.selectGraph(graphName(projectSlug));
+
+/** Run a write query and return its rows typed as T. */
+export async function run<T>(
+  graph: Graph,
+  cypher: string,
+  params: Record<string, unknown> = {},
+): Promise<T[]> {
+  const res = await graph.query<T>(cypher, { params: params as never });
+  return res.data ?? [];
+}
+
+/** Run a read-only query and return its rows typed as T. */
+export async function read<T>(
+  graph: Graph,
+  cypher: string,
+  params: Record<string, unknown> = {},
+): Promise<T[]> {
+  const res = await graph.roQuery<T>(cypher, { params: params as never });
+  return res.data ?? [];
+}

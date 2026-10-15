@@ -221,7 +221,7 @@ Puff is built in **phases**. Each phase ends with a checkpoint: a working build 
 
 | Phase | Builds | Checkpoint |
 |---|---|---|
-| **P0 Foundation** | Monorepo, shared types/API/mocks, FalkorDB + indexes | UI renders mocks; project graph is created on start |
+| **P0 Foundation** ✅ | Monorepo, shared types/API/mocks, FalkorDB + indexes | UI renders mocks; project graph is created on start |
 | **P1 Code graph** | Indexer, impact query, demo repo, live graph view | Demo repo visible as a graph |
 | **P2 Memory + context** | Memory writes, stack trace → symbol mapping, context compiler, ContextPack | A recorded failure lands on the right function |
 | **P3 Three agents, one loop** | Claude Code + Codex + OpenCode adapters, worktrees, verify, retry | Session 2 avoids session 1's mistake |
@@ -236,39 +236,50 @@ Details: [docs/ARCHITECTURE.md → Build phases](docs/ARCHITECTURE.md#build-phas
 
 ## Quick start
 
-> 🚧 Puff is being built during Graph Hacks (15–18 Oct 2026). These are the target setup steps; this section will be checked against a clean clone before submission.
+> 🚧 Puff is being built during Graph Hacks (15–18 Oct 2026). **Phase P0 is in:** the monorepo, shared contract, FalkorDB setup, CLI, MCP server and the desktop app running on mock data. Agents and the code indexer arrive in the next phases.
 
-**Prerequisites:** Node 22+, Docker (or [falkordblite](docs/ARCHITECTURE.md#option-b-no-docker-falkordblite)), git, and at least one agent CLI (`claude`, `codex` or `opencode`) signed in.
+**Prerequisites:** Node 22.12+, Docker (or [falkordblite](docs/ARCHITECTURE.md#option-b-no-docker-falkordblite)), git. Agent CLIs (`claude`, `codex`, `opencode`) are needed from phase P3.
 
 ```bash
 git clone https://github.com/Shaurya01836/Puff.git
 ```
 
 ```bash
-cd Puff && docker compose up -d
+cd Puff && npm install
 ```
 
+Start FalkorDB (database on `6379`, browser UI on <http://localhost:3000>):
+
 ```bash
-npm install
+npm run db:up
 ```
+
+> If port 6379 is already used by another Redis, copy `.env.example` to `.env` and set `FALKORDB_PORT=6380` and `FALKORDB_URL=falkor://localhost:6380`. Puff detects a plain Redis and tells you.
+
+Create the project graph, indexes and agent pool (safe to re-run):
+
+```bash
+npm run puff -- init demo --name shop-api
+```
+
+Open the desktop app:
 
 ```bash
 npm run dev
 ```
 
-Then in the app: **Open project** → pick `demo/shop-api` → **Index** → **New goal**.
+### Working on the code
 
-The FalkorDB browser runs at <http://localhost:3000> so you can inspect the graph directly.
+| Command | What it does |
+|---|---|
+| `npm run dev` | Electron app with hot reload |
+| `npm run dev:web` | Same UI in a normal browser at <http://localhost:5173>, backed by mocks (fastest for UI work) |
+| `npm run puff -- <init|status|graphs>` | Headless CLI |
+| `npm run mcp` | Puff MCP server over stdio (needs `PUFF_PROJECT`) |
+| `npm run typecheck` · `npm test` · `npm run format` | Checks (also run in CI) |
+| `npm run build:desktop` | Package the installable app (.exe / .dmg / AppImage) |
 
-Headless, without the desktop app:
-
-```bash
-npm run puff -- index demo/shop-api
-```
-
-```bash
-npm run puff -- goal "Add rate limiting to login and update docs"
-```
+**UI work:** screens live in `apps/desktop/src/renderer/src/screens`. They only talk to `puff` (`lib/api.ts`), which is the `PuffApi` from `packages/shared`. Until the backend lands, every call returns mock data from `packages/shared/src/mocks`, and **Start** simulates live task and memory events.
 
 Setup, configuration and deployment details: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#deployment)**.
 

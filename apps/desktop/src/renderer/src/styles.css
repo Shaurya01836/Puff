@@ -1,0 +1,58 @@
+@import 'tailwindcss';
+
+/* Puff design tokens: dark "mission control", purple brand, one colour per agent. */
+@theme {
+  --color-bg: #0e0b1a;
+  --color-panel: #161226;
+  --color-panel-2: #1e1933;
+  --color-line: #2b2545;
+  --color-text: #ece8ff;
+  --color-muted: #9a92bf;
+  --color-puff: #a48bf5;
+  --color-puff-deep: #6a4bd4;
+
+  --color-claude: #ff9a3c;
+  --color-codex: #3ddc84;
+  --color-opencode: #4aa8ff;
+
+  --color-ok: #3ddc84;
+  --color-warn: #ffc53d;
+  --color-fail: #ff5c7a;
+
+  --font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', ui-monospace, monospace;
+
+  --animate-bob: bob 2.4s ease-in-out infinite;
+  @keyframes bob {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-6px);
+    }
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border-radius: 8px;
+}
