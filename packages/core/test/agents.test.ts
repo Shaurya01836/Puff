@@ -6,6 +6,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { createAdapter } from '../src/agents/adapters';
 import { classifyError, parseClaude, parseCodex, parseOpenCode } from '../src/agents/parse';
 import { launchTarget, resolveExecutable, runProcess, shimTarget } from '../src/agents/spawn';
+import { summarize } from '../src/orchestrator/run';
 import { parseTestSummary } from '../src/orchestrator/verify';
 
 const fixture = (name: string) =>
@@ -90,6 +91,17 @@ describe('parsers (real output captured from the CLIs)', () => {
     expect(classifyError('Invalid API key provided').kind).toBe('auth');
     expect(classifyError('429 rate limit exceeded').kind).toBe('api');
     expect(classifyError('x'.repeat(900)).message).toHaveLength(500);
+  });
+});
+
+describe('session summaries', () => {
+  it('drop reasoning tags and the machine-readable report', () => {
+    expect(
+      summarize(
+        '<think>hmm</think></think> Added the helper. <puff-report>{"notes":"x"}</puff-report>',
+      ),
+    ).toBe('Added the helper.');
+    expect(summarize('x'.repeat(50), 10)).toBe(`${'x'.repeat(9)}…`);
   });
 });
 

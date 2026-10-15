@@ -198,39 +198,40 @@ stateDiagram-v2
     done --> [*]
 ```
 
-### Orchestrator loop
+### Running a task (implemented in `orchestrator/run.ts`)
 
-```ts
-while (await hasOpenTasks(project)) {
-  await promoteReady(project);                       // Q7
-  for (const t of await readyTasks(project)) {
-    if (!pool.hasFreeSlot()) break;
-    const { safeToRun, blockedBy } = await overlap(t); // Q8
-    if (!safeToRun) { emit({ type: 'task:update', task: { ...t, blockedBy } }); continue; }
-    const sessionId = newId('ses');
-    if (await claim(t.id, sessionId)) void runTask(t, sessionId); // Q9
-  }
-  await sleep(1000);
-}
-
-async function runTask(t: Task, sessionId: string) {
-  const agent  = await route(t, pool.freeAgents());           // Q10
-  const wt     = await worktrees.create(t.id);
-  const pack   = await compileContext(t, roleFor(t), sessionId); // Q3, Q4
-  const res    = await adapters[agent].run({ prompt: pack.prompt, cwd: wt, role: roleFor(t), timeoutMs });
-  const changed = await worktrees.changedFiles(wt);
-  await recordSession(t, agent, sessionId, res, changed);       // Q11 + <puff-report>
-  const verdict = await verify(t, wt);                          // tests + verifier agent
-  if (verdict.ok) {
-    await worktrees.merge(wt);                                  // one merge at a time
-    await reindex(changed);                                     // Q1, Q2
-    await setStatus(t, 'done');
-  } else {
-    await recordFailure(sessionId, verdict);                    // Q12 (stack trace → symbol)
-    await retryOrEscalate(t);
-  }
-}
+```mermaid
+flowchart TD
+    A["Pick agent<br/>declared strengths + past results (Q10),<br/>then up the escalation chain"] --> B["New worktree + branch<br/>node_modules linked in"]
+    B --> C["Start session, compile context<br/>(ContextPack with reasons)"]
+    C --> D["Run the agent headless<br/>prompt on stdin"]
+    D -->|"could not run<br/>(auth, timeout, crash)"| E["Session = error<br/>no failure memory<br/>escalate"]
+    D --> F{"Writer role?"}
+    F -->|"no (planner)"| G["Session = success<br/>nothing to merge"]
+    F -->|yes| H{"Any files changed?"}
+    H -->|no| I["Failure: changed nothing<br/>no lesson, escalate"]
+    H -->|yes| J["Run the project's tests<br/>in the worktree"]
+    J -->|pass| K["Commit, merge (one at a time),<br/>re-index, record decisions,<br/>record the fix for earlier failures"]
+    J -->|fail| L["Locate failures in code,<br/>record Failure memory,<br/>keep the branch"]
+    L --> M{"Retries left<br/>on this agent?"}
+    M -->|yes| B
+    M -->|no| N["Escalate to the next agent"] --> B
 ```
+
+What it guarantees:
+
+- **Puff observes, the agent does not self-report.** Success means the project's own test command exited 0 in the worktree. The agent's claim is never trusted, and a writer that changed nothing cannot "pass" on the old tests.
+- **Retry with the lesson.** The retry gets a new worktree and a freshly compiled context that now contains the failure Puff just recorded.
+- **The fix is learned.** When a later attempt passes, Puff records that as the **Solution** for the earlier failures of the same task (`FIXED_BY`, with the merge commit), so the next task that touches that code gets *what failed and what fixed it*.
+- **Bounded cost.** At most `limits.maxAttempts` agent runs per task. An agent found unusable (not signed in, not installed) is skipped for the rest of the run.
+- **Clean up.** A passing branch is deleted after the merge, a failed attempt keeps its branch (`puff/<task>-a<n>`) so it can be inspected, and worktrees are always removed. Removing one never touches the real `node_modules` it links to (tested).
+- **Stop and crash recovery.** Stopping kills the running agent and returns its task to the queue; tasks left half-run by a crash are reset on the next start and their orphaned sessions closed as errors.
+
+The team loop (`orchestrator/orchestrator.ts`) promotes planned tasks whose dependencies are done (Q7) and runs ready tasks one at a time, oldest first. Overlap-aware parallel runs and the goal-to-tasks planner arrive in P4.
+
+### The demo needs its own git repository
+
+Agents work in git worktrees, so a project must be the root of its own repository. `demo/shop-api` lives inside Puff's repository, so `npm run puff -- demo setup` copies it to `~/.puff/demo/shop-api` (a fresh repository with one commit, `node_modules` linked), and writes `PUFF_REPO` to your local `.env`. It is deliberately **outside the Puff checkout**: an agent working there cannot wander up into Puff's own files, such as `demo/TRAPS.md`, which lists the seeded traps. `--force` recreates it from scratch.
 
 ### Who writes what
 
@@ -246,49 +247,61 @@ Puff never trusts an agent's claim of success. The outcome comes from the exit c
 
 ## Agent adapters
 
-| Harness | Headless command | MCP | Strengths |
+Every agent is run headless, in the task's own git worktree, with the prompt on **stdin**. The commands below are what Puff actually sends (verified against Claude Code 2.1.232, Codex 0.162.1 and OpenCode 1.19.0); the base arguments come from `puff.config.yaml`, and Puff adds the role's permissions, the working directory and the model.
+
+| Harness | Base command | Added per role | Strengths |
 |---|---|---|---|
-| 🟠 **Claude Code** | `claude -p --output-format json --permission-mode acceptEdits --mcp-config puff-mcp.json` (prompt on stdin) | ✅ `--mcp-config` | reasoning, planning, verification, review |
-| 🟢 **Codex** | `codex exec --json --full-auto -` (prompt on stdin) | ⚠️ MCP tool calls are cancelled in `exec` ([openai/codex#24135](https://github.com/openai/codex/issues/24135)), so context goes in the prompt | implementation, refactor |
-| 🔵 **OpenCode** | `opencode run --format json "<prompt>"` | ✅ `opencode.json` → `mcp` or `OPENCODE_CONFIG` | simple-edit, docs, formatting, boilerplate |
+| 🟠 **Claude Code** | `claude -p --output-format json --no-session-persistence` | `--permission-mode acceptEdits` and `--allowedTools Read,Glob,Grep,Edit,Write,MultiEdit,Bash(npm test:*)…` for writers; `--permission-mode default` and read-only tools for planners and verifiers | reasoning, planning, verification, review |
+| 🟢 **Codex** | `codex exec --json --skip-git-repo-check --ephemeral` | `-s workspace-write` for writers, `-s read-only` otherwise, `-C <worktree>`, then `-` (read the prompt from stdin) | implementation, refactor |
+| 🔵 **OpenCode** | `opencode run --format json` | `--dir <worktree>`, `--agent build` for writers and `--agent plan` (cannot edit) otherwise | simple-edit, docs, formatting, boilerplate |
 | ⚫ Antigravity | — | — | **Not supported.** In headless mode it ignores `permissions.allow` and reports denied runs as successful, which would corrupt failure memory. Listed as future work. |
+
+`--full-auto`, which the original plan used for Codex, no longer exists in Codex 0.162; the sandbox is chosen with `-s`. Puff's MCP server is not passed to the agents yet (phase P5), so all three get their context in the prompt.
 
 ### Adapter interface
 
 ```ts
 export interface HarnessAdapter {
-  name: AgentName;
-  run(opts: { prompt: string; cwd: string; role: Role; timeoutMs: number }): Promise<HarnessResult>;
+  readonly name: AgentName;
+  available(): Promise<{ ok: boolean; detail: string }>;   // installed and runnable? no model call
+  run(opts: { prompt; cwd; role; timeoutMs; model?; signal? }): Promise<HarnessResult>;
 }
 
 export interface HarnessResult {
-  exitCode: number;
-  output: string;          // final text
-  report?: PuffReport;     // parsed <puff-report>
-  tokensIn?: number;
+  exitCode: number | null;
+  output: string;            // the agent's final text
+  report?: PuffReport;       // parsed <puff-report>
+  tokensIn?: number;         // total input, including cached
+  cachedIn?: number;         // the cached part of tokensIn
   tokensOut?: number;
-  filesRead?: number;      // Read tool calls, where the stream exposes them
+  costUsd?: number;
   durationMs: number;
-  raw: unknown;            // parsed JSON for debugging
+  error?: { kind: 'auth' | 'unavailable' | 'timeout' | 'aborted' | 'api' | 'crash'; message: string };
+  raw: string;               // trimmed stdout, for debugging
 }
 ```
 
-### Windows notes
+**Errors are about the harness, never the code.** A run that ends in `error` is recorded as a session with outcome `error` and **writes no failure memory**. Otherwise a login problem would teach the next agent a "lesson" about the wrong function. We saw this for real: the standalone `claude` CLI prints a normal-looking JSON result with `is_error: true` and the text *"OAuth session expired and could not be refreshed"*, with exit code 1.
 
-- **No shell, ever:** the prompt is data and must never be interpolated into a command line.
-- Agent CLIs installed with npm are **`.cmd` shims** on Windows. Recent Node versions refuse to `spawn` a `.cmd` file without `shell: true`. Puff resolves the shim to its underlying `node <script.js>` entry point (or uses `cross-spawn`) so it can stay shell-free.
-- Windows limits a command line to about **32k characters**. Prompts are passed on **stdin** wherever the CLI supports it.
-- Every run has a **timeout + kill** (`timeoutMs`). A stalled permission prompt is recorded as `outcome: error`.
+### Running programs safely (Windows)
 
-### Token reporting
+- **No shell, ever, for agents.** The prompt is data. It travels on stdin, and arguments are passed as an array, so a prompt containing `& echo pwned | $(whoami)` arrives as plain text (tested).
+- npm installs CLIs as **`.cmd` shims** on Windows, which Node refuses to spawn without a shell. Puff reads the shim and launches what it wraps: `opencode.cmd` wraps a real `opencode.exe`, and `codex.cmd` wraps `node …/codex.js`. The real target is the **last** quoted path in the shim, because shims first mention `%dp0%\node.exe` in a "use the bundled node" check (this broke Codex detection until `puff agents` caught it).
+- Inside Electron, `process.execPath` is the Electron binary, so JavaScript shims are run with the `node` found on `PATH` (or `ELECTRON_RUN_AS_NODE`).
+- Every run has a **timeout and an abort signal**. Both kill the whole process tree (`taskkill /T` on Windows), because agents start their own children.
+- The test command is the one exception to "no shell": it comes from the project's own config, not from model output, and `npm` needs the shell on every OS.
 
-| Harness | Token fields | Status |
+### Token reporting (measured)
+
+The three CLIs report usage differently, so Puff normalises everything to *total input (including cache)*, *the cached part*, and *output*.
+
+| Harness | Where the tokens are | How they are normalised |
 |---|---|---|
-| Claude Code | `usage` in the JSON result | to confirm on a real run |
-| Codex | usage events in the `--json` stream | to confirm on a real run |
-| OpenCode | in the `--format json` events | to confirm on a real run |
+| Claude Code | `usage` in the result object | `input_tokens` **excludes** cache; total input = input + cache creation + cache reads |
+| Codex | `turn.completed.usage` event | `input_tokens` **includes** `cached_input_tokens`; used as is |
+| OpenCode | `step_finish.part.tokens` per step | `input` **excludes** cache; total input = input + cache read + cache write; reasoning tokens are added to output |
 
-If a harness doesn't report tokens, the benchmark says so and falls back to the harnesses that do.
+Even a one-word reply costs about **15,000 input tokens on Codex** (about 10,000 cached) and about **11,000 on OpenCode**, because each CLI sends its own system prompt. The benchmark therefore reports cached and uncached input separately and applies the same accounting to both arms.
 
 ---
 
@@ -365,26 +378,27 @@ Claude Code config (`puff-mcp.json`, generated by Puff with absolute paths):
 
 ## Configuration
 
-`puff.config.yaml` at the repo root:
+`puff.config.yaml` at the repo root (the file in the repo is the source of truth; this is its shape):
 
 ```yaml
 harnesses:
   claude-code:
     command: claude
-    args: ["-p", "--output-format", "json", "--permission-mode", "acceptEdits", "--mcp-config", "{mcpConfig}"]
+    args: ["-p", "--output-format", "json", "--no-session-persistence"]
     promptVia: stdin
     instances: 2
     strengths: [reasoning, planning, verification, review]
+    # model: optional provider model override; omit to use the CLI's own configuration
   codex:
     command: codex
-    args: ["exec", "--json", "--full-auto", "-"]
+    args: ["exec", "--json", "--skip-git-repo-check", "--ephemeral"]
     promptVia: stdin
     instances: 2
     strengths: [implementation, refactor]
   opencode:
     command: opencode
-    args: ["run", "--format", "json", "{prompt}"]
-    promptVia: arg
+    args: ["run", "--format", "json"]
+    promptVia: stdin
     instances: 1
     strengths: [simple-edit, docs, formatting, boilerplate]
 
@@ -398,13 +412,17 @@ limits:
   maxParallel: 3
   timeoutMs: 600000
   retriesBeforeEscalate: 1
+  maxAttempts: 3          # hard cap on agent runs per task, across retries and escalation
   contextTokenBudget: 2000
 
-escalation: [opencode, codex, claude-code]
+escalation: [opencode, codex, claude-code]   # weakest to strongest
 
 verify:
-  testCommand: "npm test --silent"
+  testCommand: "npm test"
   verifierAgent: claude-code
+
+worktrees:
+  linkDirs: [node_modules]   # linked into every task worktree from the main checkout
 ```
 
 Agents, capabilities and `HAS_STRENGTH` edges are written to the graph from this file on startup, so routing (Q10) is a pure graph query.
@@ -596,7 +614,7 @@ Every phase ends with a **checkpoint**: a working build, committed. The next pha
 | **P0 Foundation** | Thu afternoon | Monorepo, `packages/shared` contract + mocks, docker-compose, graph init + indexes | electron-vite shell, design tokens, mascot, Board on mocks | UI renders mocks; `puff init` creates the graph |
 | **P1 Code graph** ✅ | Thu night | Indexer (Q1), impact (Q6), technologies, demo repo skeleton | Memory graph screen on real data | Demo repo visible as a graph; impact query returns files |
 | **P2 Memory + context** ✅ | Fri morning | Memory writes (Q11–Q15), stack trace → symbol, context compiler + ContextPack (Q3–Q5), `<puff-report>` parsing | Task detail on mocks | A recorded failure lands on the right function |
-| **P3 Three agents, one loop** | Fri afternoon | Claude Code + Codex + OpenCode adapters, worktrees, verify, retry once | Task detail on real data | **Session 2 avoids session 1's mistake** |
+| **P3 Three agents, one loop** ✅ | Fri afternoon | Claude Code + Codex + OpenCode adapters, worktrees, verify, retry once | Task detail on real data | **Session 2 avoids session 1's mistake** |
 | **P4 Team coordination** | Fri night | Planner goal split, routing (Q10), scheduling (Q7–Q9), escalation, event bus | Board live, mascot states wired | A goal runs across 3 agents; one task waits on overlap |
 | **P5 Correctness + Why** | Sat morning | Stale on hash change, supersede, MCP server | Why view, memory feed | Editing code marks memory stale; Why shows the path |
 | **P6 Benchmark** | Sat afternoon | Benchmark runner (sessions recorded since P3), `results.json` | Savings meter | Real numbers on screen |
@@ -619,7 +637,7 @@ Every phase ends with a **checkpoint**: a working build, committed. The next pha
 
 | Risk | Mitigation |
 |---|---|
-| Harness stalls on a permission prompt | `acceptEdits` / `--full-auto`; timeout + kill; recorded as `error` |
+| Harness stalls on a permission prompt | Role-based permissions (`acceptEdits` + an allow-list for Claude Code, `-s workspace-write` for Codex); timeout + process-tree kill; recorded as `error` |
 | Codex can't call MCP in `exec` | Context in the prompt + `<puff-report>` + facts written by Puff |
 | Token fields missing for a harness | Benchmark on the harnesses that report them; say so |
 | Imperfect call resolution | Resolve by name, drop unresolved calls; good enough for impact and context |

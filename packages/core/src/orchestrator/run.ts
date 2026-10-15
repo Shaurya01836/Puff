@@ -60,6 +60,9 @@ export interface TaskRunOptions {
 export function summarize(output: string, max = 600): string {
   const text = output
     .replace(/<puff-report>[\s\S]*?<\/puff-report>/g, '')
+    // some models print their reasoning in <think> tags, sometimes unbalanced
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<\/?think>/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;

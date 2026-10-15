@@ -8,19 +8,19 @@
 harnesses:
   claude-code:
     command: claude
-    args: ["-p", "--output-format", "json", "--no-session-persistence"]
+    args: ['-p', '--output-format', 'json', '--no-session-persistence']
     promptVia: stdin
     instances: 2
     strengths: [reasoning, planning, verification, review]
   codex:
     command: codex
-    args: ["exec", "--json", "--skip-git-repo-check", "--ephemeral"]
+    args: ['exec', '--json', '--skip-git-repo-check', '--ephemeral']
     promptVia: stdin
     instances: 2
     strengths: [implementation, refactor]
   opencode:
     command: opencode
-    args: ["run", "--format", "json"]
+    args: ['run', '--format', 'json']
     promptVia: stdin
     instances: 1
     strengths: [simple-edit, docs, formatting, boilerplate]
@@ -44,7 +44,7 @@ limits:
 escalation: [opencode, codex, claude-code]
 
 verify:
-  testCommand: "npm test"
+  testCommand: 'npm test'
   verifierAgent: claude-code
 
 worktrees:
