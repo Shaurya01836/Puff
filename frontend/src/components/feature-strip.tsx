@@ -14,6 +14,7 @@ import {
 import { PromptPreview } from "./prompt-preview";
 import { GraphMemoryLoop } from "./graph-memory-loop";
 import { AgentBadge } from "./agent-badge";
+import { InteractivePuff } from "./interactive-puff";
 
 const FEATURES = [
   {
@@ -30,6 +31,7 @@ const FEATURES = [
       "Stale lessons get flagged when code changes",
     ],
     cta: "Explore the graph",
+    narration: "I pin every lesson to the exact symbol it came from.",
   },
   {
     id: "context",
@@ -45,6 +47,7 @@ const FEATURES = [
       "Past lessons and active rules attached",
     ],
     cta: "See a ContextPack",
+    narration: "I compile a pack for the task — not another repo scan.",
   },
   {
     id: "routing",
@@ -60,6 +63,7 @@ const FEATURES = [
       "Every routing choice is explainable",
     ],
     cta: "Inspect a decision",
+    narration: "I hand each task to the agent that's best at it.",
   },
   {
     id: "parallel",
@@ -75,6 +79,7 @@ const FEATURES = [
       "No two agents edit the same symbol",
     ],
     cta: "See the scheduler",
+    narration: "Independent tasks run side by side — no collisions.",
   },
   {
     id: "why",
@@ -90,6 +95,7 @@ const FEATURES = [
       "Auditable after the task finishes",
     ],
     cta: "Trace a reason",
+    narration: "Every choice I make keeps the reason behind it.",
   },
   {
     id: "falkordb",
@@ -105,6 +111,7 @@ const FEATURES = [
       "Symbols and lessons stay connected",
     ],
     cta: "Read the schema",
+    narration: "One shared graph, queried with Cypher.",
   },
 ] as const;
 
@@ -238,6 +245,9 @@ export function FeatureStrip() {
 
           <div className="flex items-center justify-center border-dashed border-slate-500 p-8 md:border-l-[1.5px]">
             <div className="w-full rounded-none border border-slate-600 bg-[#0b0d12] p-5 shadow-2xl shadow-black/40">
+              <div className="mb-5 border-b border-slate-600 pb-5">
+                <InteractivePuff message={feature.narration} reactionKey={feature.id} />
+              </div>
               <FeatureVisual id={feature.id} />
             </div>
           </div>

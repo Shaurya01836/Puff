@@ -1,4 +1,5 @@
 import { Code2, AtSign, Rss } from "lucide-react";
+import { PuffLogo } from "./puff-logo";
 
 const columns = [
   {
@@ -51,9 +52,7 @@ export function SiteFooter() {
 
       <div className="flex flex-col gap-6 border-b-[1.5px] border-dashed border-slate-500 p-8 md:flex-row md:items-start md:justify-between">
         <div className="max-w-md">
-          <div className="font-display text-lg font-bold lowercase tracking-tight text-white">
-            puff
-          </div>
+          <PuffLogo className="h-9 w-auto" />
           <p className="mt-4 text-sm text-slate-400 text-pretty">
             Shared graph memory for a team of real coding agents. Every lesson is tied
             to the code it came from.

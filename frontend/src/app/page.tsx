@@ -17,12 +17,7 @@ export default function Home() {
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-20 sm:px-6">
         {/* Hero */}
         <section className="pt-16 text-center sm:pt-24">
-          <span className="hero-in hero-in-1 inline-flex items-center gap-2 rounded-none border border-slate-600 bg-slate-900/60 px-4 py-1.5 text-xs text-slate-300">
-            <span className="h-1.5 w-1.5 rounded-none bg-emerald-400" />
-            Graph Hacks 2026 · Track 02 · FalkorDB + TypeScript
-          </span>
-
-          <h1 className="hero-in hero-in-2 mx-auto mt-8 max-w-4xl font-display text-4xl font-bold tracking-tight text-white sm:text-6xl md:text-7xl text-balance">
+          <h1 className="hero-in hero-in-2 mx-auto max-w-4xl font-display text-4xl font-bold tracking-tight text-white sm:text-6xl md:text-7xl text-balance">
             One brain. Many agents.{" "}
             <span className="text-emerald-400">Shared memory.</span>
           </h1>
