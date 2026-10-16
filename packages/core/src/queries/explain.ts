@@ -248,6 +248,24 @@ export async function getMemoryFeed(graph: Graph, limit = 50): Promise<MemoryEve
       return `Context for “${p.title}” (${p.agent}): ${p.items} items, ~${p.tokens} tokens`;
     },
   );
+  // Q23: one event per reverted merge, counting what it downgraded (text built here, see above)
+  type RevertRow = FeedRow & { sha: string; n: number };
+  add(
+    'memory_downgraded',
+    await read<RevertRow>(
+      graph,
+      `MATCH (x:Commit)-[r:REVERTED_BY]->(:Commit)
+       OPTIONAL MATCH (m) WHERE m.revertedIn = x.sha OR m.downgradedBy = x.sha
+       RETURN x.sha AS id, x.sha AS sha, r.at AS at, count(m) AS n, collect(m.id) AS refs`,
+    ),
+    (r) => {
+      const v = r as RevertRow;
+      const n = Number(v.n);
+      return n
+        ? `${n} lesson${n === 1 ? '' : 's'} downgraded because ${v.sha.slice(0, 7)} was reverted`
+        : `${v.sha.slice(0, 7)} was reverted (nothing had been learned from it)`;
+    },
+  );
   add(
     'memory_stale',
     await read<FeedRow>(

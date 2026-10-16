@@ -105,6 +105,7 @@ export async function applyReport(
         symbolIds: [symbolId!],
         text: d.text,
         supersedes: d.supersedes,
+        sessionId: ctx?.sessionId,
       });
       out.decisionIds.push(id);
     } catch (err) {

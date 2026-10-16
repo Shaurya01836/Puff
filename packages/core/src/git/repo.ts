@@ -316,9 +316,12 @@ export class GitRepo {
    * Undo a merge Puff just made, with a revert commit (history is kept, nothing is rewritten). For
    * callers that hold the lock through serial(). On a conflict the revert is aborted and says why.
    */
-  async revertMerge(sha: string): Promise<{ reverted: boolean; reason?: string }> {
+  async revertMerge(sha: string): Promise<{ reverted: boolean; reason?: string; revert?: string }> {
     const r = await git(['revert', '-m', '1', '--no-edit', sha], this.root, this.identity);
-    if (r.code === 0) return { reverted: true };
+    if (r.code === 0) {
+      const head = await git(['rev-parse', 'HEAD'], this.root);
+      return { reverted: true, revert: head.code === 0 ? head.out.trim() : undefined };
+    }
     await git(['revert', '--abort'], this.root);
     return { reverted: false, reason: (r.out + r.err).trim().slice(0, 400) };
   }

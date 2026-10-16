@@ -276,6 +276,9 @@ describe.skipIf(!db)('memory and context against FalkorDB', () => {
   });
 
   it('keeps context inside the token budget and says what was dropped', async () => {
+    // the full-text index (similar failures, Q22) updates asynchronously: let it settle so both
+    // compiles below see the same memory
+    await new Promise((r) => setTimeout(r, 1500));
     const full = await compileContext(graph, taskB, { role: 'coder', preview: true });
     const tight = await compileContext(graph, taskB, {
       role: 'coder',

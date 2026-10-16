@@ -192,6 +192,7 @@ CREATE INDEX FOR (p:Procedure) ON (p.id)
 CREATE INDEX FOR (so:Solution) ON (so.id)
 CREATE INDEX FOR (t:Trace) ON (t.id)
 CREATE INDEX FOR (t:Trace) ON (t.kind)
+CREATE INDEX FOR (c:Commit) ON (c.sha)
 ```
 
 Full-text search over failure messages:
@@ -237,6 +238,8 @@ All queries use parameters (`$name`). Nothing is built by string concatenation.
 | Q20 | Risk: PageRank + betweenness per function | indexer → router, context budget, Board |
 | Q21 | Lessons two calls away | context compiler |
 | Q22 | Failures worded like the task (full-text) | context compiler |
+| Q23 | Repair on revert: downgrade what a reverted merge taught | after Puff's re-test revert, on every merge and on project open |
+| Q24 | Trust: how far to believe a lesson | context compiler, Context tab |
 
 ### Q1: Index a file (idempotent)
 
@@ -749,6 +752,69 @@ ORDER BY score DESC LIMIT $limit
 ```
 
 Stale hits are skipped; the rest rank lowest of all memory. Reason: "failed in listProducts(), worded like this task (full-text search)". In the transfer benchmark this is how the rate-limit lesson learned on sign-up reaches the login lockout task, which is not near it in the call graph. Test: `graph-decisions.test.ts` (Q22).
+
+### Provenance (P16)
+
+Every lesson knows where it came from:
+
+| Edge | Written by |
+|---|---|
+| `(Failure)-[:LEARNED_IN]->(Session)` | `recordFailure`, with the session that first hit it |
+| `(Solution)-[:LEARNED_IN]->(Session)`, `(Solution)-[:IN_COMMIT]->(Commit {sha})` | `recordSolution`, with the session whose work fixed it and the merge commit |
+| `(Decision)-[:LEARNED_IN]->(Session)` | `recordDecision` from an agent's `<puff-report>` |
+| `(Decision)-[:DERIVED_FROM]->(Failure \| Solution)` | the decisions a session wrote while fixing earlier failures (`runTask`), and the benchmark's lessons |
+| `(Session)-[:MERGED]->(Commit)` | `runAttempt`, right after a merge |
+| `(Commit)-[:REVERTED_BY]->(Commit)` | Q23 |
+
+Memory recorded before this existed is backfilled when a project graph opens (`backfillProvenance`, idempotent): the first session that `HIT` a failure becomes its `LEARNED_IN`, and a solution's `commit` property becomes an `IN_COMMIT` edge.
+
+### Q23: Repair on revert
+
+A merge can be undone by Puff's re-test (`git revert -m 1`) or by a person. `syncReverts` reads the branch history for "This reverts commit …" on every merge and when a project opens, so both are caught. For each newly reverted merge `$m`:
+
+```cypher
+MERGE (x:Commit {sha: $m})
+MERGE (y:Commit {sha: $r}) ON CREATE SET y.at = coalesce($at, timestamp())
+MERGE (x)-[e:REVERTED_BY]->(y) ON CREATE SET e.at = coalesce($at, timestamp())
+
+MATCH (s:Solution)-[:IN_COMMIT]->(:Commit {sha: $m})
+SET s.status = 'reverted', s.revertedIn = $m
+RETURN s.id AS id
+
+MATCH (d:Decision)-[:LEARNED_IN]->(:Session)-[:MERGED]->(:Commit {sha: $m})
+SET d.revertedIn = $m
+RETURN DISTINCT d.id AS id
+
+MATCH (m)-[:DERIVED_FROM*1..3]->(root) WHERE root.id IN $roots AND NOT m.id IN $roots
+SET m.downgradedBy = coalesce(m.downgradedBy, $m)
+RETURN DISTINCT m.id AS id
+```
+
+**Decisions it changes:** a reverted fix is no longer offered as the fix ("its earlier fix was reverted, so find another way"); the decisions from that merge and anything derived from them lose trust (Q24) and drop out of context. The memory feed says "3 lessons downgraded because abc1234 was reverted", and a `revert` trace on the task says what was undone. The failure itself keeps its trust: the mistake was real. Tests: `trust.test.ts` (Q23), `run.test.ts` (Puff's own revert, and a person's `git revert` found by `syncReverts`).
+
+### Q24: Trust
+
+Read every time context is built, so it always reflects the latest outcomes:
+
+```cypher
+UNWIND $ids AS mid
+MATCH (m:Failure {id: mid})                                  // and the same for Decision
+OPTIONAL MATCH (m)-[:LEARNED_IN]->(:Session)<-[:RAN]-(a:Agent)
+RETURN m.id AS id, head(collect(a.name)) AS agent, coalesce(m.confirmations, 0) AS confirmations,
+       coalesce(m.stale, false) AS stale, m.revertedIn AS revertedIn, m.downgradedBy AS downgradedBy
+
+UNWIND $ids AS mid                                            // sessions that were told, and succeeded
+MATCH (m:Failure {id: mid})<-[:INCLUDED]-(:ContextPack)<-[:RECEIVED]-(se:Session)
+RETURN m.id AS id, count(DISTINCT CASE WHEN se.outcome = 'success' THEN se END) AS helped
+
+UNWIND $ids AS mid                                            // told, and made the same mistake anyway
+MATCH (f:Failure {id: mid})<-[:INCLUDED]-(:ContextPack)<-[:RECEIVED]-(se:Session)-[:HIT]->(f)
+RETURN f.id AS id, count(DISTINCT se) AS repeated
+```
+
+plus each agent's record (`(a:Agent)-[:RAN]->(s:Session)` outcomes). The score (`trustScore`, plain TypeScript so every step has a reason): start at 0.6; +0.1 per confirmation (2 at most); +0.08 per session that succeeded with it in context (3 at most); −0.15 per repeat despite being shown (2 at most); −0.2 if stale; −0.4 if learned in a reverted merge, else −0.3 if derived from one; ±0.1 for the learning agent's success rate once it has 3 runs. Clamped to 0..1.
+
+**Decisions it changes:** context ranking adds `(1 − trust) × 20` to a lesson's rank, so less trusted lessons sink; below 0.35 a lesson is left out, and the context trace lists it with its reasons; below 0.5 it is included but marked "low confidence: …" in the prompt. Confirming a lesson (`confirm_memory`) adds trust and can bring it back. The trust is stored on the `INCLUDED` edge and shown as a bar in the task's Context tab. Tests: `trust.test.ts`.
 
 ---
 

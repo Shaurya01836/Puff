@@ -15,8 +15,14 @@ export interface PromptInput {
   targets: PromptTarget[];
   /** Symbol ids that call the targets and may break */
   callers: string[];
-  failures: { message: string; fix?: string; stale?: boolean }[];
-  decisions: { text: string; stale?: boolean }[];
+  failures: {
+    message: string;
+    fix?: string;
+    stale?: boolean;
+    fixReverted?: boolean;
+    note?: string;
+  }[];
+  decisions: { text: string; stale?: boolean; note?: string }[];
   procedures: string[];
   handoffs: string[];
   technologies: string[];
@@ -56,13 +62,18 @@ function memoryBlock(i: PromptInput): string[] {
   if (i.failures.length) {
     out.push('Past failures on or near this code, and their fixes:');
     for (const f of i.failures) {
-      const fix = f.fix ? `fixed by: ${f.fix}` : 'no fix recorded yet, avoid repeating it';
-      out.push(`- ${f.message} → ${fix}${f.stale ? OUTDATED : ''}`);
+      const fix = f.fix
+        ? `fixed by: ${f.fix}`
+        : f.fixReverted
+          ? 'its earlier fix was reverted, so find another way and avoid repeating it'
+          : 'no fix recorded yet, avoid repeating it';
+      out.push(`- ${f.message} → ${fix}${f.stale ? OUTDATED : ''}${f.note ? ` (${f.note})` : ''}`);
     }
   }
   if (i.decisions.length) {
     out.push('Active decisions you must respect:');
-    for (const d of i.decisions) out.push(`- ${d.text}${d.stale ? OUTDATED : ''}`);
+    for (const d of i.decisions)
+      out.push(`- ${d.text}${d.stale ? OUTDATED : ''}${d.note ? ` (${d.note})` : ''}`);
   }
   if (i.procedures.length) {
     out.push('Procedures:');

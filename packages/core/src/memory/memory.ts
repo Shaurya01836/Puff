@@ -95,6 +95,7 @@ export async function recordFailure(graph: Graph, input: FailureInput): Promise<
      CREATE (se)-[:HIT]->(f:Failure {id: $id, message: $message, kind: $kind, stale: false, count: 1,
                                      anchoredBy: $anchoredBy, createdAt: coalesce($at, timestamp()),
                                      seeded: $seeded})
+     CREATE (f)-[:LEARNED_IN]->(se)
      RETURN f.id AS id`,
     {
       sessionId: input.sessionId,
@@ -119,6 +120,8 @@ export interface SolutionInput extends Stamp {
   failureId: string;
   summary: string;
   commit?: string;
+  /** The session whose work fixed it */
+  sessionId?: string;
 }
 
 /** Q13: record what fixed a failure. */
@@ -143,6 +146,23 @@ export async function recordSolution(graph: Graph, input: SolutionInput): Promis
     },
   );
   if (!rows.length) throw new Error(`Unknown failure ${input.failureId}`);
+  // Provenance (P16): the commit the fix is in, and the session that made it
+  if (input.commit) {
+    await run(
+      graph,
+      `MATCH (s:Solution {id: $id})
+       MERGE (c:Commit {sha: $sha}) ON CREATE SET c.at = timestamp()
+       MERGE (s)-[:IN_COMMIT]->(c)`,
+      { id, sha: input.commit },
+    );
+  }
+  if (input.sessionId) {
+    await run(
+      graph,
+      `MATCH (s:Solution {id: $id}), (se:Session {id: $sid}) MERGE (s)-[:LEARNED_IN]->(se)`,
+      { id, sid: input.sessionId },
+    );
+  }
   return id;
 }
 
@@ -152,6 +172,10 @@ export interface DecisionInput extends Stamp {
   text: string;
   /** Id of an active decision this one replaces */
   supersedes?: string;
+  /** The session that wrote it */
+  sessionId?: string;
+  /** Failures or solutions it was written after (DERIVED_FROM) */
+  derivedFrom?: string[];
 }
 
 /** Q14: record a decision, or supersede an earlier one. The old decision is kept, never deleted. */
@@ -189,6 +213,22 @@ export async function recordDecision(graph: Graph, input: DecisionInput): Promis
     `MATCH (d:Decision {id: $id}) UNWIND $symbols AS sid MATCH (s:Symbol {id: sid}) MERGE (d)-[:ABOUT]->(s)`,
     { id, symbols: existing },
   );
+  if (input.sessionId) {
+    await run(
+      graph,
+      `MATCH (d:Decision {id: $id}), (se:Session {id: $sid}) MERGE (d)-[:LEARNED_IN]->(se)`,
+      { id, sid: input.sessionId },
+    );
+  }
+  if (input.derivedFrom?.length) {
+    await run(
+      graph,
+      `MATCH (d:Decision {id: $id})
+       MATCH (x) WHERE x.id IN $from AND labels(x)[0] IN ['Failure', 'Solution']
+       MERGE (d)-[:DERIVED_FROM]->(x)`,
+      { id, from: input.derivedFrom },
+    );
+  }
   if (input.supersedes) {
     await run(
       graph,
@@ -209,7 +249,7 @@ export async function confirmMemory(graph: Graph, id: string): Promise<void> {
   const rows = await run<{ id: string }>(
     graph,
     `MATCH (m) WHERE m.id = $id AND labels(m)[0] IN ['Failure', 'Decision']
-     SET m.stale = false, m.confirmedAt = timestamp()
+     SET m.stale = false, m.confirmedAt = timestamp(), m.confirmations = coalesce(m.confirmations, 0) + 1
      RETURN m.id AS id`,
     { id },
   );

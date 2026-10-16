@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Scale,
   TriangleAlert,
+  Undo2,
   Zap,
 } from 'lucide-react';
 import type { Actor, MemoryEventType, TaskStatus } from '@puff/shared';
@@ -121,6 +122,7 @@ const EVENT_ICON: Record<MemoryEventType, typeof CircleDot> = {
   decision_recorded: Scale,
   decision_superseded: RefreshCw,
   memory_stale: History,
+  memory_downgraded: Undo2,
   handoff: ArrowRightLeft,
   context_compiled: Package,
 };

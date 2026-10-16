@@ -19,6 +19,7 @@ import {
   type NewTask,
   type TaskEdit,
 } from '../memory/tasks';
+import { syncReverts } from '../memory/provenance';
 import { listSessions } from '../memory/sessions';
 import {
   Orchestrator,
@@ -112,6 +113,10 @@ export class ProjectController {
         emit: deps.emit,
         log: deps.log,
       });
+      // A person may have reverted a Puff merge while the app was closed: downgrade what it taught
+      for (const r of await syncReverts(deps.graph, runDeps.repo).catch(() => []))
+        if (r.isNew)
+          deps.log?.(`${r.merged.slice(0, 7)} was reverted: lessons from it were downgraded`);
       return new ProjectController(deps, runDeps, undefined);
     } catch (err) {
       return new ProjectController(deps, undefined, (err as Error).message);

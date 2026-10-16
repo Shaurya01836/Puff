@@ -28,6 +28,7 @@ import { getTask, updateTask } from '../memory/tasks';
 import { read, run as runQuery } from '../db/client';
 import { routeTask } from './routing';
 import { saveTrace, traced } from '../db/trace';
+import { linkDerived, recordMerge, recordRevert, syncReverts } from '../memory/provenance';
 import type { SlotPool } from './schedule';
 import { runVerification, type Verdict } from './verify';
 
@@ -112,6 +113,28 @@ export function readVerdict(text: string): 'pass' | 'fail' | undefined {
   return bare ? (bare[1]!.toLowerCase() as 'pass' | 'fail') : undefined;
 }
 
+/** Q23 after a revert, with a trace that says what it undid. */
+export async function noteRevert(
+  graph: Graph,
+  taskId: string,
+  merged: string,
+  revert: string,
+): Promise<void> {
+  const { value, steps } = await traced(() => recordRevert(graph, merged, revert));
+  const n = value.solutions.length + value.decisions.length + value.downgraded.length;
+  await saveTrace(
+    graph,
+    { taskId },
+    {
+      kind: 'revert',
+      reason: n
+        ? `${n} lesson${n === 1 ? '' : 's'} downgraded because ${merged.slice(0, 7)} was reverted (${value.solutions.length} fix(es) in it, ${value.decisions.length} decision(s) its session wrote, ${value.downgraded.length} derived from them)`
+        : `${merged.slice(0, 7)} was reverted; nothing had been learned from it yet`,
+      steps,
+    },
+  );
+}
+
 /** Make sure existing memory is not replayed as "new" the first time a run flushes events. */
 async function primeMemoryEvents(deps: Pick<RunDeps, 'graph' | 'emit'>): Promise<void> {
   if (!seenMemory.has(deps.graph)) await flushMemoryEvents(deps, true);
@@ -137,6 +160,9 @@ async function plan(deps: RunDeps, task: Task, forced?: AgentName): Promise<Agen
   const routed = await traced(() => routeTask(deps.graph, deps.config, task.id));
   const candidates = routed.value.agents;
   const chosen = forced ?? task.preferredAgent;
+  const first = chosen ?? candidates.find(usable);
+  // Say who actually gets it: the graph's pick may not be installed or signed in here
+  const pick = candidates[0];
   await saveTrace(
     deps.graph,
     { taskId: task.id },
@@ -144,12 +170,13 @@ async function plan(deps: RunDeps, task: Task, forced?: AgentName): Promise<Agen
       kind: 'route',
       reason: chosen
         ? `${chosen}, chosen by the person (the graph suggested: ${routed.value.reason})`
-        : routed.value.reason,
+        : first && pick && first !== pick
+          ? `${first}: the graph's pick was ${pick}, which is not available here (${routed.value.reason})`
+          : routed.value.reason,
       steps: routed.steps,
       graphOff: routed.value.graphOff,
     },
   );
-  const first = forced ?? task.preferredAgent ?? candidates.find(usable);
   if (!first) return [];
   const chain = deps.config.escalation as AgentName[];
   const after = chain.includes(first)
@@ -217,9 +244,19 @@ export async function runTask(
       // Close the learning loop: what passed after those failures is how they were fixed.
       if (learned.size > 0) {
         const text = attempt.fix?.text || 'Fixed on a later attempt (see the merged commit)';
+        const solutions: string[] = [];
         for (const failureId of learned) {
-          await recordSolution(graph, { failureId, summary: text, commit: attempt.fix?.commit });
+          solutions.push(
+            await recordSolution(graph, {
+              failureId,
+              summary: text,
+              commit: attempt.fix?.commit,
+              sessionId: attempt.sessionId,
+            }),
+          );
         }
+        // what the agent decided while fixing them is derived from those failures and their fix
+        await linkDerived(graph, attempt.decisionIds ?? [], [...learned, ...solutions]);
         log(`recorded the fix for ${learned.size} earlier failure(s)`);
       }
       await emitTask(
@@ -312,6 +349,10 @@ interface AttemptOutcome {
   stop?: boolean;
   /** A writer changed no files */
   noChange?: boolean;
+  /** The session of this attempt */
+  sessionId?: string;
+  /** Decisions the agent's report recorded */
+  decisionIds?: string[];
   aborted?: boolean;
 }
 
@@ -666,6 +707,9 @@ async function runAttempt(
     const landed = await repo.serial(async () => {
       const m = await repo.mergeNow(wt, `Merge puff task ${task.id}: ${task.title}`);
       if (!m.merged) return { m };
+      // Provenance: this session landed this merge, so a later revert of it can find what it taught
+      if (m.sha) await recordMerge(graph, sessionId, m.sha);
+      await syncReverts(graph, repo).catch(() => []);
       await indexRepo(graph, deps.project, { traceFor: { taskId: task.id } });
       if (!config.verify.retestAfterMerge) return { m };
 
@@ -697,7 +741,10 @@ async function runAttempt(
         }));
       if (combined.kind !== 'tests-failed') return { m, combined };
       const undo = await repo.revertMerge(m.sha!);
-      if (undo.reverted) await indexRepo(graph, deps.project, { traceFor: { taskId: task.id } });
+      if (undo.reverted) {
+        if (undo.revert) await noteRevert(graph, task.id, m.sha!, undo.revert);
+        await indexRepo(graph, deps.project, { traceFor: { taskId: task.id } });
+      }
       return { m, combined, undo };
     });
     const merge = landed.m;
@@ -780,6 +827,7 @@ async function runAttempt(
       changedFiles: files,
       summary: summarize(res.output),
     });
+    let decisionIds: string[] = [];
     if (res.report) {
       // Decisions, handoff notes, and any follow-up tasks the agent asked for.
       const applied = await applyReport(graph, res.report, {
@@ -788,6 +836,7 @@ async function runAttempt(
         sessionId,
         parent: task,
       });
+      decisionIds = applied.decisionIds;
       for (const s of applied.skipped) log(`decision skipped (${s.symbol}): ${s.reason}`);
       for (const t of applied.skippedTasks) log(`task skipped (${t.title}): ${t.reason}`);
       if (applied.tasks.length) log(`${agent} asked for ${applied.tasks.length} follow-up task(s)`);
@@ -800,6 +849,8 @@ async function runAttempt(
       tokens,
       tests: combinedTests,
       fix: { text: res.report?.notes?.trim() || summarize(res.output, 300), commit: merge.sha },
+      sessionId,
+      decisionIds,
     };
   }
 
@@ -895,6 +946,7 @@ export async function landManualWork(
         failureId,
         summary: attempt.fix?.text || 'Fixed by hand (see the merged commit)',
         commit: attempt.fix?.commit,
+        sessionId: attempt.sessionId,
       });
     }
     await emitTask(

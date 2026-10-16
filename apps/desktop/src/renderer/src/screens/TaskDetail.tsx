@@ -562,6 +562,7 @@ function ContextTab({ task, pack }: { task: Task; pack?: ContextPack }) {
                     <Sparkles className="size-3" />
                     {item.reason}
                   </div>
+                  {item.trust !== undefined && <TrustBar trust={item.trust} why={item.trustWhy} />}
                 </li>
               );
             })}
@@ -619,12 +620,36 @@ function WhyTab({ why }: { why: WhyPath }) {
   );
 }
 
+/** How far a lesson is trusted, and what moved it (Q24) */
+function TrustBar({ trust, why }: { trust: number; why?: string[] }) {
+  const tone = trust >= 0.7 ? '#4ade80' : trust >= 0.5 ? '#f5b83d' : '#fb923c';
+  return (
+    <div
+      className="mt-2 flex items-center gap-2"
+      title={why?.join('\n') || 'No evidence either way yet'}
+    >
+      <span className="font-mono text-[10px] text-ink-3">trust</span>
+      <span className="h-1 w-24 overflow-hidden rounded-full bg-surface-3">
+        <span
+          className="block h-full rounded-full"
+          style={{ width: `${Math.round(trust * 100)}%`, background: tone }}
+        />
+      </span>
+      <span className="font-mono text-[10px] tabular-nums" style={{ color: tone }}>
+        {trust.toFixed(2)}
+      </span>
+      {why?.[0] && <span className="truncate text-[11px] text-ink-3">{why.join(' · ')}</span>}
+    </div>
+  );
+}
+
 const TRACE_KIND: Record<GraphTrace['kind'], string> = {
   route: 'Which agent',
   context: 'What it was told',
   schedule: 'When it could start',
   stale: 'What went out of date',
   locate: 'Where a failure belongs',
+  revert: 'What a revert undid',
 };
 
 /** Every decision Puff made for this task, with the Cypher it ran on FalkorDB and how long it took. */

@@ -20,7 +20,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import type { Adapters } from '../src/agents/adapters';
 import type { HarnessAdapter, HarnessResult, RunOptions } from '../src/agents/types';
 import { parseConfig, type PuffConfig } from '../src/config';
-import { getContextPack } from '../src/context/compiler';
+import { compileContext, getContextPack } from '../src/context/compiler';
 import { connect, loadDotEnv, read, run as runQuery } from '../src/db/client';
 import { initProjectGraph } from '../src/db/init';
 import { listTraces } from '../src/db/trace';
@@ -28,6 +28,7 @@ import { removeLink, GitRepo } from '../src/git/repo';
 import { graphName } from '../src/ids';
 import { indexRepo } from '../src/indexer/index';
 import { parsePuffReport } from '../src/memory/report';
+import { syncReverts } from '../src/memory/provenance';
 import { listSessions, startSession } from '../src/memory/sessions';
 import {
   createTask,
@@ -657,6 +658,68 @@ describe.skipIf(!ready)('the run loop (fake agents, real git, real FalkorDB)', (
       e.type === 'activity' && e.step.taskId === failedId ? [e.step.text] : [],
     );
     expect(live).toEqual(texts);
+
+    // Q23: the revert is recorded, with a trace of what it undid
+    const revert = (await listTraces(f.graph, failedId)).find((t) => t.kind === 'revert');
+    expect(revert?.reason).toMatch(
+      /^[0-9a-f]{7} was reverted; nothing had been learned from it yet$/,
+    );
+    const reverted = await read<{ n: number }>(
+      f.graph,
+      `MATCH (:Session)-[:MERGED]->(:Commit)-[:REVERTED_BY]->(:Commit) RETURN count(*) AS n`,
+    );
+    expect(Number(reverted[0]!.n)).toBe(1);
+  }, 180_000);
+
+  it("a person's git revert of a Puff merge is found, and what that merge taught loses trust", async () => {
+    const codex = fakeAgent('codex', (o, n) => {
+      const logCall = "audit('login.failed', { email });";
+      edit(
+        o.cwd,
+        'src/auth/login.ts',
+        logCall,
+        n === 1
+          ? "audit('login.failed', { email, password });"
+          : "audit('login.failed', { email, reason: 'invalid credentials' });",
+      );
+      return {
+        output:
+          'Audited failed logins.\n<puff-report>{"decisions":[{"symbol":"checkUser","text":"Failed logins are audited with a reason only"}],"notes":"Audit with the email and a reason"}</puff-report>',
+      };
+    });
+    const f = await fixture(config, { codex });
+    const t = await f.task('Log failed login attempts', { targets: ['login', 'checkUser'] });
+    expect((await runTask(f.deps, t.id)).status).toBe('done');
+    const sha = await f.deps.repo.landedMerge(t.id);
+
+    // the person decides the fix was wrong and reverts it by hand
+    gitIn(
+      f.repoPath,
+      '-c',
+      'user.name=t',
+      '-c',
+      'user.email=t@t',
+      'revert',
+      '--no-edit',
+      '-m',
+      '1',
+      sha!,
+    );
+    const [found] = await syncReverts(f.graph, f.deps.repo);
+    expect(found).toMatchObject({ merged: sha, isNew: true });
+    expect(found!.solutions).toHaveLength(1);
+    expect(found!.decisions).toHaveLength(1);
+    expect(await syncReverts(f.graph, f.deps.repo)).toEqual([]); // recorded once
+
+    // the decision written while fixing it derives from the failure it fixed, and is left out now
+    const next = await f.task('Change login again', { targets: ['checkUser'] });
+    const ctx = await compileContext(f.graph, next.id, { role: 'coder', preview: true });
+    expect(ctx.distrusted.map((d) => d.text)).toContain(
+      'Failed logins are audited with a reason only',
+    );
+    expect(ctx.items.find((i) => i.kind === 'Failure')?.reason).toMatch(
+      /its earlier fix was reverted/,
+    );
   }, 180_000);
 
   it('retestAfterMerge: false skips the second run, so the same collision lands both tasks', async () => {

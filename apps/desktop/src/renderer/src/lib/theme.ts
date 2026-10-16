@@ -102,6 +102,7 @@ export const MEMORY_EVENT_META: Record<MemoryEventType, { label: string; color: 
   decision_recorded: { label: 'Decision', color: '#f5b83d' },
   decision_superseded: { label: 'Decision superseded', color: '#f5b83d' },
   memory_stale: { label: 'Memory marked stale', color: '#a9b4cc' },
+  memory_downgraded: { label: 'Lessons downgraded', color: '#fb923c' },
   handoff: { label: 'Handoff', color: '#b4a5ff' },
   context_compiled: { label: 'Context compiled', color: '#2dd4e0' },
 };

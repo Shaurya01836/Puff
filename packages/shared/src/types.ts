@@ -122,6 +122,10 @@ export interface ContextItem {
   /** Why the context compiler included this item (stored on the INCLUDED edge) */
   reason: string;
   stale?: boolean;
+  /** How far to trust a lesson (0 to 1), from what happened since it was learned (Q24) */
+  trust?: number;
+  /** What moved the trust, in words */
+  trustWhy?: string[];
 }
 
 export interface ContextPack {
@@ -135,7 +139,7 @@ export interface ContextPack {
 }
 
 /** A decision Puff makes by asking the graph */
-export type TraceKind = 'route' | 'context' | 'schedule' | 'stale' | 'locate';
+export type TraceKind = 'route' | 'context' | 'schedule' | 'stale' | 'locate' | 'revert';
 
 /** One query a decision ran */
 export interface TraceStep {
@@ -194,6 +198,7 @@ export type MemoryEventType =
   | 'decision_recorded'
   | 'decision_superseded'
   | 'memory_stale'
+  | 'memory_downgraded'
   | 'handoff'
   | 'context_compiled';
 

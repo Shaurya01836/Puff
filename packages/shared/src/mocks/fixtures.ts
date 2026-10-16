@@ -500,6 +500,8 @@ export const mockContextPack: ContextPack = {
       id: 'fail_01',
       text: 'login.spec: password appears in audit log',
       reason: 'failed in login(), which calls audit(), 1 session ago',
+      trust: 0.76,
+      trustWhy: ['in the context of 2 session(s) that succeeded'],
     },
     {
       kind: 'Solution',
@@ -512,6 +514,8 @@ export const mockContextPack: ContextPack = {
       id: 'dec_01',
       text: 'Session tokens live in httpOnly cookies, never localStorage',
       reason: 'active decision about Session.start, a caller of login()',
+      trust: 0.3,
+      trustWhy: ['builds on 3f9c2ab, which was reverted'],
     },
     {
       kind: 'Procedure',
@@ -549,6 +553,25 @@ export const mockContextPack: ContextPack = {
 };
 
 export const mockTraces: GraphTrace[] = [
+  {
+    id: 'trace_04',
+    kind: 'revert',
+    reason:
+      '2 lessons downgraded because 3f9c2ab was reverted (1 fix(es) in it, 1 decision(s) its session wrote, 0 derived from them)',
+    queries: 5,
+    ms: 6.2,
+    rows: 2,
+    at: min(70),
+    steps: [
+      {
+        cypher:
+          'MATCH (m)-[:DERIVED_FROM*1..3]->(root) WHERE root.id IN $roots AND NOT m.id IN $roots\n  SET m.downgradedBy = coalesce(m.downgradedBy, $m)\n  RETURN DISTINCT m.id AS id',
+        params: ['roots', 'm'],
+        ms: 1.6,
+        rows: 1,
+      },
+    ],
+  },
   {
     id: 'trace_03',
     kind: 'context',

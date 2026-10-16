@@ -2,6 +2,7 @@ import type { FalkorDB, Graph } from 'falkordb';
 import { allCapabilities, type PuffConfig } from '../config';
 import { projectGraph, read, run } from './client';
 import { FULLTEXT_INDEXES, RANGE_INDEXES, isAlreadyIndexedError, rangeIndexCypher } from './schema';
+import { backfillProvenance } from '../memory/provenance';
 
 export interface ProjectInfo {
   slug: string;
@@ -44,6 +45,7 @@ export async function initProjectGraph(
   }
 
   await syncAgentPool(graph, config);
+  await backfillProvenance(graph);
   return graph;
 }
 

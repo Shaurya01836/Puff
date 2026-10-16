@@ -11,6 +11,7 @@ import { getTask, listTasks } from '../memory/tasks';
 import { pendingHandoffs } from '../memory/memory';
 import { symbolInfos, type SymbolRow } from '../queries/code';
 import { similarFailures, taskRisk, type TaskRisk } from '../queries/insights';
+import { memoryTrust, TRUST_FLOOR, TRUST_LOW } from '../memory/provenance';
 import { estimateTokens, renderPrompt, type PromptInput } from './prompt';
 
 export const DEFAULT_BUDGET_TOKENS = 2000;
@@ -41,6 +42,8 @@ export type CompiledContext = ContextPack & {
   budgetTokens: number;
   /** The riskiest function the task targets, when risk is known */
   risk?: TaskRisk;
+  /** Lessons left out because their trust fell below the floor (Q24), with why */
+  distrusted: { id: string; text: string; trust: number; why: string[] }[];
 };
 
 /** Load-bearing code gets this much more room for what the team learned about it. */
@@ -110,6 +113,8 @@ const RANK = {
 
 interface Bundle {
   rank: number;
+  /** 0 to 1 for failures and decisions (Q24); 1 for what cannot be wrong in that way */
+  trust: number;
   at: number;
   stale: boolean;
   /** Failures and decisions can go stale; procedures and handoffs cannot */
@@ -162,7 +167,14 @@ export async function compileContext(
         reason: off
           ? `graph off: the task and its target files only, ~${pack.tokenEstimate} tokens`
           : `${pack.items.length} items (${memory} from memory), ~${pack.tokenEstimate} of ${pack.budgetTokens} tokens` +
-            (pack.dropped ? `, ${pack.dropped} left out to fit` : '') +
+            (pack.dropped - pack.distrusted.length > 0
+              ? `, ${pack.dropped - pack.distrusted.length} left out to fit`
+              : '') +
+            (pack.distrusted.length
+              ? `; ${pack.distrusted.length} left out for low trust (${pack.distrusted
+                  .map((d) => `${d.trust.toFixed(2)}: ${d.why[0] ?? 'little evidence'}`)
+                  .join('; ')})`
+              : '') +
             (risky
               ? `; budget ×${RISK_BUDGET_FACTOR} because ${pack.risk!.name}() is in the top ${Math.max(1, Math.round((1 - pack.risk!.risk) * 100))}% by risk`
               : ''),
@@ -257,12 +269,13 @@ async function buildContext(
     at: number;
     symbol: string;
     solId: string | null;
+    solStatus: string | null;
     fix: string | null;
     solAt: number | null;
   };
   const failureCols = `f.id AS id, f.message AS message, coalesce(f.stale, false) AS stale,
          coalesce(f.count, 1) AS count, f.createdAt AS at, s.id AS symbol,
-         sol.id AS solId, sol.summary AS fix, sol.createdAt AS solAt`;
+         sol.id AS solId, sol.summary AS fix, sol.createdAt AS solAt, sol.status AS solStatus`;
   const failureRows: FailureRow[] = !policy.failures
     ? []
     : policy.projectWide
@@ -471,9 +484,24 @@ async function buildContext(
 
   const failures = new Map<string, FailureRow[]>();
   for (const row of failureRows) failures.set(row.id, [...(failures.get(row.id) ?? []), row]);
+  // Q24: how far to trust each lesson, from what happened since it was learned
+  const trust = off
+    ? new Map<string, { trust: number; why: string[] }>()
+    : await memoryTrust(graph, {
+        Failure: [...failures.keys()],
+        Decision: decisionRows.map((d) => d.id),
+      });
+  const trustOf = (id: string) => trust.get(id) ?? { trust: 1, why: [] };
+  const trustNote = (t: { trust: number; why: string[] }) =>
+    t.trust < TRUST_LOW ? `low confidence: ${t.why.join(', ') || 'little evidence'}` : undefined;
   for (const rows of failures.values()) {
     const f = rows[0]!;
-    const solution = rows.filter((r) => r.solId).sort((a, b) => (b.solAt ?? 0) - (a.solAt ?? 0))[0];
+    // A fix that was reverted is not a fix: the newest one still standing, if any
+    const solution = rows
+      .filter((r) => r.solId && r.solStatus !== 'reverted')
+      .sort((a, b) => (b.solAt ?? 0) - (a.solAt ?? 0))[0];
+    const fixReverted = !solution && rows.some((r) => r.solStatus === 'reverted');
+    const t = trustOf(f.id);
     // Prefer the symbol that is closest to the task for the explanation.
     const symbol = rows.map((r) => r.symbol).sort((a, b) => closeness(a) - closeness(b))[0]!;
     const onTarget = relation(symbol)?.rel === 'self';
@@ -485,10 +513,14 @@ async function buildContext(
         kind: 'Failure',
         id: f.id,
         text: f.message,
-        reason: similar
-          ? `failed in ${nameOf(symbol)}(), worded like this task (full-text search)${again}`
-          : `${where(symbol, 'failed')}${again}`,
+        reason:
+          (similar
+            ? `failed in ${nameOf(symbol)}(), worded like this task (full-text search)${again}`
+            : `${where(symbol, 'failed')}${again}`) +
+          (fixReverted ? '; its earlier fix was reverted' : ''),
         stale: f.stale || undefined,
+        trust: trust.has(f.id) ? t.trust : undefined,
+        trustWhy: t.why.length ? t.why : undefined,
       },
     ];
     if (solution?.solId) {
@@ -512,19 +544,28 @@ async function buildContext(
             : onTarget
               ? RANK.unresolvedFailure
               : RANK.nearUnresolvedFailure,
+      trust: t.trust,
       at: f.at,
       stale: f.stale,
       memory: true,
       items,
       apply: (into) =>
-        into.failures.push({ message: f.message, fix: solution?.fix ?? undefined, stale: f.stale }),
+        into.failures.push({
+          message: f.message,
+          fix: solution?.fix ?? undefined,
+          stale: f.stale,
+          fixReverted,
+          note: trustNote(t),
+        }),
     });
   }
 
   for (const d of decisionRows) {
     const symbol = [...d.symbols].sort((a, b) => closeness(a) - closeness(b))[0]!;
     const onTarget = relation(symbol)?.rel === 'self';
+    const t = trustOf(d.id);
     bundles.push({
+      trust: t.trust,
       rank:
         onTarget || policy.projectWide
           ? RANK.targetDecision
@@ -544,9 +585,11 @@ async function buildContext(
             'active decision about',
           ),
           stale: d.stale || undefined,
+          trust: trust.has(d.id) ? t.trust : undefined,
+          trustWhy: t.why.length ? t.why : undefined,
         },
       ],
-      apply: (into) => into.decisions.push({ text: d.text, stale: d.stale }),
+      apply: (into) => into.decisions.push({ text: d.text, stale: d.stale, note: trustNote(t) }),
     });
   }
 
@@ -556,6 +599,7 @@ async function buildContext(
     seenProc.add(p.id);
     bundles.push({
       rank: RANK.procedure,
+      trust: 1,
       at: 0,
       stale: false,
       memory: false,
@@ -575,6 +619,7 @@ async function buildContext(
     const text = handoffText(h.payload);
     bundles.push({
       rank: RANK.handoff,
+      trust: 1,
       at: 0,
       stale: false,
       memory: false,
@@ -590,12 +635,21 @@ async function buildContext(
     });
   }
 
+  // Lessons that lost too much trust (a revert, repeats despite being shown) are left out, with why.
+  const distrusted = bundles
+    .filter((b) => b.memory && b.trust < TRUST_FLOOR)
+    .map((b) => {
+      const head = b.items[0]!;
+      return { id: head.id, text: head.text, trust: b.trust, why: trustOf(head.id).why };
+    });
+  const trusted = bundles.filter((b) => !(b.memory && b.trust < TRUST_FLOOR));
   // Stale memory is dropped unless nothing fresh is left, in which case it is kept and labelled.
-  const hasFresh = bundles.some((b) => b.memory && !b.stale);
-  const usable = bundles.filter((b) => !(b.memory && b.stale && hasFresh));
+  const hasFresh = trusted.some((b) => b.memory && !b.stale);
+  const usable = trusted.filter((b) => !(b.memory && b.stale && hasFresh));
 
-  // --- Fit into the budget, most important first -------------------------------------------------
-  usable.sort((a, b) => a.rank - b.rank || b.at - a.at);
+  // --- Fit into the budget, most important first; less trusted lessons sink -----------------------
+  const weight = (b: Bundle) => b.rank + (1 - b.trust) * 20;
+  usable.sort((a, b) => weight(a) - weight(b) || b.at - a.at);
   let input = base;
   const accepted: Bundle[] = [];
   let dropped = bundles.length - usable.length;
@@ -623,6 +677,7 @@ async function buildContext(
     prompt,
     dropped,
     budgetTokens: budget,
+    distrusted,
     ...(risk ? { risk } : {}),
     ...(off ? { graphOff: true } : {}),
   };
@@ -671,11 +726,17 @@ async function persistPack(
   );
   const byKind = new Map<
     MemoryKind,
-    { id: string; reason: string; stale: boolean; ord: number }[]
+    { id: string; reason: string; stale: boolean; ord: number; trust: number | null }[]
   >();
   pack.items.forEach((item, ord) => {
     const list = byKind.get(item.kind) ?? [];
-    list.push({ id: item.id, reason: item.reason, stale: item.stale ?? false, ord });
+    list.push({
+      id: item.id,
+      reason: item.reason,
+      stale: item.stale ?? false,
+      ord,
+      trust: item.trust ?? null,
+    });
     byKind.set(item.kind, list);
   });
   for (const [kind, items] of byKind) {
@@ -685,7 +746,7 @@ async function persistPack(
       `MATCH (cp:ContextPack {id: $id})
        UNWIND $items AS item
        MATCH (m:${KIND_LABEL[kind]} {id: item.id})
-       CREATE (cp)-[:INCLUDED {reason: item.reason, stale: item.stale, ord: item.ord}]->(m)`,
+       CREATE (cp)-[:INCLUDED {reason: item.reason, stale: item.stale, ord: item.ord, trust: item.trust}]->(m)`,
       { id: pack.id, items },
     );
   }
@@ -738,11 +799,12 @@ export async function getContextPack(
     reason: string;
     stale: boolean;
     ord: number;
+    trust: number | null;
   }>(
     graph,
     `MATCH (:ContextPack {id: $id})-[r:INCLUDED]->(m)
      RETURN labels(m)[0] AS kind, properties(m) AS props, coalesce(r.reason, '') AS reason,
-            coalesce(r.stale, false) AS stale, coalesce(r.ord, 0) AS ord
+            coalesce(r.stale, false) AS stale, coalesce(r.ord, 0) AS ord, r.trust AS trust
      ORDER BY ord`,
     { id: pack.id },
   );
@@ -758,6 +820,7 @@ export async function getContextPack(
       text: memoryText(r.kind, r.props),
       reason: r.reason,
       stale: r.stale || undefined,
+      ...(r.trust === null || r.trust === undefined ? {} : { trust: Number(r.trust) }),
     })),
   };
 }
