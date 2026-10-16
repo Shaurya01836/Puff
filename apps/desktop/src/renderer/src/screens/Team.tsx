@@ -29,14 +29,22 @@ const name = (a?: string) =>
 export function Team({
   events,
   onOpenTask,
+  compact,
 }: {
   events?: TeamEvent[];
   onOpenTask: (taskId: string) => void;
+  /** The narrow form used in the side panel */
+  compact?: boolean;
 }) {
   if (!events) return null;
   if (events.length === 0) {
     return (
-      <div className="grid h-full place-items-center p-10 text-center text-sm text-ink-3">
+      <div
+        className={cn(
+          'grid place-items-center text-center text-sm text-ink-3',
+          compact ? 'h-full p-6' : 'h-full p-10',
+        )}
+      >
         <div>
           <div className="font-display text-lg text-ink-2">Nothing has happened yet</div>
           <p className="mt-2 max-w-sm">
@@ -49,13 +57,22 @@ export function Team({
   }
 
   return (
-    <div className="mx-auto max-w-3xl p-6">
+    <div className={compact ? 'p-3' : 'mx-auto max-w-3xl p-6'}>
       <ol className="relative">
-        <span className="absolute top-2 bottom-2 left-[19px] w-px bg-line" aria-hidden />
+        <span
+          className={cn(
+            'absolute top-2 bottom-2 w-px bg-line',
+            compact ? 'left-[15px]' : 'left-[19px]',
+          )}
+          aria-hidden
+        />
         {events.map((e) => (
-          <li key={e.id} className="relative mb-3 flex animate-fade-in gap-4">
-            <Marker event={e} />
-            <Panel className="min-w-0 flex-1 p-4">
+          <li
+            key={e.id}
+            className={cn('relative flex animate-fade-in', compact ? 'mb-2 gap-2.5' : 'mb-3 gap-4')}
+          >
+            <Marker event={e} compact={compact} />
+            <Panel className={cn('min-w-0 flex-1', compact ? 'p-3' : 'p-4')}>
               <Body event={e} onOpenTask={onOpenTask} />
             </Panel>
           </li>
@@ -65,11 +82,12 @@ export function Team({
   );
 }
 
-function Marker({ event: e }: { event: TeamEvent }) {
+function Marker({ event: e, compact }: { event: TeamEvent; compact?: boolean }) {
+  const box = compact ? 'size-8' : 'size-10';
   if (e.kind === 'session' && e.agent) {
     return (
-      <span className="z-10 grid size-10 shrink-0 place-items-center rounded-full bg-abyss">
-        <AgentAvatar agent={e.agent} size={34} />
+      <span className={cn('z-10 grid shrink-0 place-items-center rounded-full bg-abyss', box)}>
+        <AgentAvatar agent={e.agent} size={compact ? 26 : 34} />
       </span>
     );
   }
@@ -82,7 +100,10 @@ function Marker({ event: e }: { event: TeamEvent }) {
         : 'var(--color-memory)';
   return (
     <span
-      className="z-10 grid size-10 shrink-0 place-items-center rounded-full border border-line bg-abyss"
+      className={cn(
+        'z-10 grid shrink-0 place-items-center rounded-full border border-line bg-abyss',
+        box,
+      )}
       style={{ color }}
     >
       <Icon className="size-4" />

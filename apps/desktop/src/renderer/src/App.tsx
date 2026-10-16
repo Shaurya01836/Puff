@@ -50,6 +50,8 @@ export function App() {
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  /** The side panel has two halves: the conversation with Puff, and what the team has been doing */
+  const [panelTab, setPanelTab] = useState<'chat' | 'team'>('chat');
   /** Bumped when a sign-in finished, so the agent list is read again */
   const [setupTick, setSetupTick] = useState(0);
   const [settingsFor, setSettingsFor] = useState<ProjectSummary>();
@@ -331,6 +333,11 @@ export function App() {
           onApprove={(id, approve) => void chat.approve(id, approve)}
           onReset={() => void chat.reset()}
           onClose={() => setChatOpen(false)}
+          tab={panelTab}
+          onTab={setPanelTab}
+          team={timeline}
+          onOpenTask={setOpenTask}
+          teamBusy={tasks.some((t) => t.status === 'running' || t.status === 'verifying')}
         />
       )}
       {newTaskOpen && (

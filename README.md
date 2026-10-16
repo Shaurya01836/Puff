@@ -336,7 +336,7 @@ Puff also **re-runs the project's tests on the combined result after every merge
 
 ### Talk to Puff
 
-Open **Ask Puff** in the app (or press Ctrl+K), or use the terminal:
+Open **Ask Puff** in the app (or press Ctrl+K). The side panel has two tabs: **Ask Puff** (the conversation) and **Team** (who did what and who handed what to whom, with a pulse while agents are working), so you can talk to Puff and watch the team in one place. Or use the terminal:
 
 ```bash
 npm run chat

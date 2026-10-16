@@ -11,7 +11,8 @@ import {
   Terminal,
   X,
 } from 'lucide-react';
-import { matchCommands, type ChatInfo, type ChatMessage } from '@puff/shared';
+import { matchCommands, type ChatInfo, type ChatMessage, type TeamEvent } from '@puff/shared';
+import { Team } from '@/screens/Team';
 import { cn } from '@/lib/cn';
 import { formatTokens } from '@/lib/theme';
 
@@ -32,6 +33,11 @@ export function ChatPanel({
   onApprove,
   onReset,
   onClose,
+  tab,
+  onTab,
+  team,
+  onOpenTask,
+  teamBusy,
 }: {
   messages: ChatMessage[];
   info?: ChatInfo;
@@ -41,6 +47,13 @@ export function ChatPanel({
   onApprove: (approvalId: string, approve: boolean) => void;
   onReset: () => void;
   onClose: () => void;
+  /** Which half of the panel shows: the conversation, or what the team has been doing */
+  tab: 'chat' | 'team';
+  onTab: (tab: 'chat' | 'team') => void;
+  team?: TeamEvent[];
+  onOpenTask: (taskId: string) => void;
+  /** Agents are working right now (a pulse on the Team tab) */
+  teamBusy: boolean;
 }) {
   const [text, setText] = useState('');
   const [pick, setPick] = useState(0);
@@ -102,7 +115,7 @@ export function ChatPanel({
 
   return (
     <aside
-      aria-label="Ask Puff"
+      aria-label="Ask Puff and the team"
       className="flex h-full w-[400px] shrink-0 animate-slide-in flex-col border-l border-line-strong bg-surface"
     >
       <header className="flex items-center gap-3 border-b border-line px-5 py-3.5">
@@ -116,14 +129,16 @@ export function ChatPanel({
             {info?.autoApprove ? ' · runs start without asking' : ''}
           </div>
         </div>
-        <button
-          onClick={onReset}
-          title="Start a new conversation"
-          aria-label="New conversation"
-          className="rounded-lg p-1.5 text-ink-3 hover:bg-surface-3 hover:text-ink"
-        >
-          <RotateCcw className="size-4" />
-        </button>
+        {tab === 'chat' && (
+          <button
+            onClick={onReset}
+            title="Start a new conversation"
+            aria-label="New conversation"
+            className="rounded-lg p-1.5 text-ink-3 hover:bg-surface-3 hover:text-ink"
+          >
+            <RotateCcw className="size-4" />
+          </button>
+        )}
         <button
           onClick={onClose}
           aria-label="Close chat"
@@ -133,7 +148,40 @@ export function ChatPanel({
         </button>
       </header>
 
-      {info && (!info.ready || info.needsSignIn) && (
+      <div role="tablist" aria-label="Panel" className="flex gap-1 border-b border-line px-4">
+        {(
+          [
+            ['chat', 'Ask Puff'],
+            ['team', 'Team'],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => onTab(id)}
+            className={cn(
+              '-mb-px border-b-2 px-3 py-2 text-sm transition-colors',
+              tab === id
+                ? 'border-brand text-ink'
+                : 'border-transparent text-ink-3 hover:text-ink-2',
+            )}
+          >
+            {label}
+            {id === 'team' && teamBusy && (
+              <span className="ml-1.5 inline-block size-1.5 animate-pulse rounded-full bg-info align-middle" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'team' && (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <Team compact events={team} onOpenTask={onOpenTask} />
+        </div>
+      )}
+
+      {tab === 'chat' && info && (!info.ready || info.needsSignIn) && (
         <div className="border-b border-warn/20 bg-warn/10 px-5 py-2.5 text-[12px] leading-snug text-warn">
           <p>{info.note ?? `${info.brain} is not available.`}</p>
           {info.needsSignIn && (
@@ -149,100 +197,105 @@ export function ChatPanel({
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4" aria-live="polite">
-        {messages.length === 0 && !busy ? (
-          <div className="flex h-full flex-col justify-center gap-3 px-2">
-            <p className="text-sm leading-relaxed text-ink-2">
-              Tell Puff what you want, in plain words. It adds tasks and goals, retries failures and
-              looks things up. Running the team always asks you first, because it spends tokens.
-            </p>
-            <p className="text-[12px] text-ink-3">
-              Start with <b className="font-medium text-ink-2">/</b> for instant commands that cost
-              nothing.
-            </p>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => (s.startsWith('/') ? send(s) : setText(s))}
-                  className="rounded-lg border border-line bg-surface-2 px-2.5 py-1.5 text-left text-xs text-ink-2 hover:border-line-strong hover:text-ink"
-                >
-                  {s}
-                </button>
-              ))}
+      {tab === 'chat' && (
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4" aria-live="polite">
+          {messages.length === 0 && !busy ? (
+            <div className="flex h-full flex-col justify-center gap-3 px-2">
+              <p className="text-sm leading-relaxed text-ink-2">
+                Tell Puff what you want, in plain words. It adds tasks and goals, retries failures
+                and looks things up. Running the team always asks you first, because it spends
+                tokens.
+              </p>
+              <p className="text-[12px] text-ink-3">
+                Start with <b className="font-medium text-ink-2">/</b> for instant commands that
+                cost nothing.
+              </p>
+              <div className="mt-1 flex flex-wrap gap-2">
+                {SUGGESTIONS.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => (s.startsWith('/') ? send(s) : setText(s))}
+                    className="rounded-lg border border-line bg-surface-2 px-2.5 py-1.5 text-left text-xs text-ink-2 hover:border-line-strong hover:text-ink"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        ) : (
-          <ol className="flex flex-col gap-2.5">
-            {messages.map((m) => (
-              <li key={m.id} className="animate-fade-in">
-                <Bubble message={m} onApprove={onApprove} />
-              </li>
-            ))}
-            {busy && (
-              <li className="flex items-center gap-2 px-1 text-xs text-ink-3">
-                <LoaderCircle className="size-3.5 animate-spin" />
-                Working on it…
-              </li>
-            )}
-          </ol>
-        )}
-        {error && <p className="mt-3 text-sm text-bad">{error}</p>}
-        <div ref={end} />
-      </div>
-
-      <div className="relative border-t border-line p-3">
-        {completions.length > 0 && (
-          <ul
-            role="listbox"
-            aria-label="Commands"
-            className="absolute right-3 bottom-full left-3 mb-2 max-h-64 overflow-y-auto rounded-xl border border-line-strong bg-surface p-1.5 shadow-[0_20px_50px_-15px_rgb(0_0_0/0.9)]"
-          >
-            {completions.map((c, i) => (
-              <li key={c.name}>
-                <button
-                  role="option"
-                  aria-selected={i === pick}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    complete(c.name);
-                  }}
-                  className={cn(
-                    'flex w-full items-baseline gap-3 rounded-lg px-2.5 py-1.5 text-left',
-                    i === pick ? 'bg-surface-3' : 'hover:bg-surface-2',
-                  )}
-                >
-                  <span className="font-mono text-xs text-brand-soft">{c.usage}</span>
-                  <span className="min-w-0 flex-1 truncate text-[11px] text-ink-3">
-                    {c.summary}
-                  </span>
-                  {c.spends && <span className="text-[10px] text-warn">tokens</span>}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="flex items-end gap-2 rounded-xl border border-line bg-surface-2 px-3 py-2 focus-within:border-brand/60">
-          <textarea
-            ref={input}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={onKey}
-            rows={Math.min(5, Math.max(1, text.split('\n').length))}
-            placeholder="Ask, or type / for commands"
-            aria-label="Message"
-            className="max-h-32 min-h-6 flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-ink-3"
-          />
-          <button
-            onClick={() => send()}
-            disabled={!text.trim() || busy}
-            aria-label="Send"
-            className="grid size-7 shrink-0 place-items-center rounded-lg bg-brand text-white disabled:opacity-40"
-          >
-            <CornerDownLeft className="size-3.5" />
-          </button>
+          ) : (
+            <ol className="flex flex-col gap-2.5">
+              {messages.map((m) => (
+                <li key={m.id} className="animate-fade-in">
+                  <Bubble message={m} onApprove={onApprove} />
+                </li>
+              ))}
+              {busy && (
+                <li className="flex items-center gap-2 px-1 text-xs text-ink-3">
+                  <LoaderCircle className="size-3.5 animate-spin" />
+                  Working on it…
+                </li>
+              )}
+            </ol>
+          )}
+          {error && <p className="mt-3 text-sm text-bad">{error}</p>}
+          <div ref={end} />
         </div>
-      </div>
+      )}
+
+      {tab === 'chat' && (
+        <div className="relative border-t border-line p-3">
+          {completions.length > 0 && (
+            <ul
+              role="listbox"
+              aria-label="Commands"
+              className="absolute right-3 bottom-full left-3 mb-2 max-h-64 overflow-y-auto rounded-xl border border-line-strong bg-surface p-1.5 shadow-[0_20px_50px_-15px_rgb(0_0_0/0.9)]"
+            >
+              {completions.map((c, i) => (
+                <li key={c.name}>
+                  <button
+                    role="option"
+                    aria-selected={i === pick}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      complete(c.name);
+                    }}
+                    className={cn(
+                      'flex w-full items-baseline gap-3 rounded-lg px-2.5 py-1.5 text-left',
+                      i === pick ? 'bg-surface-3' : 'hover:bg-surface-2',
+                    )}
+                  >
+                    <span className="font-mono text-xs text-brand-soft">{c.usage}</span>
+                    <span className="min-w-0 flex-1 truncate text-[11px] text-ink-3">
+                      {c.summary}
+                    </span>
+                    {c.spends && <span className="text-[10px] text-warn">tokens</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex items-end gap-2 rounded-xl border border-line bg-surface-2 px-3 py-2 focus-within:border-brand/60">
+            <textarea
+              ref={input}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={onKey}
+              rows={Math.min(5, Math.max(1, text.split('\n').length))}
+              placeholder="Ask, or type / for commands"
+              aria-label="Message"
+              className="max-h-32 min-h-6 flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-ink-3"
+            />
+            <button
+              onClick={() => send()}
+              disabled={!text.trim() || busy}
+              aria-label="Send"
+              className="grid size-7 shrink-0 place-items-center rounded-lg bg-brand text-white disabled:opacity-40"
+            >
+              <CornerDownLeft className="size-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }
