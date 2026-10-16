@@ -219,12 +219,23 @@ export class ProjectController {
   }
 
   // ---- taking control -----------------------------------------------------------------------
+  /**
+   * Is an agent (or Puff's tests) working on this task right now, or about to start its next attempt?
+   * Between two attempts the status reads "retrying" or "escalated", but the run is still going.
+   */
+  private beingWorked(task: Task): boolean {
+    return (
+      ['running', 'verifying'].includes(task.status) ||
+      this.orchestrator?.activeTaskIds.includes(task.id) === true
+    );
+  }
+
   /** Wait until a task is no longer being worked on (its agent has been stopped), up to `ms`. */
   private async settled(taskId: string, ms = 20_000): Promise<Task> {
     const until = Date.now() + ms;
     for (;;) {
       const t = (await getTask(this.graph, taskId))!;
-      if (!['running', 'verifying'].includes(t.status) || Date.now() > until) return t;
+      if (!this.beingWorked(t) || Date.now() > until) return t;
       await new Promise((r) => setTimeout(r, 150));
     }
   }
@@ -235,7 +246,10 @@ export class ProjectController {
    */
   async stopTask(ref: string): Promise<Task> {
     const task = await this.find(ref);
-    if (!['running', 'verifying', 'retrying', 'escalated'].includes(task.status))
+    if (
+      !['running', 'verifying', 'retrying', 'escalated'].includes(task.status) &&
+      !this.beingWorked(task)
+    )
       throw new Error(
         `Task ${shortId(task.id)} is ${task.status}; only a task being worked on can be stopped.`,
       );
@@ -253,7 +267,7 @@ export class ProjectController {
    */
   async reassignTask(ref: string, agent: AgentName, model?: string): Promise<Task> {
     let task = await this.find(ref);
-    if (['running', 'verifying'].includes(task.status)) task = await this.stopTask(task.id);
+    if (this.beingWorked(task)) task = await this.stopTask(task.id);
     if (task.status === 'done') throw new Error('This task is already done.');
     if (!this.config.harnesses[agent]) throw new Error(`${agent} is not set up for this project.`);
     await editTask(this.graph, task.id, { preferredAgent: agent, model: model?.trim() || null });
@@ -266,7 +280,7 @@ export class ProjectController {
   /** The person did this task themselves: mark it done, so what waits for it can go on. */
   async markDone(ref: string, note?: string): Promise<Task> {
     let task = await this.find(ref);
-    if (['running', 'verifying'].includes(task.status)) task = await this.stopTask(task.id);
+    if (this.beingWorked(task)) task = await this.stopTask(task.id);
     const updated = await updateTask(this.graph, task.id, {
       status: 'done',
       doneByHand: true,
@@ -304,7 +318,7 @@ export class ProjectController {
   async takeOver(ref: string): Promise<TakeOver> {
     if (!this.runDeps) throw new Error(this.blocked ?? 'Agents cannot run for this project');
     let task = await this.find(ref);
-    if (['running', 'verifying'].includes(task.status)) task = await this.stopTask(task.id);
+    if (this.beingWorked(task)) task = await this.stopTask(task.id);
     if (task.status === 'done') throw new Error('This task is already done.');
     const { wt, startedFrom, reused } = await this.runDeps.repo.openManualWorktree(
       task.id,

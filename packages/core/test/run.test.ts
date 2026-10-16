@@ -980,4 +980,25 @@ describe.skipIf(!ready)('the run loop (fake agents, real git, real FalkorDB)', (
     expect(fixes.length).toBeGreaterThanOrEqual(1);
     await expect(controller.landManual(t.id)).rejects.toThrow(/not taken this task over/);
   }, 240_000);
+
+  it('taking over a task between two attempts still stops its agent: "retrying" does not mean nothing is running', async () => {
+    const stuck = hangs('codex');
+    const f = await fixture(FAST, { codex: stuck });
+    const controller = await controllerFor(f);
+    const t = await f.task('between attempts', { targets: ['taxFor'], preferredAgent: 'codex' });
+    await controller.start();
+    await waitFor(() => stuck.calls.length === 1);
+    // what a task looks like in the moment between one attempt and the next
+    await updateTask(f.graph, t.id, { status: 'retrying' });
+    expect(controller.running).toBe(true);
+
+    const over = await controller.takeOver(t.id);
+
+    expect(over.cwd).toMatch(/-manual$/);
+    await waitFor(() => !controller.running); // the run ended: nothing carries on behind the person's back
+    const task = (await getTask(f.graph, t.id))!;
+    expect(task.status).toBe('failed');
+    expect(task.worktree).toMatch(/-manual$/);
+    expect(stuck.calls).toHaveLength(1); // no second attempt was started
+  }, 120_000);
 });

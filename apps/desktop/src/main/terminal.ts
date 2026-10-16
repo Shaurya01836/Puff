@@ -15,7 +15,7 @@ export interface OpenTerminal {
   cli: TerminalCli;
   /** The configured command for an agent CLI (e.g. "claude"); ignored for a shell */
   command?: string;
-  /** What to say first to an agent CLI */
+  /** Its first message, which starts it working at once (only when the person chose to start it on the task) */
   brief?: string;
 }
 
@@ -30,8 +30,14 @@ export function terminalProgram(spec: OpenTerminal): { file: string; args: strin
   const exe = resolveExecutable(command);
   if (!exe) throw new Error(`"${command}" was not found on PATH. Is ${spec.cli} installed?`);
   const target = launchTarget(exe);
-  // No first message is passed: the CLI opens idle, and nothing is sent to a model until the person types
-  return { file: target.command, args: [...target.prefix] };
+  // Without a brief the CLI opens idle and nothing is sent to a model until the person types. With one,
+  // Claude Code and Codex take it as their first message and OpenCode as --prompt: they start working.
+  const first = spec.brief
+    ? spec.cli === 'opencode'
+      ? ['--prompt', spec.brief]
+      : [spec.brief]
+    : [];
+  return { file: target.command, args: [...target.prefix, ...first] };
 }
 
 /** What each terminal has printed (the end of it), so a window that opens late can catch up */

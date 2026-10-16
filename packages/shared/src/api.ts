@@ -116,7 +116,15 @@ export interface PuffApi {
    * Take a task over: its agent is stopped, and a real terminal opens in a working folder that starts from the
    * agent's last attempt, running that agent's own CLI (or a shell). Output arrives as `terminal` events.
    */
-  openTerminal(input: { taskId: string; cli: TerminalCli }): Promise<TerminalInfo>;
+  openTerminal(input: {
+    taskId: string;
+    cli: TerminalCli;
+    /**
+     * Start the program on the task straight away: its first message is the task brief, so it begins working in
+     * its own screen (and spends tokens). Without it the program opens idle and waits for the person.
+     */
+    start?: boolean;
+  }): Promise<TerminalInfo>;
   terminalWrite(id: string, data: string): Promise<void>;
   terminalResize(id: string, cols: number, rows: number): Promise<void>;
   /** What a terminal has printed so far (a window that opens late catches up), and where that ends. Events with an `end` at or before it are already in it. */

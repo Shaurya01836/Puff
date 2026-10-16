@@ -531,7 +531,7 @@ async function buildLive(
     async pauseTeam() {
       return current?.controller.drain() ?? false;
     },
-    async openTerminal({ taskId, cli }) {
+    async openTerminal({ taskId, cli, start }) {
       const p = need();
       const command = cli === 'shell' ? undefined : p.config.harnesses[cli]?.command;
       if (cli !== 'shell' && !command) throw new Error(`${cli} is not set up for this project.`);
@@ -541,6 +541,8 @@ async function buildLive(
         cwd: over.cwd,
         cli,
         command,
+        // one line: a program's first message is a command-line argument
+        brief: start && cli !== 'shell' ? over.brief.replace(/\s*\n\s*/g, ' ') : undefined,
       });
       const task = await getTask(p.graph, taskId);
       return {

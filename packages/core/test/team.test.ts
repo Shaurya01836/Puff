@@ -469,7 +469,7 @@ describe.skipIf(!ready)('coordination (fake agents, real git, real FalkorDB)', (
       active++;
       peak = Math.max(peak, active);
       spans[title] = { start: Date.now(), end: 0 };
-      await sleep(900);
+      await sleep(2500); // long enough that two slow worktree creations still overlap
       const file = title.includes('login')
         ? 'src/auth/login.ts'
         : title.includes('cart')

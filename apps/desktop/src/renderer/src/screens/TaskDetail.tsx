@@ -108,10 +108,10 @@ export function TaskDetail({
   const canEdit = status === 'planned' || status === 'ready' || status === 'failed';
   const canRemove = (status === 'planned' || status === 'ready') && detail?.sessions.length === 0;
   const mine = Boolean(detail?.task.worktree?.endsWith('-manual'));
-  const openCli = async (cli: TerminalCli) => {
+  const openCli = async (cli: TerminalCli, start = false) => {
     setProblem(undefined);
     try {
-      await openTerminal(taskId, cli);
+      await openTerminal(taskId, cli, start);
       setPicked('terminal');
       setTick((t) => t + 1);
     } catch (err) {
@@ -222,14 +222,21 @@ export function TaskDetail({
                 label="Take over"
                 icon={<Terminal className="size-3.5" />}
                 title="Stop the agent and work on it yourself in a real terminal"
-                items={CLIS.map((c) => ({
-                  label: c.cli === 'shell' ? c.label : `Open ${c.label}`,
-                  hint:
-                    c.cli === 'shell'
-                      ? "A shell in the task's folder"
-                      : "Its own screen, in the task's folder",
-                  onSelect: () => void openCli(c.cli),
-                }))}
+                items={[
+                  ...CLIS.filter((c) => c.cli !== 'shell').map((c) => ({
+                    label: `Start ${c.label} on this task`,
+                    hint: 'Watch it work in its own screen. Uses tokens.',
+                    onSelect: () => void openCli(c.cli, true),
+                  })),
+                  ...CLIS.map((c) => ({
+                    label: c.cli === 'shell' ? c.label : `Open ${c.label} and wait`,
+                    hint:
+                      c.cli === 'shell'
+                        ? "A shell in the task's folder"
+                        : "Its own screen, idle, in the task's folder",
+                    onSelect: () => void openCli(c.cli),
+                  })),
+                ]}
               />
               <ActionButton
                 icon={StickyNote}
@@ -305,7 +312,20 @@ export function TaskDetail({
               {detail.task.note}
             </p>
           )}
-          {mine && status !== 'done' && (
+          {mine && working && (
+            <p
+              role="alert"
+              className="mt-3 rounded-xl border border-warn/40 bg-warn/10 p-3 text-[13px] leading-snug text-ink-2"
+            >
+              <b className="font-medium text-warn">
+                An agent is also running this task in the background.
+              </b>{' '}
+              What you see under Activity is that background run, not your terminal. If it succeeds
+              it merges its own result. Press <b className="font-medium">Stop</b> above if you want
+              to work on it yourself.
+            </p>
+          )}
+          {mine && !working && status !== 'done' && (
             <p className="mt-3 rounded-xl border border-brand/30 bg-brand/10 p-3 text-[13px] leading-snug text-ink-2">
               <b className="font-medium text-ink">You took this task over.</b> Puff will not run it.
               Work in its terminal, then press{' '}
@@ -659,7 +679,7 @@ function TerminalTab({
 }: {
   taskId: string;
   terms: ReturnType<typeof useTerminals>;
-  onOpen: (cli: TerminalCli) => Promise<void>;
+  onOpen: (cli: TerminalCli, start?: boolean) => Promise<void>;
   onLanded: () => void;
 }) {
   const [active, setActive] = useState<string>();
@@ -668,29 +688,48 @@ function TerminalTab({
   const [opening, setOpening] = useState(false);
   const current = terms.find((t) => t.info.id === active) ?? terms.at(-1);
 
-  const open = async (cli: TerminalCli) => {
+  const open = async (cli: TerminalCli, start = false) => {
     setOpening(true);
     try {
-      await onOpen(cli);
+      await onOpen(cli, start);
       setActive(undefined);
     } finally {
       setOpening(false);
     }
   };
 
+  const choice = (c: (typeof CLIS)[number], start: boolean) => (
+    <button
+      key={`${c.cli}-${start}`}
+      disabled={opening}
+      onClick={() => void open(c.cli, start)}
+      className="inline-flex items-center gap-2 rounded-xl border border-line-strong bg-surface-2 px-3.5 py-2 text-sm font-medium hover:bg-surface-3 disabled:opacity-50"
+    >
+      {c.cli === 'shell' ? <Terminal className="size-4" /> : <AgentMini cli={c.cli} />}
+      {c.cli === 'shell' ? c.label : start ? `Start ${c.label}` : `Open ${c.label}`}
+    </button>
+  );
   const picker = (
-    <div className="flex flex-wrap gap-2">
-      {CLIS.map((c) => (
-        <button
-          key={c.cli}
-          disabled={opening}
-          onClick={() => void open(c.cli)}
-          className="inline-flex items-center gap-2 rounded-xl border border-line-strong bg-surface-2 px-3.5 py-2 text-sm font-medium hover:bg-surface-3 disabled:opacity-50"
-        >
-          {c.cli === 'shell' ? <Terminal className="size-4" /> : <AgentMini cli={c.cli} />}
-          {c.cli === 'shell' ? c.label : `Open ${c.label}`}
-        </button>
-      ))}
+    <div className="flex flex-col gap-4">
+      <div>
+        <div className="mb-1.5 text-xs font-medium text-ink">
+          Start an agent on this task, in its own screen
+        </div>
+        <p className="mb-2 text-[12px] text-ink-3">
+          It begins working at once and you watch it in its real terminal. This uses tokens. When it
+          is done, press Verify and merge.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {CLIS.filter((c) => c.cli !== 'shell').map((c) => choice(c, true))}
+        </div>
+      </div>
+      <div>
+        <div className="mb-1.5 text-xs font-medium text-ink">Or open one and do it yourself</div>
+        <p className="mb-2 text-[12px] text-ink-3">
+          The program opens idle and waits for you. Nothing is sent until you type.
+        </p>
+        <div className="flex flex-wrap gap-2">{CLIS.map((c) => choice(c, false))}</div>
+      </div>
     </div>
   );
 
@@ -698,11 +737,11 @@ function TerminalTab({
     return (
       <div className="flex flex-col gap-5">
         <p className="text-sm leading-relaxed text-ink-2">
-          Work on this task yourself, in a real terminal. Puff stops the agent if it is running and
-          opens the program you choose, with its own screen, in the task's working folder. The
-          folder starts from the agent's last attempt, so you continue from there. When you are
-          done, press <b className="font-medium text-ink">Verify and merge my changes</b>: Puff runs
-          the project's tests on your work like it does for an agent, then merges it.
+          Work on this task in a real terminal. Puff stops the agent if it is running and opens the
+          program you choose, with its own screen, in the task's working folder. The folder starts
+          from the agent's last attempt, so you continue from there. When you are done, press{' '}
+          <b className="font-medium text-ink">Verify and merge my changes</b>: Puff runs the
+          project's tests on your work like it does for an agent, then merges it.
         </p>
         {picker}
         {opening && (
@@ -744,10 +783,17 @@ function TerminalTab({
           compact
           label="Another"
           icon={<Plus className="size-3" />}
-          items={CLIS.map((c) => ({
-            label: c.cli === 'shell' ? c.label : c.label,
-            onSelect: () => void open(c.cli),
-          }))}
+          items={[
+            ...CLIS.filter((c) => c.cli !== 'shell').map((c) => ({
+              label: `Start ${c.label} on the task`,
+              hint: 'Uses tokens',
+              onSelect: () => void open(c.cli, true),
+            })),
+            ...CLIS.map((c) => ({
+              label: c.cli === 'shell' ? c.label : `Open ${c.label} and wait`,
+              onSelect: () => void open(c.cli),
+            })),
+          ]}
         />
       </div>
 

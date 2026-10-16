@@ -25,8 +25,12 @@ puff.onEvent((e) => {
 });
 
 /** Take the task over in a real terminal running `cli` in its working folder. */
-export async function openTerminal(taskId: string, cli: TerminalCli): Promise<TerminalInfo> {
-  const info = await puff.openTerminal({ taskId, cli });
+export async function openTerminal(
+  taskId: string,
+  cli: TerminalCli,
+  start = false,
+): Promise<TerminalInfo> {
+  const info = await puff.openTerminal({ taskId, cli, start });
   store.set(info.id, { info, ended: false });
   changed();
   return info;
