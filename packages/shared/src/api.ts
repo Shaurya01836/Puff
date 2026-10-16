@@ -11,6 +11,7 @@ import type {
   PlanPreview,
   ManualResult,
   MemoryEvent,
+  MemoryItem,
   ProjectSummary,
   PuffEvent,
   RepoInspection,
@@ -94,6 +95,8 @@ export interface PuffApi {
   getPlanPreview(taskId: string): Promise<PlanPreview | undefined>;
   getGraph(projectId: string, focusId?: string, depth?: number): Promise<GraphData>;
   getMemoryFeed(projectId: string, limit?: number): Promise<MemoryEvent[]>;
+  /** Everything the team learned (failures, fixes, decisions, procedures), newest first, with state and trust */
+  listMemory(projectId: string): Promise<MemoryItem[]>;
   listAgents(projectId: string): Promise<AgentProfile[]>;
   /** Who worked on what, who handed what to whom, which agent asked for which task. Newest first. */
   getTeamTimeline(projectId: string, limit?: number): Promise<TeamEvent[]>;
@@ -185,6 +188,7 @@ export const PUFF_INVOKE_METHODS = [
   'getPlanPreview',
   'getGraph',
   'getMemoryFeed',
+  'listMemory',
   'listAgents',
   'getTeamTimeline',
   'getSavings',

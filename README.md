@@ -461,7 +461,7 @@ npm run dev
 | `npm run typecheck` · `npm test` · `npm run format` | Checks (also run in CI) |
 | `npm run build:desktop` | Build the Windows installer (`apps/desktop/release/Puff-Setup.exe`) |
 
-**UI work:** screens live in `apps/desktop/src/renderer/src/screens`. They only talk to `puff` (`lib/api.ts`), which is the `PuffApi` from `packages/shared`. Inside Electron they are served live from FalkorDB (the badge in the top bar says what is still sample data). In the browser-only mode (`npm run dev:web`) every call returns mock data from `packages/shared/src/mocks`. **Run team** runs the ready tasks through the same orchestrator as `puff run`, and the board, agent pool and memory graph update live.
+**UI work:** screens live in `apps/desktop/src/renderer/src/screens`. They only talk to `puff` (`lib/api.ts`), which is the `PuffApi` from `packages/shared`. Inside Electron they are served live from FalkorDB (the badge in the top bar says what is still sample data). In the browser-only mode (`npm run dev:web`) every call returns mock data from `packages/shared/src/mocks`. **Run team** runs the ready tasks through the same orchestrator as `puff run`, and the task list, agent pool and memory update live.
 
 Setup, configuration and deployment details: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#deployment)**.
 
@@ -508,7 +508,7 @@ Method, limits and how to reproduce: **[docs/BENCHMARK.md](docs/BENCHMARK.md)**.
 
 ```text
 puff/
-  apps/desktop        Electron + React UI (Board, Task detail, Memory graph, Agents)
+  apps/desktop        Electron + React UI (Tasks with the task panel, Memory, Agents)
   packages/core       indexer, graph queries, context compiler, router, scheduler, adapters
   packages/mcp        Puff MCP server (stdio)
   packages/shared     types, API contract, mock fixtures

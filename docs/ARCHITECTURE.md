@@ -28,7 +28,7 @@ The graph data model and every Cypher query are in **[GRAPH_SCHEMA.md](GRAPH_SCH
 ```mermaid
 flowchart TB
     subgraph UI["apps/desktop: Electron + React"]
-        B[Board] --- TD[Task detail] --- MG[Memory graph] --- AG[Agents + Savings]
+        B[Tasks + task panel] --- MG[Memory] --- AG[Agents + history + savings]
     end
 
     subgraph CORE["packages/core: Node + TypeScript"]
@@ -632,10 +632,10 @@ The full type definitions (`Task`, `SessionInfo`, `ContextPack`, `WhyPath`, `Gra
 
 | Screen | Contents |
 |---|---|
-| **Memory graph** (the demo opens here) | Force graph of the project. Nodes coloured by kind; the current task's neighbourhood highlighted; click a node → side panel; live **memory feed** column. |
-| **Board** | Columns: Planned · Running · Verifying · Failed/Retrying · Done. Cards show title, agent, role, worktree, tests passed, tokens, and **"waiting on …"** when blocked by overlap. "+ New goal" with agent: Auto / specific. |
-| **Task detail** | Agent output, changed files, **Context received** (items + reasons), **Why?** mini-graph, session history |
-| **Agents** | Pool cards (strengths, busy/free, success rate, average tokens) and the **savings meter** |
+| **Tasks** (the app opens here) | The task list next to the selected task's panel. Each row says what the graph decided about the task: the newest route or schedule reason from its traces (`Task.why`), or "load-bearing" from its risk. A Board view shows the same tasks in columns (Planned · Running · Verifying · Needs attention · Done). |
+| **Task panel** | Four tabs. **Live**: the agent's steps as they happen, and a real terminal when the person takes over. **Changes**: the diff and the merge preview (a plan shows its dry run). **Why**: the graph path, every decision with the Cypher it ran, and the context the agent was given with trust. **History**: every attempt. Stop, Switch agent, Take over, Add note, Mark done, Retry, Edit and Remove sit above the tabs. |
+| **Memory** | Every failure, fix, decision and procedure (`listMemory`, `queries/lessons.ts`): what it is about, who learned it, how often agents were given it, whether it still holds (current, possibly outdated, replaced, reverted, builds on a revert) and its trust with what moved it. The selected lesson is drawn with what is two steps from it, in rings, every node labelled. **Whole graph** shows the full force graph and the memory feed. |
+| **Agents** | Pool cards (strengths, busy or idle, success rate, what each knows per module), **Who did what** (sessions, handoffs, escalations) and the **savings meter** |
 
 Mascot states: **idle** (empty states) · **working** (agents running) · **happy** (verified) · **worried** (failure recorded).
 

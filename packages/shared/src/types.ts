@@ -250,6 +250,42 @@ export type MemoryEventType =
   | 'handoff'
   | 'context_compiled';
 
+/** What the team can learn: a failure, its fix, a decision about code, or a procedure */
+export type LessonKind = 'Failure' | 'Solution' | 'Decision' | 'Procedure';
+
+/**
+ * Whether a lesson still holds: current; possibly outdated (the code it is about changed); superseded (a newer
+ * decision replaced it); reverted (the merge it was learned in was undone); downgraded (it builds on a reverted one).
+ */
+export type MemoryState = 'current' | 'outdated' | 'superseded' | 'reverted' | 'downgraded';
+
+/** One thing the team learned, as the Memory screen lists it */
+export interface MemoryItem {
+  id: string;
+  kind: LessonKind;
+  text: string;
+  /** The functions (symbol ids) it is about; for a fix, the functions of the failure it fixed */
+  about: string[];
+  /** For a procedure: the technology it applies to, or the whole project */
+  appliesTo?: string;
+  /** When it was learned (a failure: when it was last hit) */
+  at: number;
+  /** The agent whose session it was learned in */
+  agent?: AgentName;
+  /** A failure: how many times agents hit it */
+  hits?: number;
+  /** How many agent prompts it was put in */
+  usedIn: number;
+  /** A failure's newest fix, the failure a fix fixed, or the decision a decision replaced */
+  related?: { id: string; text: string };
+  state: MemoryState;
+  /** 0 to 1 for failures and decisions (Q24), with what moved it */
+  trust?: number;
+  trustWhy?: string[];
+  /** Sample memory written by `puff seed` */
+  seeded?: boolean;
+}
+
 export interface MemoryEvent {
   id: string;
   at: number;

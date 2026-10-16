@@ -11,14 +11,7 @@ import {
   Terminal,
   X,
 } from 'lucide-react';
-import {
-  matchCommands,
-  type AgentName,
-  type ChatInfo,
-  type ChatMessage,
-  type TeamEvent,
-} from '@puff/shared';
-import { Team } from '@/screens/Team';
+import { matchCommands, type AgentName, type ChatInfo, type ChatMessage } from '@puff/shared';
 import { cn } from '@/lib/cn';
 import { formatTokens } from '@/lib/theme';
 import { PuffMark } from './landing/puff-logo';
@@ -42,11 +35,6 @@ export function ChatPanel({
   onReset,
   onSetAgent,
   onClose,
-  tab,
-  onTab,
-  team,
-  onOpenTask,
-  teamBusy,
 }: {
   open?: boolean;
   messages: ChatMessage[];
@@ -59,13 +47,6 @@ export function ChatPanel({
   /** Talk to a different agent */
   onSetAgent: (agent: AgentName) => void;
   onClose: () => void;
-  /** Which half of the panel shows: the conversation, or what the team has been doing */
-  tab: 'chat' | 'team';
-  onTab: (tab: 'chat' | 'team') => void;
-  team?: TeamEvent[];
-  onOpenTask: (taskId: string) => void;
-  /** Agents are working right now (a pulse on the Team tab) */
-  teamBusy: boolean;
 }) {
   const [text, setText] = useState('');
   const [pick, setPick] = useState(0);
@@ -182,7 +163,7 @@ export function ChatPanel({
           </div>
           <div className="flex items-center gap-1.5 truncate font-mono text-[10px] text-slate-400">
             <span>Talking to</span>
-            {info?.choices && info.agent && tab === 'chat' ? (
+            {info?.choices && info.agent ? (
               <select
                 value={info.agent}
                 onChange={(e) => onSetAgent(e.target.value as AgentName)}
@@ -206,7 +187,7 @@ export function ChatPanel({
         </div>
 
         <div className="flex items-center gap-1">
-          {tab === 'chat' && (
+          {
             <button
               onClick={onReset}
               title="Start a new conversation"
@@ -215,7 +196,7 @@ export function ChatPanel({
             >
               <RotateCcw className="size-3.5" />
             </button>
-          )}
+          }
           <button
             onClick={onClose}
             title="Close panel (Esc)"
@@ -227,45 +208,7 @@ export function ChatPanel({
         </div>
       </header>
 
-      {/* Tabs */}
-      <div
-        role="tablist"
-        aria-label="Panel"
-        className="flex gap-1 border-b border-line bg-surface-2/40 px-4"
-      >
-        {(
-          [
-            ['chat', 'Ask Puff'],
-            ['team', 'Team'],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            role="tab"
-            aria-selected={tab === id}
-            onClick={() => onTab(id)}
-            className={cn(
-              '-mb-px border-b-2 px-3 py-2 text-xs font-medium transition-colors',
-              tab === id
-                ? 'border-emerald-400 text-white font-semibold'
-                : 'border-transparent text-slate-400 hover:text-slate-200',
-            )}
-          >
-            {label}
-            {id === 'team' && teamBusy && (
-              <span className="ml-1.5 inline-block size-1.5 animate-pulse rounded-full bg-emerald-400 align-middle" />
-            )}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'team' && (
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <Team compact events={team} onOpenTask={onOpenTask} />
-        </div>
-      )}
-
-      {tab === 'chat' && info && (!info.ready || info.needsSignIn) && (
+      {info && (!info.ready || info.needsSignIn) && (
         <div className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 font-mono text-[11px] leading-snug text-amber-300">
           <p>{info.note ?? `${info.brain} is not available.`}</p>
           {info.needsSignIn && (
@@ -282,7 +225,7 @@ export function ChatPanel({
       )}
 
       {/* Messages Feed */}
-      {tab === 'chat' && (
+      {
         <div
           ref={messagesBoxRef}
           className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
@@ -347,10 +290,10 @@ export function ChatPanel({
           )}
           {error && <p className="mt-3 font-mono text-xs text-red-400">{error}</p>}
         </div>
-      )}
+      }
 
       {/* Input Dock */}
-      {tab === 'chat' && (
+      {
         <div className="relative border-t border-line bg-surface-2/80 p-3 backdrop-blur-md">
           {completions.length > 0 && (
             <ul
@@ -418,7 +361,7 @@ export function ChatPanel({
             </div>
           </div>
         </div>
-      )}
+      }
     </aside>
   );
 }

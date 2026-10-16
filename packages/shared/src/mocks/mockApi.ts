@@ -17,6 +17,7 @@ import {
   MOCK_PROJECT_ID,
   mockAgents,
   mockContextPack,
+  mockMemory,
   mockMemoryEvents,
   mockSavings,
   mockSessions,
@@ -607,6 +608,9 @@ export function createMockApi(opts: MockApiOptions = {}): PuffApi {
     },
     async getMemoryFeed(_projectId, limit = 50) {
       return clone(feed.slice(0, limit));
+    },
+    async listMemory() {
+      return clone(mockMemory);
     },
     async getTeamTimeline(_projectId, limit = 60) {
       return clone(mockTeamTimeline.slice(0, limit));

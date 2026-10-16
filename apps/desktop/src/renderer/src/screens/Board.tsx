@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import type { AgentName, Task, TaskStatus, TrailEntry } from '@puff/shared';
 import type { SymbolOption } from '@/components/NewTaskDialog';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AgentAvatar, AgentChip, StatusPill, WaitingChip } from '@/components/ui';
 import { Menu } from '@/components/Menu';
 import { cn } from '@/lib/cn';
@@ -255,13 +256,15 @@ export function Board({
           </ul>
           <div className="min-h-0 min-w-0">
             {selected ? (
-              <TaskPanel
-                key={selected.id}
-                taskId={selected.id}
-                symbols={symbols}
-                showTerminal={terminalFor === selected.id}
-                onRemoved={() => onSelect(undefined)}
-              />
+              <ErrorBoundary resetKey={selected.id} label="This task's panel">
+                <TaskPanel
+                  key={selected.id}
+                  taskId={selected.id}
+                  symbols={symbols}
+                  showTerminal={terminalFor === selected.id}
+                  onRemoved={() => onSelect(undefined)}
+                />
+              </ErrorBoundary>
             ) : (
               <div className="grid h-full place-items-center text-sm text-slate-500">
                 Pick a task to see what its agent is doing

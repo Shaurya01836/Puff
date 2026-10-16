@@ -1,7 +1,8 @@
 import { ArrowDown, ArrowUp } from 'lucide-react';
-import type { AgentProfile, Savings } from '@puff/shared';
+import type { AgentProfile, Savings, TeamEvent } from '@puff/shared';
 import { ClaudeMark, OpenAIMark, OpenCodeMark } from '@/components/landing/agent-logos';
 import { Panel, SectionTitle } from '@/components/ui';
+import { Team } from '@/screens/Team';
 import { cn } from '@/lib/cn';
 import { AGENT_META, formatTokens } from '@/lib/theme';
 
@@ -9,24 +10,25 @@ export function Agents({
   agents,
   savings,
   mock,
+  timeline,
+  onOpenTask,
 }: {
   agents?: AgentProfile[];
   savings?: Savings;
   mock: boolean;
+  /** Who worked on what, handed what to whom and escalated what: the team's history */
+  timeline?: TeamEvent[];
+  onOpenTask: (taskId: string) => void;
 }) {
-  const connectedCount = agents?.length ?? 3;
+  const busy = agents?.reduce((n, a) => n + a.busy, 0) ?? 0;
 
   return (
     <div className="flex flex-col gap-6 overflow-y-auto p-6">
       {/* View Title matching Screenshot 3 */}
       <div className="flex items-center gap-3 border-b border-line pb-4">
         <h2 className="font-display text-xl font-bold tracking-tight text-white">Agents</h2>
-        <span className="font-mono text-xs uppercase tracking-widest text-slate-400">
-          {connectedCount} connected
-        </span>
-        <span className="inline-flex items-center gap-1.5 font-mono text-xs uppercase tracking-widest text-emerald-400">
-          <span className="size-1.5 animate-pulse-dot rounded-full bg-emerald-400" />
-          live
+        <span className="text-xs text-slate-400">
+          {agents?.length ?? 0} in the pool · {busy} working now
         </span>
       </div>
 
@@ -36,6 +38,11 @@ export function Agents({
             <AgentCard key={a.name} agent={a} />
           ))}
         </div>
+      </section>
+
+      <section>
+        <SectionTitle>Who did what</SectionTitle>
+        <Team compact events={timeline} onOpenTask={onOpenTask} />
       </section>
 
       {savings && <SavingsSection savings={savings} mock={mock} />}
@@ -52,9 +59,8 @@ function AgentCard({ agent: a }: { agent: AgentProfile }) {
         ? OpenAIMark
         : OpenCodeMark;
 
-  const successRate = Math.round((a.stats.successRate || 0.9) * 100);
-  const tasksHandled = a.stats.runs || a.stats.wins || (a.name === 'codex' ? 4 : a.name === 'opencode' ? 2 : 3);
-  const isOnline = true;
+  const runs = a.stats.runs;
+  const successRate = runs ? `${Math.round(a.stats.successRate * 100)}%` : 'no runs yet';
 
   return (
     <div className="relative overflow-hidden border border-line bg-surface p-5 transition-colors hover:border-line-strong">
@@ -91,18 +97,23 @@ function AgentCard({ agent: a }: { agent: AgentProfile }) {
       <dl className="mt-5 space-y-2.5 font-mono text-xs">
         <div className="flex items-center justify-between border-b border-line/60 pb-2">
           <dt className="text-slate-500">status</dt>
-          <dd className="inline-flex items-center gap-1.5 font-medium text-emerald-400">
-            <span className="size-1.5 animate-pulse-dot rounded-full bg-emerald-400" />
-            {a.busy > 0 ? `${a.busy} running` : 'online'}
+          <dd
+            className={cn(
+              'inline-flex items-center gap-1.5 font-medium',
+              a.busy > 0 ? 'text-emerald-400' : 'text-slate-400',
+            )}
+          >
+            {a.busy > 0 && <span className="size-1.5 animate-pulse-dot rounded-full bg-emerald-400" />}
+            {a.busy > 0 ? `${a.busy} running` : 'idle'}
           </dd>
         </div>
         <div className="flex items-center justify-between border-b border-line/60 pb-2">
           <dt className="text-slate-500">success rate</dt>
-          <dd className="font-semibold tabular-nums text-slate-200">{successRate}%</dd>
+          <dd className="font-semibold tabular-nums text-slate-200">{successRate}</dd>
         </div>
         <div className="flex items-center justify-between border-b border-line/60 pb-2">
-          <dt className="text-slate-500">tasks handled</dt>
-          <dd className="font-semibold tabular-nums text-slate-200">{tasksHandled}</dd>
+          <dt className="text-slate-500">runs finished</dt>
+          <dd className="font-semibold tabular-nums text-slate-200">{runs}</dd>
         </div>
         <div className="flex items-center justify-between pt-0.5">
           <dt className="text-slate-500">instances</dt>

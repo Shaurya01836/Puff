@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import { Bot, GitBranch, LayoutList, Network, Settings, Users } from 'lucide-react';
+import { Bot, GitBranch, LayoutList, Network, Settings } from 'lucide-react';
 import type { AgentProfile, BackendInfo, ProjectSummary } from '@puff/shared';
 import { PuffMark } from '@/components/landing/puff-logo';
 import { cn } from '@/lib/cn';
@@ -8,7 +8,7 @@ import { Mascot, MASCOT_LINES, type MascotState } from './Mascot';
 import { ProjectSwitcher } from './ProjectSwitcher';
 import { AgentAvatar } from './ui';
 
-export type Screen = 'graph' | 'board' | 'team' | 'agents';
+export type Screen = 'board' | 'memory' | 'agents';
 
 const NAV: {
   id: Screen;
@@ -16,10 +16,9 @@ const NAV: {
   hint: string;
   icon: ComponentType<{ className?: string }>;
 }[] = [
-  { id: 'board', label: 'Tasks', hint: 'Tasks across agents', icon: LayoutList },
-  { id: 'graph', label: 'Graph', hint: 'Code + what the team learned', icon: Network },
-  { id: 'agents', label: 'Agents', hint: 'Pool, routing, savings', icon: Bot },
-  { id: 'team', label: 'Team', hint: 'Who handed what to whom', icon: Users },
+  { id: 'board', label: 'Tasks', hint: 'What each agent is doing', icon: LayoutList },
+  { id: 'memory', label: 'Memory', hint: 'What the team learned, and whether it holds', icon: Network },
+  { id: 'agents', label: 'Agents', hint: 'Pool, records, who did what', icon: Bot },
 ];
 
 export function Sidebar({

@@ -4,6 +4,7 @@ import { MOCK_PROJECT_ID } from '@puff/shared/mocks';
 import type { MascotState } from '@/components/Mascot';
 import { Sidebar, type Screen } from '@/components/Sidebar';
 import { TopBar } from '@/components/TopBar';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Notice } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { puff } from '@/lib/api';
@@ -13,17 +14,15 @@ import { ChatPanel } from '@/components/ChatPanel';
 import { ImportProjectDialog, ProjectSettingsDialog } from '@/components/ProjectDialogs';
 import { Agents } from '@/screens/Agents';
 import { Board, type BoardAction } from '@/screens/Board';
-import { MemoryGraph } from '@/screens/MemoryGraph';
-import { Team } from '@/screens/Team';
+import { Memory } from '@/screens/Memory';
 import { Setup } from '@/screens/Setup';
 import { Welcome } from '@/screens/Welcome';
 import pkg from '../../../package.json';
 
 const TITLES: Record<Screen, { title: string; subtitle: string }> = {
-  graph: { title: 'Memory graph', subtitle: 'Code and what the team learned about it' },
+  memory: { title: 'Memory', subtitle: 'What the team learned, and whether it still holds' },
   board: { title: 'Tasks', subtitle: 'What each agent is doing, and why the graph chose it' },
-  team: { title: 'Team', subtitle: 'Who did what, and who handed what to whom' },
-  agents: { title: 'Agents', subtitle: 'Strengths, results and savings' },
+  agents: { title: 'Agents', subtitle: 'Strengths, records and who did what' },
 };
 
 /** The app's own version, shown in the status bar */
@@ -57,8 +56,6 @@ export function App() {
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
-  /** The side panel has two halves: the conversation with Puff, and what the team has been doing */
-  const [panelTab, setPanelTab] = useState<'chat' | 'team'>('chat');
   /** Bumped when a sign-in finished, so the agent list is read again */
   const [setupTick, setSetupTick] = useState(0);
   const [settingsFor, setSettingsFor] = useState<ProjectSummary>();
@@ -312,40 +309,45 @@ export function App() {
             }
           />
           <div className="min-h-0 flex-1 overflow-auto">
-            {info?.noProject && (
-              <Welcome
-                onAdd={() => setImportOpen(true)}
-                agents={setup?.agents}
-                onRefresh={() => setSetupTick((t) => t + 1)}
-              />
-            )}
-            {!info?.noProject && screen === 'graph' && (
-              <MemoryGraph
-                projectId={projectId}
-                graph={graph}
-                feedIsSample={!live || info.seeded === true}
-              />
-            )}
-            {!info?.noProject && screen === 'board' && (
-              <Board
-                tasks={tasks}
-                selectedId={selectedTask}
-                onSelect={(id) => {
-                  setSelectedTask(id);
-                  if (id !== terminalFor) setTerminalFor(undefined);
-                }}
-                terminalFor={terminalFor}
-                symbols={symbols}
-                onAction={boardAction}
-                onHint={(text) => setNotice({ tone: 'warn', text })}
-              />
-            )}
-            {!info?.noProject && screen === 'team' && (
-              <Team events={timeline} onOpenTask={openTask} />
-            )}
-            {!info?.noProject && screen === 'agents' && (
-              <Agents agents={agents} savings={savings} mock={savingsMocked} />
-            )}
+            <ErrorBoundary resetKey={screen} label="This screen">
+              {info?.noProject && (
+                <Welcome
+                  onAdd={() => setImportOpen(true)}
+                  agents={setup?.agents}
+                  onRefresh={() => setSetupTick((t) => t + 1)}
+                />
+              )}
+              {!info?.noProject && screen === 'memory' && (
+                <Memory
+                  projectId={projectId}
+                  graph={graph}
+                  feedIsSample={!live || info.seeded === true}
+                />
+              )}
+              {!info?.noProject && screen === 'board' && (
+                <Board
+                  tasks={tasks}
+                  selectedId={selectedTask}
+                  onSelect={(id) => {
+                    setSelectedTask(id);
+                    if (id !== terminalFor) setTerminalFor(undefined);
+                  }}
+                  terminalFor={terminalFor}
+                  symbols={symbols}
+                  onAction={boardAction}
+                  onHint={(text) => setNotice({ tone: 'warn', text })}
+                />
+              )}
+              {!info?.noProject && screen === 'agents' && (
+                <Agents
+                  agents={agents}
+                  savings={savings}
+                  mock={savingsMocked}
+                  timeline={timeline}
+                  onOpenTask={openTask}
+                />
+              )}
+            </ErrorBoundary>
           </div>
         </main>
 
@@ -361,11 +363,6 @@ export function App() {
           onReset={() => void chat.reset()}
           onSetAgent={(agent) => void chat.setAgent(agent)}
           onClose={() => setChatOpen(false)}
-          tab={panelTab}
-          onTab={setPanelTab}
-          team={timeline}
-          onOpenTask={openTask}
-          teamBusy={tasks.some((t) => t.status === 'running' || t.status === 'verifying')}
         />
       </div>
 
@@ -404,7 +401,7 @@ export function App() {
           onAdd={async (input) => {
             const added = await puff.addProject(input);
             reloadProjects();
-            setScreen('graph');
+            setScreen('memory');
             setNotice({ tone: 'good', text: `${added.name} added and indexed.` });
           }}
         />

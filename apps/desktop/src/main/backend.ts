@@ -25,6 +25,7 @@ import {
   findProject,
   getContextPack,
   getMemoryFeed,
+  listMemory,
   getTask,
   getTeamTimeline,
   getWhy,
@@ -630,6 +631,9 @@ async function buildLive(
     },
     async getMemoryFeed(_projectId, limit) {
       return current ? getMemoryFeed(current.graph, limit) : [];
+    },
+    async listMemory() {
+      return current ? listMemory(current.graph) : [];
     },
     async listAgents() {
       return current ? agentProfiles(current.graph, current.config) : [];
