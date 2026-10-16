@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type {
   ActivityStep,
+  AgentName,
   ChatInfo,
   ChatMessage,
   MemoryEvent,
@@ -144,6 +145,16 @@ export function useChat(projectKey: string) {
     reset: async () => {
       await run(() => puff.chatReset());
       setMessages([]);
+    },
+    /** Talk to a different agent: a fresh conversation with it */
+    setAgent: async (agent: AgentName) => {
+      setError(undefined);
+      try {
+        setInfo(await puff.chatSetAgent(agent));
+        setMessages([]);
+      } catch (err) {
+        setError((err as Error).message);
+      }
     },
   };
 }

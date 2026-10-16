@@ -3,6 +3,7 @@
 import type { PuffApi } from '../api';
 import type {
   ActivityStep,
+  AgentName,
   ChatMessage,
   MemoryEvent,
   ProjectSummary,
@@ -62,6 +63,20 @@ export interface MockApiOptions {
   databaseDown?: boolean;
 }
 
+const AGENT_NAMES_SAMPLE: { id: AgentName; label: string; installed: boolean }[] = [
+  { id: 'claude-code', label: 'Claude Code', installed: true },
+  { id: 'codex', label: 'Codex', installed: true },
+  { id: 'opencode', label: 'OpenCode', installed: true },
+];
+
+const sampleChatInfo = (agent: AgentName) => ({
+  brain: `${AGENT_NAMES_SAMPLE.find((a) => a.id === agent)?.label} (sample)`,
+  ready: true,
+  autoApprove: false,
+  agent,
+  choices: AGENT_NAMES_SAMPLE,
+});
+
 const sampleSetup = (databaseOk: boolean, claudeSignedIn = true): SetupStatus => ({
   databaseOk,
   databaseUrl: 'falkor://localhost:6379',
@@ -100,6 +115,8 @@ const sampleSetup = (databaseOk: boolean, claudeSignedIn = true): SetupStatus =>
 export function createMockApi(opts: MockApiOptions = {}): PuffApi {
   const tickMs = opts.tickMs ?? 2500;
   let databaseUp = !opts.databaseDown;
+  /** The agent the sample chat talks to (changed from the panel's picker) */
+  let chatAgent: AgentName = 'claude-code';
   /** What each sample terminal has printed, so a view that opens late catches up (like the real host) */
   const termOut = new Map<string, { text: string; end: number }>();
   const termPrint = (id: string, data: string) => {
@@ -335,7 +352,12 @@ export function createMockApi(opts: MockApiOptions = {}): PuffApi {
     },
     // ---- chat: scripted, so the panel can be designed without an agent ---------------------------
     async chatInfo() {
-      return { brain: 'Claude Code (sample)', ready: true, autoApprove: false };
+      return sampleChatInfo(chatAgent);
+    },
+    async chatSetAgent(agent) {
+      chatAgent = agent;
+      chat.length = 0;
+      return sampleChatInfo(agent);
     },
     async chatHistory() {
       return clone(chat);

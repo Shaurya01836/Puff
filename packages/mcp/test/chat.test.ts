@@ -26,12 +26,15 @@ import {
 } from '@puff/core';
 import type { ChatMessage, PuffEvent } from '@puff/shared';
 import {
+  ActionBrain,
   ChatSession,
   ClaudeCodeBrain,
   claudeArgs,
   describeBrainError,
   hostMcp,
   orchestratorPrompt,
+  parseCalls,
+  type AgentRun,
   type BrainInput,
   type BrainReply,
   type ChatBrain,
@@ -157,6 +160,68 @@ describe('Claude Code command line', () => {
     expect(p).toMatch(/do not write or edit code/i);
     expect(p).toMatch(/request_run/);
     expect(p).toMatch(/cannot delete/i);
+  });
+});
+
+describe('asking an agent that cannot use tools directly (Codex, OpenCode)', () => {
+  const known = new Set(['list_tasks', 'create_task', 'team_status']);
+
+  it('reads the calls the agent asked for, and shows the person only the words around them', () => {
+    const out = parseCalls(
+      'Let me look.\n<puff-calls>[{"tool":"list_tasks","args":{}},{"tool":"create_task","args":{"title":"x"}}]</puff-calls>',
+      known,
+    );
+    expect(out.visible).toBe('Let me look.');
+    expect(out.calls).toEqual([
+      { tool: 'list_tasks', args: {} },
+      { tool: 'create_task', args: { title: 'x' } },
+    ]);
+    expect(out.problems).toEqual([]);
+  });
+
+  it('copes with a code fence, a single object, and reasoning tags', () => {
+    const out = parseCalls(
+      '<think>hmm</think>ok <puff-calls>```json\n{"tool":"team_status"}\n```</puff-calls>',
+      known,
+    );
+    expect(out.visible).toBe('ok');
+    expect(out.calls).toEqual([{ tool: 'team_status', args: {} }]);
+  });
+
+  it('never runs a tool that does not exist, bad JSON, or more than five calls', () => {
+    expect(
+      parseCalls('<puff-calls>[{"tool":"delete_everything"}]</puff-calls>', known),
+    ).toMatchObject({
+      calls: [],
+      problems: [expect.stringContaining('delete_everything')],
+    });
+    expect(parseCalls('<puff-calls>[{oops</puff-calls>', known)).toMatchObject({
+      calls: [],
+      problems: [expect.stringContaining('not valid JSON')],
+    });
+    const many = Array.from({ length: 8 }, () => ({ tool: 'list_tasks' }));
+    const out = parseCalls(`<puff-calls>${JSON.stringify(many)}</puff-calls>`, known);
+    expect(out.calls).toHaveLength(5);
+    expect(out.problems[0]).toContain('At most 5');
+  });
+
+  it('recovers calls from a model that mangled the tag into its own tool-call syntax', () => {
+    const out = parseCalls(
+      '<tool_call><function=pash-calls>[{"tool":"list_tasks","args":{}}]</parameter></function></tool_call>\n\nNo tasks yet.',
+      known,
+    );
+    expect(out.calls).toEqual([{ tool: 'list_tasks', args: {} }]);
+    expect(out.visible).toBe('No tasks yet.');
+    // and a leftover tag never reaches the person
+    expect(parseCalls('Fine.</function></tool_call>', known).visible).toBe('Fine.');
+  });
+
+  it('treats an answer with no block as just an answer', () => {
+    expect(parseCalls('All good.', known)).toEqual({
+      visible: 'All good.',
+      calls: [],
+      problems: [],
+    });
   });
 });
 
@@ -612,6 +677,56 @@ describe.skipIf(!db)('the chat session (real tools, scripted agent)', () => {
     release();
     await first;
     expect(session.history.at(-1)!.text).toBe('late');
+  }, 60_000);
+
+  it('lets an agent without tools run Puff tools through the same guardrails, and feeds the results back', async () => {
+    const { chat, controller, chatMessages } = await fixture();
+    const prompts: string[] = [];
+    const run: AgentRun = async (prompt) => {
+      prompts.push(prompt);
+      if (prompts.length === 1) {
+        return {
+          text: 'Adding it.\n<puff-calls>[{"tool":"create_task","args":{"title":"Document login","type":"chore","targets":["login"]}},{"tool":"delete_task","args":{"id":"x"}}]</puff-calls>',
+          tokens: { in: 50, out: 5 },
+        };
+      }
+      return { text: 'Added "Document login".', tokens: { in: 60, out: 6 } };
+    };
+    const brain = new ActionBrain('Codex', run, async () => ({ ok: true }));
+    const session = chat(brain);
+    await session.send('document the login');
+
+    expect((await controller.tasks()).map((t) => t.title)).toEqual(['Document login']);
+    // the second round saw the real result of the call and the complaint about the made-up tool
+    expect(prompts[1]).toContain('create_task(');
+    expect(prompts[1]).toContain('"delete_task" is not one of the tools');
+    expect(chatMessages().map((m) => `${m.role}:${m.tool ?? ''}`)).toEqual([
+      'user:',
+      'action:create_task',
+      'assistant:',
+    ]);
+    const answer = chatMessages().at(-1)!;
+    expect(answer.text).toBe('Added "Document login".');
+    expect(answer.tokens).toEqual({ in: 110, out: 11 });
+
+    // the next message continues the conversation; a reset forgets it
+    await session.send('thanks');
+    expect(prompts.at(-1)).toContain('PERSON: document the login');
+    session.reset();
+    await session.send('hello again');
+    expect(prompts.at(-1)).not.toContain('PERSON: document the login');
+  }, 60_000);
+
+  it('reports an agent error as an error, not as an answer', async () => {
+    const { chat, chatMessages } = await fixture();
+    const brain = new ActionBrain(
+      'OpenCode',
+      async () => ({ text: '', error: { kind: 'auth', message: 'not signed in' } }),
+      async () => ({ ok: true }),
+    );
+    await chat(brain).send('hi');
+    expect(chatMessages().at(-1)!.role).not.toBe('user');
+    expect(chatMessages().at(-1)!.text.toLowerCase()).toContain('sign');
   }, 60_000);
 
   it('reports whether the agent can be asked', async () => {

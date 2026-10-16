@@ -5,3 +5,5 @@ export * from './tools';
 export * from './control';
 export * from './http';
 export * from './chat';
+export * from './action-brain';
+export * from './brains';

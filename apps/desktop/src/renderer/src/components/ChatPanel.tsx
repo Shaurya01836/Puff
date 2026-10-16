@@ -11,7 +11,13 @@ import {
   Terminal,
   X,
 } from 'lucide-react';
-import { matchCommands, type ChatInfo, type ChatMessage, type TeamEvent } from '@puff/shared';
+import {
+  matchCommands,
+  type AgentName,
+  type ChatInfo,
+  type ChatMessage,
+  type TeamEvent,
+} from '@puff/shared';
 import { Team } from '@/screens/Team';
 import { cn } from '@/lib/cn';
 import { formatTokens } from '@/lib/theme';
@@ -34,6 +40,7 @@ export function ChatPanel({
   onSend,
   onApprove,
   onReset,
+  onSetAgent,
   onClose,
   tab,
   onTab,
@@ -49,6 +56,8 @@ export function ChatPanel({
   onSend: (text: string) => void;
   onApprove: (approvalId: string, approve: boolean) => void;
   onReset: () => void;
+  /** Talk to a different agent */
+  onSetAgent: (agent: AgentName) => void;
   onClose: () => void;
   /** Which half of the panel shows: the conversation, or what the team has been doing */
   tab: 'chat' | 'team';
@@ -163,15 +172,36 @@ export function ChatPanel({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="font-display text-xs font-bold tracking-tight text-white">Ask Puff</span>
+            <span className="font-display text-xs font-bold tracking-tight text-white">
+              Ask Puff
+            </span>
             <span className="inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/15 px-1.5 py-0.2 font-mono text-[9px] font-semibold uppercase tracking-wider text-emerald-400">
               <span className="size-1 rounded-full bg-emerald-400 animate-pulse-dot" />
               Agent
             </span>
           </div>
-          <div className="truncate font-mono text-[10px] text-slate-400">
-            {info ? `Orchestrator: ${info.brain}` : 'Orchestrator'}
-            {info?.autoApprove ? ' · auto-run enabled' : ''}
+          <div className="flex items-center gap-1.5 truncate font-mono text-[10px] text-slate-400">
+            <span>Talking to</span>
+            {info?.choices && info.agent && tab === 'chat' ? (
+              <select
+                value={info.agent}
+                onChange={(e) => onSetAgent(e.target.value as AgentName)}
+                disabled={busy}
+                aria-label="Which agent answers"
+                title="Which agent answers in Ask Puff. Changing it starts a new conversation."
+                className="rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[10px] text-slate-200 outline-none focus:border-emerald-500/60 disabled:opacity-50"
+              >
+                {info.choices.map((c) => (
+                  <option key={c.id} value={c.id} disabled={!c.installed}>
+                    {c.label}
+                    {c.installed ? '' : ' (not installed)'}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="text-slate-200">{info?.brain ?? 'your agent'}</span>
+            )}
+            {info?.autoApprove ? <span>· auto-run enabled</span> : null}
           </div>
         </div>
 
@@ -198,7 +228,11 @@ export function ChatPanel({
       </header>
 
       {/* Tabs */}
-      <div role="tablist" aria-label="Panel" className="flex gap-1 border-b border-line bg-surface-2/40 px-4">
+      <div
+        role="tablist"
+        aria-label="Panel"
+        className="flex gap-1 border-b border-line bg-surface-2/40 px-4"
+      >
         {(
           [
             ['chat', 'Ask Puff'],
@@ -262,10 +296,12 @@ export function ChatPanel({
                   Orchestrate your team
                 </div>
                 <p className="mt-1.5 text-xs leading-relaxed text-slate-300">
-                  Tell Puff what you want in plain words. It coordinates Claude Code, Codex, and OpenCode, writes goals, and reviews graph diffs.
+                  Tell Puff what you want in plain words. It coordinates Claude Code, Codex, and
+                  OpenCode, writes goals, and reviews graph diffs.
                 </p>
                 <p className="mt-2 font-mono text-[11px] text-slate-400">
-                  Start with <b className="font-semibold text-emerald-400">/</b> for instant zero-token commands.
+                  Start with <b className="font-semibold text-emerald-400">/</b> for instant
+                  zero-token commands.
                 </p>
               </div>
 
@@ -281,7 +317,11 @@ export function ChatPanel({
                       onClick={() => (s.startsWith('/') ? send(s) : setText(s))}
                       className="group flex items-center justify-between rounded-lg border border-line bg-surface-2 px-3 py-2 text-left text-xs text-slate-300 hover:border-emerald-500/40 hover:bg-surface-3 hover:text-white transition-all"
                     >
-                      <span className={cn(s.startsWith('/') ? 'font-mono text-emerald-400' : 'text-slate-200')}>
+                      <span
+                        className={cn(
+                          s.startsWith('/') ? 'font-mono text-emerald-400' : 'text-slate-200',
+                        )}
+                      >
                         {s}
                       </span>
                       <CornerDownLeft className="size-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -332,11 +372,17 @@ export function ChatPanel({
                       i === pick ? 'bg-surface-3' : 'hover:bg-surface-2',
                     )}
                   >
-                    <span className="font-mono text-xs font-semibold text-emerald-400">{c.usage}</span>
+                    <span className="font-mono text-xs font-semibold text-emerald-400">
+                      {c.usage}
+                    </span>
                     <span className="min-w-0 flex-1 truncate text-[11px] text-slate-300">
                       {c.summary}
                     </span>
-                    {c.spends && <span className="font-mono text-[9px] uppercase tracking-wider text-amber-400">tokens</span>}
+                    {c.spends && (
+                      <span className="font-mono text-[9px] uppercase tracking-wider text-amber-400">
+                        tokens
+                      </span>
+                    )}
                   </button>
                 </li>
               ))}
@@ -390,7 +436,9 @@ function Bubble({
         <div className="rounded-xl rounded-br-xs border border-emerald-500/30 bg-emerald-950/40 px-3.5 py-2.5 text-xs leading-relaxed text-emerald-100 shadow-sm backdrop-blur-sm whitespace-pre-wrap">
           {m.text}
         </div>
-        <span className="mt-1 font-mono text-[9px] uppercase tracking-wider text-slate-500">You</span>
+        <span className="mt-1 font-mono text-[9px] uppercase tracking-wider text-slate-500">
+          You
+        </span>
       </div>
     );
   }

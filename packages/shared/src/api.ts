@@ -102,6 +102,8 @@ export interface PuffApi {
   chatApprove(approvalId: string, approve: boolean): Promise<void>;
   /** Start a fresh conversation */
   chatReset(): Promise<void>;
+  /** Talk to a different agent in Ask Puff (remembered for next time). Starts a fresh conversation. */
+  chatSetAgent(agent: AgentName): Promise<ChatInfo>;
   /** Stop one task: its agent is killed and it shows as failed, ready to retry. The rest of the team goes on. */
   stopTask(taskId: string): Promise<Task>;
   /** Give a task to another agent (and model): stops it if it runs, puts it back in the queue */
@@ -179,6 +181,7 @@ export const PUFF_INVOKE_METHODS = [
   'chatSend',
   'chatApprove',
   'chatReset',
+  'chatSetAgent',
   'stopTask',
   'reassignTask',
   'markTaskDone',

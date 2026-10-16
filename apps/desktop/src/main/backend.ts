@@ -43,6 +43,7 @@ import {
   removeProject as removeFromRegistry,
   savingsFromBench,
   setActiveProject,
+  saveUserEnv,
   setWasmDirectory,
   SignInManager,
   startDatabase,
@@ -54,7 +55,7 @@ import {
   type ProjectInfo,
   type PuffConfig,
 } from '@puff/core';
-import { ChatSession, ClaudeCodeBrain } from '@puff/mcp';
+import { ChatSession, brainChoices, createBrain, pickBrain } from '@puff/mcp';
 import { TerminalHost } from './terminal';
 import type { FalkorDB, Graph } from 'falkordb';
 
@@ -238,8 +239,10 @@ async function buildLive(
    * The chat: slash commands answer at once; plain sentences go to Claude Code, which can only use
    * Puff's tools. Set PUFF_CHAT_AUTO_APPROVE=1 to let it start runs without asking first.
    */
-  const makeChat = (controller: ProjectController) => {
-    const claude = controller.config.harnesses['claude-code'];
+  const makeChat = async (controller: ProjectController) => {
+    // Whichever agent the person chose (remembered), else the first installed one that is not signed out:
+    // a teammate with only Codex or OpenCode gets a working Ask Puff
+    const brainId = await pickBrain(controller.config, process.env.PUFF_CHAT_AGENT);
     const projects: ProjectHooks = {
       list: async () => {
         const reg = await loadRegistry();
@@ -266,10 +269,12 @@ async function buildLive(
     };
     return new ChatSession({
       controller,
-      brain: new ClaudeCodeBrain(claude?.command ?? 'claude'),
+      brain: createBrain(brainId, controller.config),
+      brainId,
+      choices: () => brainChoices(controller.config),
       projects,
       signIn,
-      model: claude?.model,
+      model: controller.config.harnesses[brainId]?.model,
       autoApprove: process.env.PUFF_CHAT_AUTO_APPROVE === '1',
       emit,
     });
@@ -288,7 +293,7 @@ async function buildLive(
       graph: opened.graph,
       config: opened.config,
       controller,
-      chat: makeChat(controller),
+      chat: await makeChat(controller),
     };
   };
 
@@ -420,7 +425,7 @@ async function buildLive(
         current.config = applyProject(userConfig, await withDetectedSettings(entry));
         current.controller = await makeController(current.project, current.graph, current.config);
         await current.chat.close();
-        current.chat = makeChat(current.controller);
+        current.chat = await makeChat(current.controller);
         emit({ type: 'project', projectId });
       }
       return summary(entry, current?.entry.slug);
@@ -513,6 +518,17 @@ async function buildLive(
     },
     async chatReset() {
       current?.chat.reset();
+    },
+    async chatSetAgent(agent) {
+      const p = need();
+      if (!['claude-code', 'codex', 'opencode'].includes(agent))
+        throw new Error(`Ask Puff cannot talk to ${agent}.`);
+      // remembered for next time, for every project
+      process.env.PUFF_CHAT_AGENT = agent;
+      await saveUserEnv('PUFF_CHAT_AGENT', agent);
+      await p.chat.close();
+      p.chat = await makeChat(p.controller);
+      return p.chat.info();
     },
 
     // ---- taking control of a task -------------------------------------------------------------

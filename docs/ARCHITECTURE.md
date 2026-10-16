@@ -451,7 +451,7 @@ One class, `ProjectController` (`control/controller.ts`), is everything a person
 
 **Slash commands** (`control/commands.ts`, list in `shared/src/commands.ts`) run at once, for free, and never reach an agent. They never throw: a failure is an answer the person can read.
 
-**The orchestrator** answers plain sentences. `ChatSession` (`packages/mcp/src/chat.ts`) starts a local MCP endpoint (`http.ts`: `127.0.0.1` only, a random port, a random bearer token that exists only for this chat, POST `/mcp` only, and only for its own host name) and runs **Claude Code** against it:
+**The orchestrator** answers plain sentences. `ChatSession` (`packages/mcp/src/chat.ts`) starts a local MCP endpoint (`http.ts`: `127.0.0.1` only, a random port, a random bearer token that exists only for this chat, POST `/mcp` only, and only for its own host name) and runs the chosen agent against it. **Claude Code** gets the endpoint as an MCP server:
 
 ```
 claude -p --output-format json --mcp-config <file> --strict-mcp-config --tools "" \
@@ -469,6 +469,8 @@ The endpoint serves tools from the **app's own process**, which is why the agent
 | Spend tokens on its own | `request_run` only **asks**: the chat shows **Run now / Not now**, and the tool answer says it has NOT started. `PUFF_CHAT_AUTO_APPROVE=1` is the explicit opt-out |
 | Loop | At most 20 tool calls per message; the next call gets an error telling it to stop |
 | Be reached by anyone else | Loopback only, token on every request, DNS-rebinding check on the host header |
+
+**Codex and OpenCode** (`action-brain.ts`, `brains.ts`) cannot be handed MCP tools that way, so `ActionBrain` runs them read-only through the adapter's `planner` role (Codex read-only sandbox, OpenCode plan agent) and teaches them a small text protocol: the answer ends with `<puff-calls>[{"tool","args"}]</puff-calls>`. Puff executes those calls with an in-process MCP client against the same token-protected endpoint, so every limit in the table below applies unchanged (unknown tools are refused, at most 5 calls per round and 3 rounds per message, `request_run` still only asks), feeds the results back and asks for the final answer. The board is pre-fetched into the first prompt; malformed blocks (including a model's own `<tool_call>` syntax) are parsed leniently, and anything unusable is reported to the agent, never run. `pickBrain` prefers the saved choice (`PUFF_CHAT_AGENT`), else the first installed agent that is not signed out. The header picker calls `chatSetAgent`, which saves the choice in `~/.puff/.env` and starts a fresh conversation.
 
 The conversation continues across messages (`--resume` with the session id from the last reply) and is kept in memory per open project; switching project starts that project's own conversation. Every message, tool card and approval is an event (`{ type: 'chat' }`), so the UI updates as the agent works. If Claude Code is missing or not signed in, the chat says exactly that and slash commands keep working. The brain is an interface (`ChatBrain`); the tests drive the whole path with a scripted agent that connects to the real HTTP endpoint as a real MCP client.
 

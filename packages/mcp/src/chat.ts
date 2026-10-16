@@ -25,6 +25,7 @@ import {
 import {
   parseSlashCommand,
   type AgentName,
+  type ChatChoice,
   type ChatInfo,
   type ChatMessage,
   type PuffEvent,
@@ -186,6 +187,7 @@ export function orchestratorPrompt(project: string): string {
     '- You cannot delete tasks or memory. If asked to, say that is done in the app.',
     '- Refer to tasks by the short ids the tools print. Never invent an id or claim something happened that a tool did not report.',
     '- If a tool fails, say what failed and why, in plain words, and what the person can do.',
+    '- When a request is vague (no clear outcome, no idea which code it touches, or very large), do not create anything yet: ask the person one to three short, specific questions, offering options where you can, and wait for the answers. Once it is clear, act.',
     '- Be brief. Plain sentences, no headings. Say what you did and what is next.',
   ].join('\n');
 }
@@ -201,6 +203,9 @@ export interface ChatSessionOptions {
   projects?: ProjectHooks;
   /** Starts the agents' own sign-in for /login and /code. Without it those commands say they are unavailable. */
   signIn?: Pick<SignInManager, 'start' | 'submitCode'>;
+  /** Which agent the brain is, and the agents to choose from (for the picker and for signing in) */
+  brainId?: AgentName;
+  choices?: () => ChatChoice[];
   /** Model for the orchestrator agent; default: the agent's own */
   model?: string;
   /** Runs the orchestrator asks for start without asking the person first */
@@ -247,12 +252,12 @@ export class ChatSession {
     // Installed is not the same as signed in: ask the CLI, so the panel can offer the Sign in button
     let note = status.note;
     let needsSignIn = false;
-    if (status.ok && this.opts.signIn && this.opts.brain.name === 'Claude Code') {
-      const command = this.opts.controller.config.harnesses['claude-code']?.command ?? 'claude';
-      if ((await signInState('claude-code', command)) === 'signed-out') {
+    const id = this.opts.brainId;
+    if (status.ok && this.opts.signIn && id && id in SIGN_IN_AGENTS) {
+      const command = this.opts.controller.config.harnesses[id]?.command ?? id;
+      if ((await signInState(id, command)) === 'signed-out') {
         needsSignIn = true;
-        note =
-          'Claude Code is not signed in. Press Sign in (or type /login); it opens your browser. Slash commands work meanwhile.';
+        note = `${this.opts.brain.name} is not signed in. Press Sign in (or type /login); it opens your browser. Slash commands work meanwhile.`;
       }
     }
     return {
@@ -261,6 +266,8 @@ export class ChatSession {
       note,
       needsSignIn,
       autoApprove: this.opts.autoApprove === true,
+      agent: this.opts.brainId,
+      choices: this.opts.choices?.(),
     };
   }
 
@@ -350,11 +357,15 @@ export class ChatSession {
       });
     const word = args.trim().toLowerCase();
     const agent: AgentName | undefined =
-      word === '' || word === 'claude' || word === 'claude-code'
-        ? 'claude-code'
-        : word === 'codex'
-          ? 'codex'
-          : undefined;
+      word === ''
+        ? this.opts.brainId && this.opts.brainId in SIGN_IN_AGENTS
+          ? this.opts.brainId
+          : 'claude-code'
+        : word === 'claude' || word === 'claude-code'
+          ? 'claude-code'
+          : word === 'codex'
+            ? 'codex'
+            : undefined;
     if (!agent)
       return void this.push({
         role: 'system',

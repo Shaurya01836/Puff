@@ -372,6 +372,7 @@ export function App() {
           onSend={(text) => void chat.send(text)}
           onApprove={(id, approve) => void chat.approve(id, approve)}
           onReset={() => void chat.reset()}
+          onSetAgent={(agent) => void chat.setAgent(agent)}
           onClose={() => setChatOpen(false)}
           tab={panelTab}
           onTab={setPanelTab}

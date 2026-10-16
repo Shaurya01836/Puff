@@ -22,7 +22,8 @@ import {
   type ProjectEntry,
 } from '@puff/core';
 import type { ChatMessage, PuffEvent } from '@puff/shared';
-import { ChatSession, ClaudeCodeBrain } from './chat';
+import { ChatSession } from './chat';
+import { brainChoices, createBrain, pickBrain } from './brains';
 
 loadDotEnv();
 
@@ -85,11 +86,14 @@ async function main(): Promise<void> {
     emit,
     log: (line) => console.log(dim(`  ${line}`)),
   });
-  const claude = opened.config.harnesses['claude-code'];
+  // The agent that answers: PUFF_CHAT_AGENT, else the first installed one that is not signed out
+  const brainId = await pickBrain(opened.config, process.env.PUFF_CHAT_AGENT);
   const session = new ChatSession({
     controller,
-    brain: new ClaudeCodeBrain(claude?.command ?? 'claude'),
-    model: claude?.model,
+    brain: createBrain(brainId, opened.config),
+    brainId,
+    choices: () => brainChoices(opened.config),
+    model: opened.config.harnesses[brainId]?.model,
     signIn: new SignInManager((agent) => opened.config.harnesses[agent]?.command, emit),
     autoApprove: process.env.PUFF_CHAT_AUTO_APPROVE === '1',
     emit,

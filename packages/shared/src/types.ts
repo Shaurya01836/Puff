@@ -383,6 +383,17 @@ export interface ChatInfo {
   needsSignIn?: boolean;
   /** Runs the orchestrator asks for start without asking the person first */
   autoApprove: boolean;
+  /** Which agent is answering (absent in a bare test session) */
+  agent?: AgentName;
+  /** The agents to choose from */
+  choices?: ChatChoice[];
+}
+
+/** One agent the person can pick to talk to in Ask Puff */
+export interface ChatChoice {
+  id: AgentName;
+  label: string;
+  installed: boolean;
 }
 
 /** What a person can change about a task that is not being worked on. */
