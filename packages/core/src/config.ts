@@ -30,6 +30,10 @@ export const configSchema = z.object({
       /** Tasks created by tasks created by tasks… stop here, so agents cannot spawn work forever */
       maxSpawnDepth: z.number().int().nonnegative().default(2),
       contextTokenBudget: z.number().int().positive().default(2000),
+      /** An agent silent this long is marked stalled on the board (it keeps running; the person can stop it or switch agent) */
+      stallWarnMs: z.number().int().positive().default(180_000),
+      /** An agent silent this long is stopped and the task moves on to the next agent. 0 = never, only the normal timeout applies. */
+      stallKillMs: z.number().int().nonnegative().default(0),
     })
     .prefault({}),
   escalation: z.array(z.string()).default([]),

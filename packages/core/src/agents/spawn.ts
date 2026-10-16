@@ -23,6 +23,8 @@ export interface ProcessOptions {
   maxBytes?: number;
   /** Called with each complete line of stdout as it arrives (for watching an agent work) */
   onStdoutLine?: (line: string) => void;
+  /** Called whenever the process writes anything at all (stdout or stderr): it is still alive and working */
+  onData?: () => void;
 }
 
 export interface ProcessResult {
@@ -227,6 +229,7 @@ export function runProcess(opts: ProcessOptions): Promise<ProcessResult> {
 
     let pending = '';
     child.stdout!.on('data', (c: Buffer) => {
+      opts.onData?.();
       out.push(c);
       if (!opts.onStdoutLine) return;
       pending += c.toString('utf8');
@@ -234,7 +237,10 @@ export function runProcess(opts: ProcessOptions): Promise<ProcessResult> {
       pending = lines.pop() ?? '';
       for (const line of lines) if (line) opts.onStdoutLine(line);
     });
-    child.stderr!.on('data', (c: Buffer) => err.push(c));
+    child.stderr!.on('data', (c: Buffer) => {
+      opts.onData?.();
+      err.push(c);
+    });
     child.on('error', (e) => {
       spawnError = e.message;
       finish(null);

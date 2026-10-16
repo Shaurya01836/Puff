@@ -1,13 +1,13 @@
 // Sessions: one agent run on one task (episodic memory). Created when the run starts so the
 // context pack can hang off it, then finished with the outcome Puff observed.
 import type { Graph } from 'falkordb';
-import type { ActivityStep, AgentName, Role, SessionInfo, SessionOutcome } from '@puff/shared';
+import type { Actor, ActivityStep, Role, SessionInfo, SessionOutcome } from '@puff/shared';
 import { read, run } from '../db/client';
 import { newId } from '../ids';
 
 export async function startSession(
   graph: Graph,
-  input: { agent: AgentName; taskId: string; role: Role; at?: number; seeded?: boolean },
+  input: { agent: Actor; taskId: string; role: Role; at?: number; seeded?: boolean },
 ): Promise<string> {
   const id = newId('Session');
   const rows = await run<{ id: string }>(
@@ -87,7 +87,7 @@ export async function finishSession(
 
 interface SessionRow {
   p: Record<string, unknown>;
-  agent: AgentName;
+  agent: Actor;
   taskId: string;
   changed: string[];
 }

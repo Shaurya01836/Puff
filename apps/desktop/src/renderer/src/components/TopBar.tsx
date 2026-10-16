@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { CornerDownLeft, MessageSquare, Pause, Play, Plus, Sparkles } from 'lucide-react';
+import { CornerDownLeft, MessageSquare, Pause, Play, Plus, Sparkles, Square } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Kbd, MockBadge } from './ui';
 
@@ -8,6 +8,8 @@ export function TopBar({
   subtitle,
   running,
   onToggleRun,
+  onPause,
+  pausing,
   onGoal,
   onNewTask,
   chatOpen,
@@ -19,6 +21,9 @@ export function TopBar({
   subtitle: string;
   running: boolean;
   onToggleRun: () => void;
+  /** Finish what is running and start nothing new */
+  onPause?: () => void;
+  pausing?: boolean;
   onGoal: (goal: string) => Promise<void>;
   onNewTask: () => void;
   chatOpen: boolean;
@@ -90,6 +95,17 @@ export function TopBar({
           <Plus className="size-4" />
           New task
         </button>
+        {running && onPause && (
+          <button
+            onClick={onPause}
+            disabled={pausing}
+            title="Let the running tasks finish, then stop. Nothing new starts."
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-line-strong bg-surface-2 px-3.5 text-sm font-medium transition-colors hover:bg-surface-3 disabled:cursor-default disabled:opacity-60"
+          >
+            <Pause className="size-4" />
+            {pausing ? 'Pausing…' : 'Pause after current'}
+          </button>
+        )}
         <button
           onClick={onToggleRun}
           disabled={!!runBlockedReason}
@@ -102,8 +118,8 @@ export function TopBar({
               : 'bg-gradient-to-br from-brand to-brand-deep text-white shadow-[0_6px_20px_-6px_rgb(139_124_246/0.7)] hover:brightness-110',
           )}
         >
-          {running ? <Pause className="size-4" /> : <Play className="size-4 fill-current" />}
-          {running ? 'Pause team' : 'Run team'}
+          {running ? <Square className="size-4" /> : <Play className="size-4 fill-current" />}
+          {running ? 'Stop now' : 'Run team'}
         </button>
       </div>
     </header>

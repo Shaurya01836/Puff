@@ -166,6 +166,65 @@ export class GitRepo {
     return { path, branch, name: n, links };
   }
 
+  /** The newest kept attempt branch of a task (a failed attempt keeps its branch), if there is one. */
+  async latestAttemptBranch(taskId: string): Promise<string | undefined> {
+    const r = await git(
+      ['branch', '--list', `puff/${safeName(taskId)}-a*`, '--format=%(refname:short)'],
+      this.root,
+    );
+    const attempt = (b: string) => Number(/-a(\d+)$/.exec(b)?.[1] ?? 0);
+    return r.out
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .sort((a, b) => attempt(b) - attempt(a))[0];
+  }
+
+  /** The person's own worktree for a task, if they have one open. */
+  manualWorktree(taskId: string, linkDirs: string[] = []): Worktree | undefined {
+    const name = safeName(`${taskId}-manual`);
+    const path = this.worktreePath(name);
+    if (!existsSync(path)) return undefined;
+    return {
+      path,
+      branch: `puff/${name}`,
+      name,
+      links: linkDirs.filter((d) => existsSync(join(path, d))),
+    };
+  }
+
+  /**
+   * A working folder for the person to take a task over in. It starts from the newest kept attempt of an
+   * agent (so they continue its work) or from the current code, and it stays until their changes land.
+   * If it already exists it is reused untouched: it holds their work.
+   */
+  async openManualWorktree(
+    taskId: string,
+    linkDirs: string[] = [],
+  ): Promise<{ wt: Worktree; startedFrom: string; reused: boolean }> {
+    const existing = this.manualWorktree(taskId, linkDirs);
+    if (existing) return { wt: existing, startedFrom: 'your earlier changes', reused: true };
+    const name = safeName(`${taskId}-manual`);
+    const path = this.worktreePath(name);
+    const branch = `puff/${name}`;
+    const base = (await this.latestAttemptBranch(taskId)) ?? 'HEAD';
+    await git(['branch', '-D', branch], this.root);
+    await mkdir(join(this.root, '.puff', 'worktrees'), { recursive: true });
+    await must(['worktree', 'add', '-b', branch, path, base], this.root);
+    const links: string[] = [];
+    for (const dir of linkDirs) {
+      const source = join(this.root, dir);
+      if (!existsSync(source)) continue;
+      await symlink(source, join(path, dir), process.platform === 'win32' ? 'junction' : 'dir');
+      links.push(dir);
+    }
+    return {
+      wt: { path, branch, name, links },
+      startedFrom: base === 'HEAD' ? 'the current code' : `the agent's last attempt (${base})`,
+      reused: false,
+    };
+  }
+
   /**
    * Run `fn` in a clean, detached checkout of the current HEAD (no branch, dependency folders linked in),
    * then remove it. This is how the merged result is tested: the main checkout also holds `.puff/worktrees`,

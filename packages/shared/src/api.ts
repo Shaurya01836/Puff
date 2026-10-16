@@ -6,6 +6,7 @@ import type {
   ChatMessage,
   ContextPack,
   GraphData,
+  ManualResult,
   MemoryEvent,
   ProjectSummary,
   PuffEvent,
@@ -17,6 +18,8 @@ import type {
   TaskDiffInfo,
   TaskEditInput,
   TeamEvent,
+  TerminalCli,
+  TerminalInfo,
   WhyPath,
 } from './types';
 
@@ -99,6 +102,30 @@ export interface PuffApi {
   chatApprove(approvalId: string, approve: boolean): Promise<void>;
   /** Start a fresh conversation */
   chatReset(): Promise<void>;
+  /** Stop one task: its agent is killed and it shows as failed, ready to retry. The rest of the team goes on. */
+  stopTask(taskId: string): Promise<Task>;
+  /** Give a task to another agent (and model): stops it if it runs, puts it back in the queue */
+  reassignTask(taskId: string, agent: AgentName, model?: string): Promise<Task>;
+  /** The person did this task themselves: mark it done so what waits for it can go on */
+  markTaskDone(taskId: string, note?: string): Promise<Task>;
+  /** A note the next attempt on this task must follow. An empty note removes it. */
+  addTaskNote(taskId: string, note: string): Promise<Task>;
+  /** Finish the tasks that are running, start nothing new. False when the team is not running. */
+  pauseTeam(): Promise<boolean>;
+  /**
+   * Take a task over: its agent is stopped, and a real terminal opens in a working folder that starts from the
+   * agent's last attempt, running that agent's own CLI (or a shell). Output arrives as `terminal` events.
+   */
+  openTerminal(input: { taskId: string; cli: TerminalCli }): Promise<TerminalInfo>;
+  terminalWrite(id: string, data: string): Promise<void>;
+  terminalResize(id: string, cols: number, rows: number): Promise<void>;
+  /** What a terminal has printed so far (a window that opens late catches up), and where that ends. Events with an `end` at or before it are already in it. */
+  terminalAttach(id: string): Promise<{ data: string; end: number }>;
+  closeTerminal(id: string): Promise<void>;
+  /** Show the person's working folder for a task in the file explorer */
+  openTaskFolder(taskId: string): Promise<void>;
+  /** Check the person's own changes with the project's tests, merge them, re-test the combined result */
+  landManualChanges(taskId: string): Promise<ManualResult>;
   start(projectId: string): Promise<void>;
   stop(projectId: string): Promise<void>;
   /** Subscribe to live events; returns an unsubscribe function */
@@ -144,6 +171,18 @@ export const PUFF_INVOKE_METHODS = [
   'chatSend',
   'chatApprove',
   'chatReset',
+  'stopTask',
+  'reassignTask',
+  'markTaskDone',
+  'addTaskNote',
+  'pauseTeam',
+  'openTerminal',
+  'terminalWrite',
+  'terminalResize',
+  'terminalAttach',
+  'closeTerminal',
+  'openTaskFolder',
+  'landManualChanges',
   'start',
   'stop',
 ] as const satisfies readonly PuffInvokeMethod[];

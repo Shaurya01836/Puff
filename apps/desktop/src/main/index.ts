@@ -65,6 +65,8 @@ else
 app.whenReady().then(async () => {
   if (!app.hasSingleInstanceLock()) return;
   backend = await createBackend(here, {
+    openPath: async (path) => void (await shell.openPath(path)),
+    onShutdown: (cb) => app.on('before-quit', cb),
     // The installed app has no checkout; what ships with it is next to the app files.
     resourcesDir: app.isPackaged ? process.resourcesPath : undefined,
     // The system "choose a folder" dialog, over whichever window the person is using.

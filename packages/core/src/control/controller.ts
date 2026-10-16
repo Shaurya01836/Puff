@@ -2,7 +2,7 @@
 // and change them, run the team, stop it. The desktop app, the slash commands, the chat's tools and the
 // CLI all go through this one class, so they cannot disagree about what an action means.
 import type { Graph } from 'falkordb';
-import type { PuffEvent, SessionInfo, Task, TaskStatus } from '@puff/shared';
+import type { AgentName, PuffEvent, SessionInfo, Task, TaskStatus } from '@puff/shared';
 import type { PuffConfig } from '../config';
 import type { ProjectInfo } from '../db/init';
 import type { TaskDiff } from '../git/repo';
@@ -12,6 +12,7 @@ import {
   editTask,
   getTask,
   listTasks,
+  promoteReady,
   recoverInterrupted,
   removeTask,
   updateTask,
@@ -25,7 +26,9 @@ import {
   type OrchestratorDeps,
   type StartOptions,
 } from '../orchestrator/orchestrator';
+import { landManualWork } from '../orchestrator/run';
 import { getWhy } from '../queries/explain';
+import { buildHandoffBrief } from './handoff';
 import { resolveTask, shortId } from './resolve';
 import { summarizeRun } from './summary';
 
@@ -66,6 +69,19 @@ const ALL_STATUSES: TaskStatus[] = [
   'escalated',
   'done',
 ];
+
+/** What the person needs to work on a task themselves */
+export interface TakeOver {
+  taskId: string;
+  /** The working folder (a git worktree of the project) */
+  cwd: string;
+  /** Where it started: the agent's last attempt, or the current code */
+  startedFrom: string;
+  /** The folder was already there from an earlier take-over and holds the person's work */
+  reused: boolean;
+  /** A short message for the CLI they open there, saying what the task is and what was tried */
+  brief: string;
+}
 
 export class ProjectController {
   private orchestrator?: Orchestrator;
@@ -200,6 +216,147 @@ export class ProjectController {
     });
     this.emit({ type: 'task:update', task: updated });
     return updated;
+  }
+
+  // ---- taking control -----------------------------------------------------------------------
+  /** Wait until a task is no longer being worked on (its agent has been stopped), up to `ms`. */
+  private async settled(taskId: string, ms = 20_000): Promise<Task> {
+    const until = Date.now() + ms;
+    for (;;) {
+      const t = (await getTask(this.graph, taskId))!;
+      if (!['running', 'verifying'].includes(t.status) || Date.now() > until) return t;
+      await new Promise((r) => setTimeout(r, 150));
+    }
+  }
+
+  /**
+   * Stop one task: its agent is killed and the task shows as failed ("Stopped by you"), ready to Retry,
+   * switch agent or take over. The rest of the team keeps working.
+   */
+  async stopTask(ref: string): Promise<Task> {
+    const task = await this.find(ref);
+    if (!['running', 'verifying', 'retrying', 'escalated'].includes(task.status))
+      throw new Error(
+        `Task ${shortId(task.id)} is ${task.status}; only a task being worked on can be stopped.`,
+      );
+    if (this.orchestrator?.stopTask(task.id)) return this.settled(task.id);
+    // Nothing in this app is working on it (an earlier session left it behind)
+    const updated = await updateTask(this.graph, task.id, { status: 'failed', stalledAt: null });
+    await recoverInterrupted(this.graph, { olderThanMs: 0 }).catch(() => 0);
+    this.emit({ type: 'task:update', task: updated });
+    return updated;
+  }
+
+  /**
+   * Give a task to another agent (and model): stop it if it is running, change who it is for, and put it
+   * back in the queue. Press Run team to start it.
+   */
+  async reassignTask(ref: string, agent: AgentName, model?: string): Promise<Task> {
+    let task = await this.find(ref);
+    if (['running', 'verifying'].includes(task.status)) task = await this.stopTask(task.id);
+    if (task.status === 'done') throw new Error('This task is already done.');
+    if (!this.config.harnesses[agent]) throw new Error(`${agent} is not set up for this project.`);
+    await editTask(this.graph, task.id, { preferredAgent: agent, model: model?.trim() || null });
+    this.emit({ type: 'task:update', task: (await getTask(this.graph, task.id))! });
+    return task.status === 'failed'
+      ? this.retryTask(task.id)
+      : (await getTask(this.graph, task.id))!;
+  }
+
+  /** The person did this task themselves: mark it done, so what waits for it can go on. */
+  async markDone(ref: string, note?: string): Promise<Task> {
+    let task = await this.find(ref);
+    if (['running', 'verifying'].includes(task.status)) task = await this.stopTask(task.id);
+    const updated = await updateTask(this.graph, task.id, {
+      status: 'done',
+      doneByHand: true,
+      stalledAt: null,
+      ...(note?.trim() ? { note } : {}),
+    });
+    this.emit({ type: 'task:update', task: updated });
+    for (const t of await promoteReady(this.graph)) this.emit({ type: 'task:update', task: t });
+    return updated;
+  }
+
+  /** A note the next attempt on this task is told to follow. An empty note removes it. */
+  async addNote(ref: string, note: string): Promise<Task> {
+    const task = await this.find(ref);
+    const updated = await updateTask(this.graph, task.id, { note: note.trim() || null });
+    this.emit({ type: 'task:update', task: updated });
+    return updated;
+  }
+
+  /** Finish what is running, start nothing new. */
+  drain(): boolean {
+    if (!this.orchestrator?.running) return false;
+    this.orchestrator.drain();
+    return true;
+  }
+
+  get draining(): boolean {
+    return this.orchestrator?.isDraining === true;
+  }
+
+  /**
+   * Take a task over: stop its agent, and give the person a working folder (starting from the agent's last
+   * attempt) to continue in, with a short brief for the CLI they open there. Nothing runs by itself after this.
+   */
+  async takeOver(ref: string): Promise<TakeOver> {
+    if (!this.runDeps) throw new Error(this.blocked ?? 'Agents cannot run for this project');
+    let task = await this.find(ref);
+    if (['running', 'verifying'].includes(task.status)) task = await this.stopTask(task.id);
+    if (task.status === 'done') throw new Error('This task is already done.');
+    const { wt, startedFrom, reused } = await this.runDeps.repo.openManualWorktree(
+      task.id,
+      this.config.worktrees.linkDirs,
+    );
+    // The task is the person's now: failed means the queue leaves it alone
+    task = await updateTask(this.graph, task.id, {
+      status: 'failed',
+      worktree: `.puff/worktrees/${wt.name}`,
+      stalledAt: null,
+    });
+    this.emit({ type: 'task:update', task });
+    const sessions = await listSessions(this.graph, task.id);
+    return {
+      taskId: task.id,
+      cwd: wt.path,
+      startedFrom,
+      reused,
+      brief: buildHandoffBrief(task, sessions, this.config.verify.testCommand),
+    };
+  }
+
+  /** The person's working folder for a task, if they have taken it over. */
+  manualFolder(taskId: string): string | undefined {
+    return this.runDeps?.repo.manualWorktree(taskId, this.config.worktrees.linkDirs)?.path;
+  }
+
+  /**
+   * Remove the person's working folder once their changes have landed. It may take a moment to let go: a
+   * program that was running in it has to finish closing first.
+   */
+  async removeManualFolder(taskId: string): Promise<void> {
+    const repo = this.runDeps?.repo;
+    for (let attempt = 0; attempt < 8 && repo; attempt++) {
+      const wt = repo.manualWorktree(taskId, this.config.worktrees.linkDirs);
+      if (!wt) return;
+      await repo.remove(wt, { deleteBranch: true }).catch(() => {});
+      if (!repo.manualWorktree(taskId, this.config.worktrees.linkDirs)) return;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
+
+  /** Check the person's own changes, merge them, re-test the combined result (like an agent's work). */
+  async landManual(ref: string): Promise<{ status: 'done' | 'failed'; message: string }> {
+    if (!this.runDeps) throw new Error(this.blocked ?? 'Agents cannot run for this project');
+    const task = await this.find(ref);
+    const wt = this.runDeps.repo.manualWorktree(task.id, this.config.worktrees.linkDirs);
+    if (!wt)
+      throw new Error(
+        'You have not taken this task over, so there are no changes of yours to land.',
+      );
+    return landManualWork(this.runDeps, task.id, wt);
   }
 
   async editTask(ref: string, edit: TaskEdit): Promise<Task> {

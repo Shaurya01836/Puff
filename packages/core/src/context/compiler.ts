@@ -327,6 +327,7 @@ export async function compileContext(
     boardTitles,
     maxTasks: opts.maxTasks,
     hints: task.hints,
+    note: task.note,
     diff: opts.diff,
     testCommand: opts.testCommand,
   };

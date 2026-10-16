@@ -44,5 +44,6 @@ export * from './control/resolve';
 export * from './control/summary';
 export * from './control/controller';
 export * from './control/commands';
+export * from './control/handoff';
 export * from './setup/setup';
 export * from './setup/auth';

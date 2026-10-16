@@ -1,8 +1,8 @@
-import type { AgentName, MemoryEventType, TaskStatus } from '@puff/shared';
+import type { Actor, MemoryEventType, TaskStatus } from '@puff/shared';
 
 /** Validated categorical palette (see styles.css). Keep in sync with --color-claude/codex/opencode. */
 export const AGENT_META: Record<
-  AgentName,
+  Actor,
   { label: string; short: string; color: string; text: string; tagline: string }
 > = {
   'claude-code': {
@@ -25,6 +25,14 @@ export const AGENT_META: Record<
     color: '#5b89f6',
     text: 'text-opencode',
     tagline: 'Cheap edits, docs and boilerplate',
+  },
+  // Work the person did by hand (a manual change landed through Puff)
+  you: {
+    label: 'You',
+    short: 'ME',
+    color: '#a3b0c8',
+    text: 'text-ink-2',
+    tagline: 'Changes you made yourself',
   },
 };
 

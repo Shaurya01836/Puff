@@ -53,6 +53,8 @@ export interface RunOptions {
   /** Provider model override; omit to use the CLI's own configuration */
   model?: string;
   signal?: AbortSignal;
+  /** Called whenever the agent writes any output, so a caller can tell a quiet agent from a stuck one */
+  onOutput?: () => void;
   /** Called for each step the agent takes, as it happens. Without it the agent runs exactly as before. */
   onActivity?: (step: ActivityDraft) => void;
 }

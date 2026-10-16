@@ -61,3 +61,4 @@ The script (`apps/desktop/scripts/package.mjs`) builds the app, stages the built
 - Updating means running a newer installer; there is no auto-update.
 - Claude Code must be installed and signed in for the Ask Puff chat to answer plain sentences. Slash commands work without it.
 - Sign-in status is known for Claude Code and Codex; for OpenCode it shows as installed only.
+- **Take over** opens the agent's own program in a terminal, so that program must be installed (and signed in to be useful). The first time Claude Code opens in a new task folder it asks whether to trust it, as it does anywhere. The plain terminal is PowerShell on Windows.

@@ -40,6 +40,10 @@ export class Orchestrator {
   private readonly unavailable = new Map<AgentName, string>();
   private readonly owner = `puff-${process.pid}-${Date.now().toString(36)}`;
   private checked = false;
+  /** One abort switch per task in flight, so a single task can be stopped without stopping the team */
+  private readonly taskAborts = new Map<string, AbortController>();
+  /** Finish what is running, start nothing new */
+  private draining = false;
   /** Set when the run stopped before starting agents because the project cannot be checked */
   problem?: string;
 
@@ -52,6 +56,7 @@ export class Orchestrator {
   /** Start working through ready tasks. Resolves with every task result once the queue is empty or stopped. */
   start(opts: StartOptions = {}): Promise<TaskRunResult[]> {
     if (this.loop) return this.loop;
+    this.draining = false;
     this.controller = new AbortController();
     const { signal } = this.controller;
     this.loop = this.work(signal, opts).finally(() => {
@@ -92,6 +97,30 @@ export class Orchestrator {
     return undefined;
   }
 
+  /** Stop one task: its agent is killed and the task is marked failed ("Stopped by you"). False if it is not running here. */
+  stopTask(taskId: string): boolean {
+    const own = this.taskAborts.get(taskId);
+    if (!own) return false;
+    own.abort();
+    return true;
+  }
+
+  /** Ids of the tasks this run is working on right now */
+  get activeTaskIds(): string[] {
+    return [...this.taskAborts.keys()];
+  }
+
+  /** Finish the tasks that are running, then stop: nothing new is started. Gentler than stop(). */
+  drain(): void {
+    if (!this.loop) return;
+    this.draining = true;
+    this.deps.log?.('pausing: finishing the running tasks, starting nothing new');
+  }
+
+  get isDraining(): boolean {
+    return this.draining;
+  }
+
   /** Agents found unusable during this run, with the reason. */
   get blocked(): ReadonlyMap<AgentName, string> {
     return this.unavailable;
@@ -111,15 +140,28 @@ export class Orchestrator {
     if (reset) log?.(`reset ${reset} interrupted task(s) back to the queue`);
 
     const launch = (taskId: string) => {
-      const run = runTask({ ...this.deps, signal, unavailable: this.unavailable, slots }, taskId, {
-        agent: opts.agent,
-      })
+      const own = new AbortController();
+      this.taskAborts.set(taskId, own);
+      const run = runTask(
+        {
+          ...this.deps,
+          signal: AbortSignal.any([signal, own.signal]),
+          userStopped: () => own.signal.aborted && !signal.aborted,
+          unavailable: this.unavailable,
+          slots,
+        },
+        taskId,
+        { agent: opts.agent },
+      )
         .then((r) => void results.push(r))
         .catch((err: Error) => {
           log?.(`✖ ${taskId} crashed: ${err.message}`);
           results.push({ taskId, status: 'failed', attempts: [], reason: err.message });
         })
-        .finally(() => void running.delete(taskId));
+        .finally(() => {
+          running.delete(taskId);
+          this.taskAborts.delete(taskId);
+        });
       running.set(taskId, run);
     };
 
@@ -131,7 +173,7 @@ export class Orchestrator {
         .sort((a, b) => a.createdAt - b.createdAt);
 
       for (const task of ready) {
-        if (running.size >= maxParallel) break;
+        if (running.size >= maxParallel || this.draining) break;
         if (!this.checked && WRITES_FILES[ROLE_FOR_TYPE[task.type]]) {
           this.problem = await this.preflight(signal);
           this.checked = true;

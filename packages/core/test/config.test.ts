@@ -34,6 +34,8 @@ routing:
       maxTasksPerPlan: 8,
       maxSpawnDepth: 2,
       contextTokenBudget: 2000,
+      stallWarnMs: 180_000,
+      stallKillMs: 0, // an agent is only warned about by default, never stopped for being quiet
     });
     expect(config.worktrees.linkDirs).toEqual(['node_modules']);
   });

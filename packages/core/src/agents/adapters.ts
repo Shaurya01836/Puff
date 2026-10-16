@@ -123,6 +123,7 @@ export function createAdapter(name: AgentName, cfg: HarnessConfig): HarnessAdapt
         timeoutMs: opts.timeoutMs,
         signal: opts.signal,
         env: { NO_COLOR: '1', ...spec.env?.(opts) },
+        onData: opts.onOutput,
         onStdoutLine: watch
           ? (line) => {
               for (const step of activityFromLine(name, line, opts.cwd)) watch(step);

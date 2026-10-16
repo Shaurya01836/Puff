@@ -35,6 +35,7 @@ import {
   recoverInterrupted,
   updateTask,
 } from '../src/memory/tasks';
+import { ProjectController } from '../src/control/controller';
 import { Orchestrator } from '../src/orchestrator/orchestrator';
 import { runTask, type RunDeps } from '../src/orchestrator/run';
 
@@ -718,4 +719,265 @@ describe.skipIf(!ready)('the run loop (fake agents, real git, real FalkorDB)', (
     expect(await outcome(staleSession, stale.id)).toBe('error');
     expect(await outcome(liveSession, live.id)).toBe('running');
   }, 60_000);
+
+  // ---- taking control: the trail, stalls, stopping one task, notes, taking a task over ------------------
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const waitFor = async (cond: () => boolean | Promise<boolean>, ms = 15_000) => {
+    const until = Date.now() + ms;
+    while (!(await cond())) {
+      if (Date.now() > until) throw new Error('timed out waiting for the condition');
+      await sleep(50);
+    }
+  };
+  /** An agent that does nothing until it is told to stop (a hung agent) */
+  const hangs = (name: AgentName) =>
+    fakeAgent(
+      name,
+      (o) =>
+        new Promise((resolve) =>
+          o.signal?.addEventListener('abort', () =>
+            resolve({ output: '', error: { kind: 'aborted', message: 'Stopped by the user' } }),
+          ),
+        ),
+    );
+  const orchestrate = (f: { deps: RunDeps }) => {
+    const { repo, graph, project, config: cfg, adapters, emit, log } = f.deps;
+    return new Orchestrator({ repo, graph, project, config: cfg, adapters, emit, log });
+  };
+  const controllerFor = (f: { deps: RunDeps }) =>
+    ProjectController.create({
+      graph: f.deps.graph,
+      project: { name: f.deps.project.slug, ...f.deps.project },
+      config: f.deps.config,
+      emit: f.deps.emit,
+      log: f.deps.log,
+      runDeps: f.deps,
+    });
+
+  it('each task keeps a trail of who worked on it, so a card can say who failed and who took over', async () => {
+    const opencode = fakeAgent('opencode', () => ({
+      output: '',
+      error: { kind: 'crash', message: 'it fell over' },
+    }));
+    const codex = fakeAgent('codex', (o) => {
+      edit(o.cwd, 'src/cart/tax.ts', 'export function taxFor', '// ok\nexport function taxFor');
+      return { output: 'done' };
+    });
+    const f = await fixture(FAST, { opencode, codex });
+    const t = await f.task('first on opencode', {
+      targets: ['taxFor'],
+      preferredAgent: 'opencode',
+    });
+    await runTask(f.deps, t.id);
+    const task = (await getTask(f.graph, t.id))!;
+    expect(task.trail?.map((e) => [e.agent, e.outcome])).toEqual([
+      ['opencode', 'error'],
+      ['codex', 'success'],
+    ]);
+    expect(task.trail![0]!.detail).toMatch(/fell over/);
+    expect(task.stalledAt).toBeUndefined();
+  }, 120_000);
+
+  it('an agent that goes quiet is marked stalled on the card, and unmarked when it finishes', async () => {
+    const quick: PuffConfig = { ...FAST, limits: { ...FAST.limits, stallWarnMs: 300 } };
+    const slow = fakeAgent('codex', async (o) => {
+      await sleep(1500); // no output for far longer than stallWarnMs
+      edit(o.cwd, 'src/cart/tax.ts', 'export function taxFor', '// slow\nexport function taxFor');
+      return { output: 'done' };
+    });
+    const f = await fixture(quick, { codex: slow });
+    const t = await f.task('slow one', { targets: ['taxFor'] });
+    await runTask(f.deps, t.id);
+    const flagged = f.events.some(
+      (e) => e.type === 'task:update' && e.task.id === t.id && e.task.stalledAt !== undefined,
+    );
+    expect(flagged).toBe(true);
+    const [session] = await listSessions(f.graph, t.id);
+    expect(
+      (session!.activity ?? []).some((a) => /No output for .* the agent may be stuck/.test(a.text)),
+    ).toBe(true);
+    expect((await getTask(f.graph, t.id))?.stalledAt).toBeUndefined();
+  }, 120_000);
+
+  it('with a stall limit, a hung agent is stopped and the task moves on to the next agent', async () => {
+    const strict: PuffConfig = {
+      ...FAST,
+      limits: { ...FAST.limits, stallWarnMs: 200, stallKillMs: 600 },
+    };
+    const stuck = hangs('opencode');
+    const codex = fakeAgent('codex', (o) => {
+      edit(
+        o.cwd,
+        'src/cart/tax.ts',
+        'export function taxFor',
+        '// rescued\nexport function taxFor',
+      );
+      return { output: 'done' };
+    });
+    const f = await fixture(strict, { opencode: stuck, codex });
+    const t = await f.task('hangs on opencode', {
+      targets: ['taxFor'],
+      preferredAgent: 'opencode',
+    });
+    const result = await runTask(f.deps, t.id);
+    expect(result.status).toBe('done');
+    const task = (await getTask(f.graph, t.id))!;
+    expect(task.trail?.map((e) => [e.agent, e.outcome])).toEqual([
+      ['opencode', 'stalled'],
+      ['codex', 'success'],
+    ]);
+    expect(task.trail![0]!.detail).toMatch(/No output for/);
+  }, 120_000);
+
+  it('stopping one task kills its agent and marks it failed ("Stopped by you") while the rest keeps going', async () => {
+    const stuck = hangs('codex');
+    const quick = fakeAgent('opencode', (o) => {
+      edit(
+        o.cwd,
+        'src/cart/discounts.ts',
+        'export function applyDiscount',
+        '// quick\nexport function applyDiscount',
+      );
+      return { output: 'done' };
+    });
+    const f = await fixture(FAST, { codex: stuck, opencode: quick });
+    const a = await f.task('hangs', { targets: ['taxFor'], preferredAgent: 'codex' });
+    const b = await f.task('quick', { targets: ['applyDiscount'], preferredAgent: 'opencode' });
+    const orch = orchestrate(f);
+    const run = orch.start();
+    await waitFor(() => stuck.calls.length === 1);
+    expect(orch.stopTask(a.id)).toBe(true);
+    expect(orch.stopTask('no-such-task')).toBe(false);
+    const results = await run;
+
+    expect(Object.fromEntries(results.map((r) => [r.taskId, r.status]))).toEqual({
+      [a.id]: 'failed',
+      [b.id]: 'done',
+    });
+    expect(results.find((r) => r.taskId === a.id)?.reason).toBe('Stopped by you');
+    const task = (await getTask(f.graph, a.id))!;
+    expect(task.status).toBe('failed');
+    expect(task.trail?.[0]).toMatchObject({ agent: 'codex', outcome: 'stopped' });
+  }, 120_000);
+
+  it('"finish what is running, then pause" starts nothing new', async () => {
+    const serial: PuffConfig = { ...FAST, limits: { ...FAST.limits, maxParallel: 1 } };
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const codex = fakeAgent('codex', async (o) => {
+      await gate;
+      edit(o.cwd, 'src/cart/tax.ts', 'export function taxFor', '// gated\nexport function taxFor');
+      return { output: 'done' };
+    });
+    const f = await fixture(serial, { codex });
+    const first = await f.task('first', { targets: ['taxFor'] });
+    const second = await f.task('second', { targets: ['applyDiscount'] });
+    const orch = orchestrate(f);
+    const run = orch.start();
+    await waitFor(() => codex.calls.length === 1);
+    orch.drain();
+    expect(orch.isDraining).toBe(true);
+    release();
+    const results = await run;
+
+    expect(results.map((r) => [r.taskId, r.status])).toEqual([[first.id, 'done']]);
+    expect((await getTask(f.graph, second.id))?.status).toBe('ready'); // waiting, not started, not lost
+    expect(codex.calls).toHaveLength(1);
+  }, 120_000);
+
+  it("a note on a task reaches the next attempt's prompt; switching agent, marking done and stopping work through the controller", async () => {
+    const codex = fakeAgent('codex', (o) => {
+      edit(o.cwd, 'src/cart/tax.ts', 'export function taxFor', '// noted\nexport function taxFor');
+      return { output: 'done' };
+    });
+    const opencode = fakeAgent('opencode', () => ({ output: 'never needed' }));
+    const f = await fixture(FAST, { codex, opencode });
+    const controller = await controllerFor(f);
+    const t = await f.task('needs a note', { targets: ['taxFor'] });
+
+    await controller.addNote(t.id, 'Reuse the existing rounding helper');
+    await controller.reassignTask(t.id, 'codex');
+    expect((await getTask(f.graph, t.id))?.preferredAgent).toBe('codex');
+    await runTask(f.deps, t.id);
+    expect(codex.calls[0]!.prompt).toContain(
+      'NOTE FROM THE PERSON (follow it):\nReuse the existing rounding helper',
+    );
+    await expect(controller.reassignTask(t.id, 'opencode')).rejects.toThrow(/already done/);
+
+    // mark done by hand: dependants are released
+    const a = await f.task('did it myself', { targets: ['applyDiscount'] });
+    const b = await f.task('waits for it', { targets: ['cartTotal'], dependsOn: [a.id] });
+    expect((await getTask(f.graph, b.id))?.status).toBe('planned');
+    const done = await controller.markDone(a.id, 'Done in my editor');
+    expect(done).toMatchObject({ status: 'done', doneByHand: true });
+    expect((await getTask(f.graph, b.id))?.status).toBe('ready');
+
+    // stop is only for a task that is being worked on
+    await expect(controller.stopTask(b.id)).rejects.toThrow(/only a task being worked on/);
+  }, 120_000);
+
+  it("taking a task over: the agent's last attempt becomes the person's folder, their fix is checked, merged and teaches the failure its fix", async () => {
+    // The project's check fails while bad.txt exists
+    const check = [
+      "const fs = require('fs');",
+      "const bad = fs.existsSync('bad.txt');",
+      "console.log(bad ? 'Tests  1 failed (1)' : 'Tests  1 passed (1)');",
+      'process.exit(bad ? 1 : 0);',
+    ].join('\n');
+    const cfg: PuffConfig = {
+      ...config,
+      limits: { ...config.limits, maxAttempts: 1 },
+      verify: { ...config.verify, testCommand: 'node check.cjs' },
+    };
+    const codex = fakeAgent('codex', (o) => {
+      writeFileSync(join(o.cwd, 'bad.txt'), 'oops\n');
+      return { output: 'I added bad.txt' };
+    });
+    const f = await fixture(cfg, { codex });
+    writeFileSync(join(f.repoPath, 'check.cjs'), check);
+    gitIn(f.repoPath, 'add', '-A');
+    gitIn(f.repoPath, 'commit', '-q', '-m', 'add check');
+    const controller = await controllerFor(f);
+    const t = await f.task('Add the feature', { targets: ['taxFor'] });
+    const failed = await runTask(f.deps, t.id);
+    expect(failed.status).toBe('failed');
+
+    const over = await controller.takeOver(t.id);
+    expect(over.startedFrom).toMatch(/the agent's last attempt/);
+    expect(over.brief).toContain('Add the feature');
+    expect(over.brief).toMatch(/codex: failure/);
+    expect(existsSync(join(over.cwd, 'bad.txt'))).toBe(true); // they continue from the agent's work
+    expect((await getTask(f.graph, t.id))?.worktree).toMatch(/-manual$/);
+
+    // not fixed yet: the check fails, nothing merges, their folder stays
+    const tryAgain = await controller.landManual(t.id);
+    expect(tryAgain.status).toBe('failed');
+    expect(existsSync(over.cwd)).toBe(true);
+
+    // they fix it by hand
+    rmSync(join(over.cwd, 'bad.txt'));
+    writeFileSync(join(over.cwd, 'feature.txt'), 'the feature\n');
+    const landed = await controller.landManual(t.id);
+    expect(landed).toMatchObject({ status: 'done' });
+    expect(existsSync(join(f.repoPath, 'feature.txt'))).toBe(true);
+    expect(existsSync(join(f.repoPath, 'bad.txt'))).toBe(false);
+    expect(existsSync(over.cwd)).toBe(false); // cleaned up once landed
+
+    const task = (await getTask(f.graph, t.id))!;
+    expect(task.status).toBe('done');
+    expect(task.trail?.map((e) => [e.agent, e.outcome])).toEqual([
+      ['codex', 'failure'],
+      ['you', 'failure'],
+      ['you', 'success'],
+    ]);
+    const sessions = await listSessions(f.graph, t.id);
+    expect(sessions.at(-1)).toMatchObject({ agent: 'you', outcome: 'success' });
+    // the failure the agent hit now has the person's fix
+    const fixes = await read<{ summary: string }>(
+      f.graph,
+      `MATCH (:Failure)-[:FIXED_BY]->(s:Solution) RETURN s.summary AS summary`,
+    );
+    expect(fixes.length).toBeGreaterThanOrEqual(1);
+    await expect(controller.landManual(t.id)).rejects.toThrow(/not taken this task over/);
+  }, 240_000);
 });

@@ -11,10 +11,10 @@ import { NewTaskDialog, type SymbolOption } from '@/components/NewTaskDialog';
 import { ChatPanel } from '@/components/ChatPanel';
 import { ImportProjectDialog, ProjectSettingsDialog } from '@/components/ProjectDialogs';
 import { Agents } from '@/screens/Agents';
-import { Board } from '@/screens/Board';
+import { Board, type BoardAction } from '@/screens/Board';
 import { MemoryGraph } from '@/screens/MemoryGraph';
 import { Team } from '@/screens/Team';
-import { TaskDetail } from '@/screens/TaskDetail';
+import { TaskDetail, type Tab } from '@/screens/TaskDetail';
 import { Setup } from '@/screens/Setup';
 import { Welcome } from '@/screens/Welcome';
 
@@ -40,6 +40,10 @@ interface NoticeState {
 export function App() {
   const [screen, setScreen] = useState<Screen>('graph');
   const [openTask, setOpenTask] = useState<string>();
+  /** The tab a task opens on when a button sent the person straight to it (Take over opens the terminal) */
+  const [openTaskTab, setOpenTaskTab] = useState<Tab>();
+  /** "Pause after the current tasks" was pressed: nothing new starts, the running ones finish */
+  const [pausing, setPausing] = useState(false);
   const [running, setRunning] = useState(false);
   const [graph, setGraph] = useState<GraphData>();
   const [notice, setNotice] = useState<NoticeState>();
@@ -110,6 +114,7 @@ export function App() {
       }
       if (e.type === 'run') {
         setRunning(e.running);
+        if (!e.running) setPausing(false);
         if (!e.running) {
           setAgentsTick((t) => t + 1);
           void loadGraph();
@@ -162,7 +167,57 @@ export function App() {
     return `${s.files} files · ${s.symbols} symbols · ${s.calls} calls`;
   };
 
-  const closeTask = useCallback(() => setOpenTask(undefined), []);
+  const closeTask = useCallback(() => {
+    setOpenTask(undefined);
+    setOpenTaskTab(undefined);
+  }, []);
+
+  /** Something the person asked of a task from the board */
+  const boardAction = async (a: BoardAction) => {
+    const say = (tone: 'good' | 'warn' | 'bad', text: string) => setNotice({ tone, text });
+    try {
+      switch (a.kind) {
+        case 'stop':
+          await puff.stopTask(a.id);
+          return say(
+            'good',
+            'Stopped. The task is under Needs attention: retry it, switch agent or take it over.',
+          );
+        case 'retry':
+          await puff.retryTask(a.id);
+          return say('good', 'Back in the queue. Press Run team to start it.');
+        case 'done':
+          if (!window.confirm('Mark this task as done? Use this when you finished it yourself.'))
+            return;
+          await puff.markTaskDone(a.id);
+          return say('good', 'Marked done. Whatever was waiting for it can start.');
+        case 'takeover':
+          setOpenTaskTab('terminal');
+          setOpenTask(a.id);
+          return;
+        case 'switch':
+          await puff.reassignTask(a.id, a.agent);
+          // If the team is running, carry on straight away; otherwise it waits for Run team
+          if (running) await puff.start(projectId);
+          return say(
+            'good',
+            running
+              ? `Moved to ${a.agent}; it starts now.`
+              : `Moved to ${a.agent}. Press Run team to start it.`,
+          );
+      }
+    } catch (err) {
+      say('bad', (err as Error).message);
+    }
+  };
+
+  const pauseTeam = async () => {
+    try {
+      if (await puff.pauseTeam()) setPausing(true);
+    } catch (err) {
+      setNotice({ tone: 'bad', text: (err as Error).message });
+    }
+  };
 
   // Ctrl+K (or Cmd+K) opens and closes the chat from anywhere
   useEffect(() => {
@@ -224,6 +279,8 @@ export function App() {
           {...TITLES[screen]}
           running={running}
           onToggleRun={toggleRun}
+          onPause={pauseTeam}
+          pausing={pausing}
           onGoal={createGoal}
           onNewTask={() => setNewTaskOpen(true)}
           chatOpen={chatOpen}
@@ -248,7 +305,14 @@ export function App() {
               feedIsSample={!live || info.seeded === true}
             />
           )}
-          {!info?.noProject && screen === 'board' && <Board tasks={tasks} onOpen={setOpenTask} />}
+          {!info?.noProject && screen === 'board' && (
+            <Board
+              tasks={tasks}
+              onOpen={setOpenTask}
+              onAction={boardAction}
+              onHint={(text) => setNotice({ tone: 'warn', text })}
+            />
+          )}
           {!info?.noProject && screen === 'team' && (
             <Team events={timeline} onOpenTask={setOpenTask} />
           )}
@@ -303,7 +367,15 @@ export function App() {
           }}
         />
       )}
-      {openTask && <TaskDetail taskId={openTask} onClose={closeTask} symbols={symbols} />}
+      {openTask && (
+        <TaskDetail
+          key={openTask}
+          taskId={openTask}
+          onClose={closeTask}
+          symbols={symbols}
+          initialTab={openTaskTab}
+        />
+      )}
       {notice && (
         <Notice tone={notice.tone} onClose={() => setNotice(undefined)}>
           {notice.text}

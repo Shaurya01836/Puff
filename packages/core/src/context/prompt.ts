@@ -28,6 +28,8 @@ export interface PromptInput {
   maxTasks?: number;
   /** Names the plan gave that are not in the graph yet (new code) */
   hints?: string[];
+  /** A note the person attached to the task; the agent is told to follow it */
+  note?: string;
   diff?: string;
   testCommand?: string;
 }
@@ -145,6 +147,7 @@ export function renderPrompt(i: PromptInput): string {
       lines.push('');
   }
 
+  if (i.note) lines.push('NOTE FROM THE PERSON (follow it):', i.note, '');
   lines.push(...memoryBlock(i), i.role === 'planner' ? PLANNER_FOOTER : REPORT_FOOTER);
   return lines.join('\n');
 }

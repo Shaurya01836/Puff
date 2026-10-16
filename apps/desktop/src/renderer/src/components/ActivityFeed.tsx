@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Flag,
   FileText,
@@ -83,6 +83,8 @@ export function ActivityFeed({ groups, active }: { groups: ActivityGroup[]; acti
     if (active) end.current?.scrollIntoView({ block: 'nearest' });
   }, [total, active]);
 
+  const [view, setView] = useState<'feed' | 'console'>('feed');
+
   if (groups.length === 0) {
     return (
       <p className="text-sm text-ink-3">
@@ -93,8 +95,46 @@ export function ActivityFeed({ groups, active }: { groups: ActivityGroup[]; acti
     );
   }
 
+  const toggle = (
+    <div
+      role="group"
+      aria-label="How to show the steps"
+      className="flex self-end rounded-lg border border-line bg-surface-2 p-0.5 text-[11px]"
+    >
+      {(
+        [
+          ['feed', 'Feed'],
+          ['console', 'Console'],
+        ] as const
+      ).map(([id, label]) => (
+        <button
+          key={id}
+          onClick={() => setView(id)}
+          aria-pressed={view === id}
+          className={cn(
+            'rounded-md px-2.5 py-1 transition-colors',
+            view === id ? 'bg-surface-3 text-ink' : 'text-ink-3 hover:text-ink-2',
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (view === 'console') {
+    return (
+      <div className="flex flex-col gap-3">
+        {toggle}
+        <ConsoleView groups={groups} />
+        <div ref={end} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-5">
+      {toggle}
       {groups.map((g, i) => {
         const running = g.session?.outcome === 'running' || (!g.session && active);
         const start = g.steps[0]?.at ?? 0;
@@ -138,5 +178,61 @@ export function ActivityFeed({ groups, active }: { groups: ActivityGroup[]; acti
       })}
       <div ref={end} />
     </div>
+  );
+}
+
+const clock = (at: number) => new Date(at).toLocaleTimeString([], { hour12: false });
+
+/**
+ * The same steps as a terminal log: one line each, in order, monospace, the way a CLI prints them.
+ * (A task's agent runs without its own screen so Puff can read it; to see the agent's real screen, take the
+ * task over from the Terminal tab.)
+ */
+function ConsoleView({ groups }: { groups: ActivityGroup[] }) {
+  return (
+    <pre
+      aria-label="Console"
+      className="max-h-[62vh] overflow-auto rounded-xl border border-line bg-[#0a0a0a] p-3.5 font-mono text-[12px] leading-relaxed text-[#d4d4d4]"
+    >
+      {groups.map((g, i) => (
+        <div key={g.id} className="mb-3 last:mb-0">
+          <div className="text-ink-3">
+            {'── '}
+            {g.session ? `${g.session.agent} · ${g.session.role}` : 'attempt'} · attempt {i + 1}
+            {g.session && g.session.outcome !== 'running' ? ` · ${g.session.outcome}` : ''}
+            {' ──'}
+          </div>
+          {g.steps.map((s) => (
+            <div key={s.id} className="flex gap-2.5 whitespace-pre-wrap">
+              <span className="shrink-0 text-ink-3">{clock(s.at)}</span>
+              <span
+                className={cn(
+                  s.ok === false
+                    ? 'text-[#f45d6d]'
+                    : s.ok === true
+                      ? 'text-[#4ade80]'
+                      : s.kind === 'phase'
+                        ? 'text-[#a99bff]'
+                        : s.kind === 'edit'
+                          ? 'text-[#f5b83d]'
+                          : s.kind === 'message'
+                            ? 'text-[#9ca3af] italic'
+                            : '',
+                )}
+              >
+                {s.kind === 'command'
+                  ? '$ '
+                  : s.kind === 'phase'
+                    ? '▶ '
+                    : s.ok === false
+                      ? '✖ '
+                      : '· '}
+                {s.text}
+              </span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </pre>
   );
 }

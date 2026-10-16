@@ -8,6 +8,9 @@ files:
   - out/**
   - package.json
 asar: true
+# The terminal needs its native program files outside the archive (conpty and the .node binary)
+asarUnpack:
+  - node_modules/@lydell/**
 # Ships next to the app files: the default agent configuration and the measured benchmark results.
 # Both are read from process.resourcesPath, so the installed app needs no checkout of Puff.
 extraResources:

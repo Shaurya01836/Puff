@@ -5,7 +5,7 @@
 // agent claims. Harness problems (not signed in, timeout) are recorded as `error` sessions and do
 // not create failure memory, because they say nothing about the code.
 import type { Graph } from 'falkordb';
-import type { ActivityStep, AgentName, PuffEvent, Task } from '@puff/shared';
+import type { ActivityStep, Actor, AgentName, PuffEvent, Task, TrailEntry } from '@puff/shared';
 import { ROLE_FOR_TYPE, type Adapters } from '../agents/adapters';
 import { isLimitError } from '../agents/parse';
 import { WRITES_FILES, type HarnessResult } from '../agents/types';
@@ -25,6 +25,7 @@ import {
   type SessionResult,
 } from '../memory/sessions';
 import { getTask, updateTask } from '../memory/tasks';
+import { read, run as runQuery } from '../db/client';
 import { candidateAgents } from './routing';
 import type { SlotPool } from './schedule';
 import { runVerification, type Verdict } from './verify';
@@ -42,11 +43,13 @@ export interface RunDeps {
   slots?: SlotPool;
   /** Agents that proved unusable during this run (not signed in, not installed), with the reason */
   unavailable?: Map<AgentName, string>;
+  /** True when the person stopped this one task (as opposed to stopping the whole team) */
+  userStopped?: () => boolean;
 }
 
 export interface AttemptSummary {
   n: number;
-  agent: AgentName;
+  agent: Actor;
   sessionId: string;
   outcome: 'success' | 'failure' | 'error';
   detail: string;
@@ -190,8 +193,23 @@ export async function runTask(
     }
 
     if (attempt.aborted) {
-      await emitTask(deps, await updateTask(graph, taskId, { status: 'planned', tokens }));
-      return { taskId, status: 'aborted', attempts, reason: 'Stopped by the user' };
+      // Stopped by the person on this one task: it stays visible as failed, with Retry. Stopping the whole
+      // team puts the task back in the queue instead.
+      const byPerson = deps.userStopped?.() === true;
+      await emitTask(
+        deps,
+        await updateTask(graph, taskId, {
+          status: byPerson ? 'failed' : 'planned',
+          tokens,
+          stalledAt: null,
+        }),
+      );
+      return {
+        taskId,
+        status: byPerson ? 'failed' : 'aborted',
+        attempts,
+        reason: byPerson ? 'Stopped by you' : 'Stopped by the user',
+      };
     }
     if (attempt.stop) {
       await emitTask(deps, await updateTask(graph, taskId, { status: 'failed', tokens }));
@@ -246,20 +264,48 @@ interface AttemptOutcome {
   aborted?: boolean;
 }
 
+/** The trail with a new attempt on the end */
+async function trailWith(graph: Graph, taskId: string, entry: TrailEntry): Promise<TrailEntry[]> {
+  return [...((await getTask(graph, taskId))?.trail ?? []), entry];
+}
+
+/** Close the running entry of a task's trail */
+async function endTrail(
+  graph: Graph,
+  taskId: string,
+  outcome: TrailEntry['outcome'],
+  detail?: string,
+): Promise<void> {
+  const trail = [...((await getTask(graph, taskId))?.trail ?? [])];
+  for (let i = trail.length - 1; i >= 0; i--) {
+    if (trail[i]!.outcome === 'running') {
+      trail[i] = { ...trail[i]!, outcome, ...(detail ? { detail } : {}) };
+      break;
+    }
+  }
+  await updateTask(graph, taskId, { trail, stalledAt: null });
+}
+
+/**
+ * One attempt. With `manual`, the attempt is the person's: their changes in that worktree are checked,
+ * merged and re-tested exactly like an agent's, and recorded as work done by "you".
+ */
 async function runAttempt(
   deps: RunDeps,
   task: Task,
-  agent: AgentName,
+  agent: Actor,
   role: ReturnType<typeof roleOf>,
   n: number,
+  manual?: Worktree,
 ): Promise<AttemptOutcome> {
   const { graph, config, repo } = deps;
   const log = deps.log ?? (() => {});
-  const adapter = deps.adapters[agent]!;
+  const adapter = manual ? undefined : deps.adapters[agent as AgentName]!;
   const writes = WRITES_FILES[role];
   const none = { in: 0, out: 0 };
 
-  const wt = await repo.createWorktree(`${task.id}-a${n}`, config.worktrees.linkDirs);
+  const wt = manual ?? (await repo.createWorktree(`${task.id}-a${n}`, config.worktrees.linkDirs));
+  if (manual) await runQuery(graph, "MERGE (:Agent {name: 'you'})");
   const sessionId = await startSession(graph, { agent, taskId: task.id, role });
 
   // What happens during this attempt, in order. Each step goes to the UI as it happens and is stored
@@ -283,16 +329,27 @@ async function runAttempt(
     if (steps.length > MAX_STORED_STEPS) steps.shift();
     deps.emit?.({ type: 'activity', step });
   };
-  const end = (result: SessionResult) =>
-    finishSession(graph, sessionId, { ...result, activity: steps });
-  note('phase', `${agent} started as ${role}`);
+  // How this attempt ends on the task's trail: stopped by the person, or stalled, instead of a plain error
+  let trailOutcome: TrailEntry['outcome'] | undefined;
+  const end = async (result: SessionResult) => {
+    await finishSession(graph, sessionId, { ...result, activity: steps });
+    await endTrail(
+      graph,
+      task.id,
+      trailOutcome ?? result.outcome,
+      result.summary?.replace(/\s+/g, ' ').slice(0, 100),
+    );
+  };
+  note('phase', manual ? 'You made changes yourself' : `${agent} started as ${role}`);
   await emitTask(
     deps,
     await updateTask(graph, task.id, {
-      status: 'running',
-      assignedAgent: agent,
+      // A manual attempt leaves the status alone (the task is not an agent's to run)
+      ...(manual ? {} : { status: 'running' as const, assignedAgent: agent as AgentName }),
       role,
       worktree: `.puff/worktrees/${wt.name}`,
+      trail: await trailWith(graph, task.id, { agent, outcome: 'running', at: Date.now() }),
+      stalledAt: null,
     }),
   );
 
@@ -308,43 +365,107 @@ async function runAttempt(
     detail,
     failures,
   });
-  const cleanup = (deleteBranch: boolean) =>
-    repo.remove(wt, { deleteBranch }).catch((e) => log(`cleanup: ${(e as Error).message}`));
+  // The person's own worktree is theirs: it stays until their changes have landed
+  const cleanup = (deleteBranch: boolean, landed = false) =>
+    manual && !landed
+      ? Promise.resolve()
+      : repo.remove(wt, { deleteBranch }).catch((e) => log(`cleanup: ${(e as Error).message}`));
 
-  // A planner also gets the code map, so it is allowed a bigger prompt.
-  const pack = await compileContext(graph, task.id, {
-    role,
-    sessionId,
-    budgetTokens: config.limits.contextTokenBudget * (role === 'planner' ? 2 : 1),
-    testCommand: config.verify.testCommand,
-    maxTasks: config.limits.maxTasksPerPlan,
-  });
-  await emitSession(deps, task.id, sessionId);
-
-  // Wait for one of this agent's slots (its configured instances), then run. Waiting can be aborted.
-  let release: (() => void) | undefined;
-  try {
-    release = await deps.slots?.acquire(agent, deps.signal);
-  } catch {
-    await end({
-      outcome: 'error',
-      summary: 'Stopped while waiting for a free agent slot',
+  let res: HarnessResult;
+  if (manual) {
+    res = { exitCode: 0, output: 'Changes made by you.', durationMs: 0, raw: '' };
+  } else {
+    // A planner also gets the code map, so it is allowed a bigger prompt.
+    const pack = await compileContext(graph, task.id, {
+      role,
+      sessionId,
+      budgetTokens: config.limits.contextTokenBudget * (role === 'planner' ? 2 : 1),
+      testCommand: config.verify.testCommand,
+      maxTasks: config.limits.maxTasksPerPlan,
     });
     await emitSession(deps, task.id, sessionId);
-    await cleanup(true);
-    return { summary: summary('error', 'Stopped by the user'), tokens: none, aborted: true };
+
+    // Wait for one of this agent's slots (its configured instances), then run. Waiting can be aborted.
+    let release: (() => void) | undefined;
+    try {
+      release = await deps.slots?.acquire(agent as AgentName, deps.signal);
+    } catch {
+      trailOutcome = 'stopped';
+      await end({
+        outcome: 'error',
+        summary: 'Stopped while waiting for a free agent slot',
+      });
+      await emitSession(deps, task.id, sessionId);
+      await cleanup(true);
+      return { summary: summary('error', 'Stopped by the user'), tokens: none, aborted: true };
+    }
+
+    // Watch for an agent that has gone quiet: warn on the board, and (if configured) stop it so the
+    // task moves on to the next agent instead of waiting for the full timeout.
+    const { stallWarnMs, stallKillMs } = config.limits;
+    let lastOutput = Date.now();
+    let stalled = false;
+    let stallKilled = false;
+    const own = new AbortController();
+    const runSignal = deps.signal ? AbortSignal.any([deps.signal, own.signal]) : own.signal;
+    const setStalled = (at: number | null) =>
+      updateTask(graph, task.id, { stalledAt: at })
+        .then((t) => emitTask(deps, t))
+        .catch(() => {});
+    const watcher = setInterval(
+      () => {
+        const quiet = Date.now() - lastOutput;
+        if (stallKillMs > 0 && quiet > stallKillMs && !stallKilled) {
+          stallKilled = true;
+          own.abort();
+        } else if (quiet > stallWarnMs && !stalled) {
+          stalled = true;
+          note(
+            'phase',
+            `No output for ${Math.max(1, Math.round(quiet / 60_000))} min: the agent may be stuck. You can stop it or switch agent.`,
+            { ok: false },
+          );
+          void setStalled(Date.now());
+        }
+      },
+      Math.min(10_000, Math.max(200, stallWarnMs / 3)),
+    );
+    res = await adapter!
+      .run({
+        prompt: pack.prompt,
+        cwd: wt.path,
+        role,
+        timeoutMs: config.limits.timeoutMs,
+        model: task.model ?? config.harnesses[agent]?.model,
+        signal: runSignal,
+        onOutput: () => {
+          lastOutput = Date.now();
+          if (stalled && !stallKilled) {
+            stalled = false;
+            note('phase', 'The agent is producing output again');
+            void setStalled(null);
+          }
+        },
+        onActivity: (step) => note(step.kind, step.text, { path: step.path, ok: step.ok }),
+      })
+      .finally(() => {
+        clearInterval(watcher);
+        release?.();
+      });
+    if (stallKilled && res.error?.kind === 'aborted') {
+      res = {
+        ...res,
+        error: {
+          kind: 'timeout',
+          message: `No output for ${Math.round(stallKillMs / 60_000)} min, so Puff stopped it and moved on`,
+        },
+      };
+    }
+    if (res.error) {
+      if (stallKilled || (stalled && res.error.kind === 'timeout')) trailOutcome = 'stalled';
+      else if (res.error.kind === 'aborted') trailOutcome = 'stopped';
+    }
   }
-  const res: HarnessResult = await adapter
-    .run({
-      prompt: pack.prompt,
-      cwd: wt.path,
-      role,
-      timeoutMs: config.limits.timeoutMs,
-      model: task.model ?? config.harnesses[agent]?.model,
-      signal: deps.signal,
-      onActivity: (step) => note(step.kind, step.text, { path: step.path, ok: step.ok }),
-    })
-    .finally(() => release?.());
   const tokens = { in: res.tokensIn ?? 0, out: res.tokensOut ?? 0 };
   const facts = {
     tokensIn: res.tokensIn,
@@ -357,7 +478,7 @@ async function runAttempt(
   if (res.error) {
     if (res.error.kind === 'auth' || res.error.kind === 'unavailable' || isLimitError(res.error)) {
       deps.unavailable ??= new Map();
-      deps.unavailable.set(agent, res.error.message);
+      deps.unavailable.set(agent as AgentName, res.error.message);
     }
     await end({
       outcome: 'error',
@@ -588,7 +709,7 @@ async function runAttempt(
       for (const t of applied.tasks) await emitTask(deps, t);
     }
     await emitSession(deps, task.id, sessionId);
-    await cleanup(true);
+    await cleanup(true, true);
     return {
       summary: summary('success', summarize(res.output, 160)),
       tokens,
@@ -608,7 +729,12 @@ async function runAttempt(
     await emitSession(deps, task.id, sessionId);
     await cleanup(true);
     log(`✖ verification error: ${verdict.message}`);
-    return { summary: summary('error', verdict.message ?? 'verification error'), tokens, tests };
+    return {
+      summary: summary('error', verdict.message ?? 'verification error'),
+      tokens,
+      tests,
+      aborted: deps.signal?.aborted === true,
+    };
   }
 
   // 5. The tests failed: remember exactly where, before the worktree disappears.
@@ -643,5 +769,66 @@ async function runAttempt(
 }
 
 const roleOf = (type: Task['type']) => ROLE_FOR_TYPE[type];
+
+/** Failures recorded by this task's earlier sessions that nothing has fixed yet */
+async function openFailures(graph: Graph, taskId: string): Promise<string[]> {
+  const rows = await read<{ id: string }>(
+    graph,
+    `MATCH (se:Session)-[:WORKED_ON]->(:Task {id: $id})
+     MATCH (se)-[:HIT]->(f:Failure) WHERE NOT (f)-[:FIXED_BY]->()
+     RETURN DISTINCT f.id AS id`,
+    { id: taskId },
+  );
+  return rows.map((r) => r.id);
+}
+
+/**
+ * The person's own changes to a task, made in `wt` (a worktree they took over): check them with the
+ * project's tests like an agent's work, merge them, re-test the combined result, and remember them.
+ * If they fix what an agent got wrong earlier, that failure gets its fix.
+ */
+export async function landManualWork(
+  deps: RunDeps,
+  taskId: string,
+  wt: Worktree,
+): Promise<{ status: 'done' | 'failed'; message: string }> {
+  const { graph } = deps;
+  const task = await getTask(graph, taskId);
+  if (!task) throw new Error(`Unknown task ${taskId}`);
+  const role = ROLE_FOR_TYPE[task.type];
+  if (!WRITES_FILES[role])
+    throw new Error(
+      'This task does not change code, so there is nothing to land. Mark it done instead.',
+    );
+  await primeMemoryEvents(deps);
+  const before = await openFailures(graph, taskId);
+  const attempt = await runAttempt(deps, task, 'you', role, (task.trail?.length ?? 0) + 1, wt);
+
+  if (attempt.summary.outcome === 'success') {
+    for (const failureId of before) {
+      await recordSolution(graph, {
+        failureId,
+        summary: attempt.fix?.text || 'Fixed by hand (see the merged commit)',
+        commit: attempt.fix?.commit,
+      });
+    }
+    await emitTask(
+      deps,
+      await updateTask(graph, taskId, {
+        status: 'done',
+        testSummary: attempt.tests,
+        stalledAt: null,
+      }),
+    );
+    await flushMemoryEvents(deps);
+    return { status: 'done', message: 'Your changes passed the checks and were merged.' };
+  }
+  await emitTask(deps, await updateTask(graph, taskId, { status: 'failed', stalledAt: null }));
+  await flushMemoryEvents(deps);
+  return {
+    status: 'failed',
+    message: `Your changes were not merged: ${attempt.summary.detail}. Your working folder is kept, so you can fix it and try again.`,
+  };
+}
 
 export type { Worktree };

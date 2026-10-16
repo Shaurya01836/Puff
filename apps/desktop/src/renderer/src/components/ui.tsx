@@ -12,7 +12,7 @@ import {
   TriangleAlert,
   Zap,
 } from 'lucide-react';
-import type { AgentName, MemoryEventType, TaskStatus } from '@puff/shared';
+import type { Actor, MemoryEventType, TaskStatus } from '@puff/shared';
 import { cn } from '@/lib/cn';
 import { AGENT_META, MEMORY_EVENT_META, STATUS_META, TONE_COLOR } from '@/lib/theme';
 
@@ -32,7 +32,7 @@ export function SectionTitle({ children, right }: { children: ReactNode; right?:
 }
 
 /** Rounded-square avatar in the agent's colour; the initials keep identity readable without colour. */
-export function AgentAvatar({ agent, size = 28 }: { agent: AgentName; size?: number }) {
+export function AgentAvatar({ agent, size = 28 }: { agent: Actor; size?: number }) {
   const meta = AGENT_META[agent];
   return (
     <span
@@ -52,7 +52,7 @@ export function AgentAvatar({ agent, size = 28 }: { agent: AgentName; size?: num
   );
 }
 
-export function AgentChip({ agent, sub }: { agent?: AgentName; sub?: string }) {
+export function AgentChip({ agent, sub }: { agent?: Actor; sub?: string }) {
   if (!agent)
     return (
       <span className="inline-flex items-center gap-2 text-xs text-ink-3">

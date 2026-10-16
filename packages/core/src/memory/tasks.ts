@@ -1,6 +1,14 @@
 // Tasks: the unit of work. A task TARGETS symbols, REQUIRES capabilities and may DEPEND_ON other tasks.
 import type { Graph } from 'falkordb';
-import type { AgentName, Complexity, Role, Task, TaskStatus, TaskType } from '@puff/shared';
+import type {
+  AgentName,
+  Complexity,
+  Role,
+  Task,
+  TaskStatus,
+  TaskType,
+  TrailEntry,
+} from '@puff/shared';
 import type { PuffConfig } from '../config';
 import { read, run } from '../db/client';
 import { newId } from '../ids';
@@ -45,6 +53,17 @@ const TASK_QUERY = `
   RETURN properties(t) AS p, targets, collect(DISTINCT d.id) AS dependsOn, t.createdAt AS createdAt
   ORDER BY createdAt`;
 
+/** The stored trail; a missing or unreadable value is an empty trail, never an error. */
+function parseTrail(raw: unknown): TrailEntry[] | undefined {
+  if (typeof raw !== 'string' || !raw) return undefined;
+  try {
+    const trail = JSON.parse(raw);
+    return Array.isArray(trail) && trail.length ? (trail as TrailEntry[]) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function toTask({ p, targets, dependsOn }: TaskRow): Task {
   const num = (v: unknown) => (v === undefined || v === null ? undefined : Number(v));
   const tokensIn = num(p.tokensIn);
@@ -66,6 +85,10 @@ function toTask({ p, targets, dependsOn }: TaskRow): Task {
     blockedBy:
       Array.isArray(p.blockedBy) && p.blockedBy.length ? (p.blockedBy as string[]) : undefined,
     worktree: (p.worktree as string | undefined) ?? undefined,
+    trail: parseTrail(p.trail),
+    stalledAt: num(p.stalledAt),
+    note: (p.note as string | undefined) ?? undefined,
+    doneByHand: p.doneByHand === true ? true : undefined,
     tokens: tokensIn === undefined ? undefined : { in: tokensIn, out: num(p.tokensOut) ?? 0 },
     testSummary:
       testsTotal === undefined ? undefined : { passed: num(p.testsPassed) ?? 0, total: testsTotal },
@@ -167,6 +190,12 @@ export interface TaskPatch {
   worktree?: string;
   tokens?: { in: number; out: number };
   testSummary?: { passed: number; total: number };
+  trail?: TrailEntry[];
+  /** When the agent went quiet; `null` clears it */
+  stalledAt?: number | null;
+  /** A note for the next attempt; `null` clears it */
+  note?: string | null;
+  doneByHand?: boolean;
   /** Running tasks whose code overlaps this one (set while it waits); `null` clears it */
   blockedBy?: string[] | null;
   /** Override the update time (seeding and tests) */
@@ -195,6 +224,10 @@ export async function updateTask(graph: Graph, id: string, patch: TaskPatch): Pr
   }
   if (patch.blockedBy !== undefined)
     set('blockedBy', patch.blockedBy?.length ? patch.blockedBy : null);
+  if (patch.trail) set('trail', JSON.stringify(patch.trail.slice(-30)));
+  if (patch.stalledAt !== undefined) set('stalledAt', patch.stalledAt);
+  if (patch.note !== undefined) set('note', patch.note?.trim().slice(0, 2000) || null);
+  if (patch.doneByHand !== undefined) set('doneByHand', patch.doneByHand);
   const rows = await run<{ id: string }>(
     graph,
     `MATCH (t:Task {id: $id}) SET ${sets.join(', ')} RETURN t.id AS id`,

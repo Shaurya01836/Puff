@@ -2,6 +2,8 @@
 // change it only by team agreement, then update mocks and both sides together.
 
 export type AgentName = 'claude-code' | 'codex' | 'opencode';
+/** Who did a piece of work: one of the agents, or the person (a manual change landed through Puff) */
+export type Actor = AgentName | 'you';
 export type Role = 'planner' | 'coder' | 'verifier' | 'chore';
 export type TaskType = 'plan' | 'implement' | 'verify' | 'chore';
 export type Complexity = 'low' | 'medium' | 'high';
@@ -48,8 +50,26 @@ export interface Task {
   blockedBy?: string[];
   tokens?: { in: number; out: number };
   testSummary?: { passed: number; total: number };
+  /** Who has worked on this task, in order, so a card can say "OpenCode stalled, then Claude Code took over" */
+  trail?: TrailEntry[];
+  /** When the running agent was last silent for too long (cleared when it speaks again) */
+  stalledAt?: number;
+  /** A note from the person that the next attempt is told to follow */
+  note?: string;
+  /** Marked done by the person, not by an agent's verified work */
+  doneByHand?: boolean;
   createdAt: number;
   updatedAt: number;
+}
+
+/** One attempt on a task */
+export interface TrailEntry {
+  agent: Actor;
+  outcome: 'running' | 'success' | 'failure' | 'error' | 'stopped' | 'stalled';
+  /** When the attempt started */
+  at: number;
+  /** Why it ended the way it did, in a few words */
+  detail?: string;
 }
 
 /**
@@ -77,7 +97,7 @@ export interface ActivityStep {
 export interface SessionInfo {
   id: string;
   taskId: string;
-  agent: AgentName;
+  agent: Actor;
   role: Role;
   outcome: SessionOutcome;
   tokensIn?: number;
@@ -168,7 +188,7 @@ export interface TeamEvent {
   id: string;
   at: number;
   kind: TeamEventKind;
-  agent?: AgentName;
+  agent?: Actor;
   role?: Role;
   taskId: string;
   taskTitle: string;
@@ -244,6 +264,10 @@ export type PuffEvent =
   | { type: 'chat'; message: ChatMessage }
   /** One thing an agent (or Puff) just did on a task: a file read, an edit, a command, a test run */
   | { type: 'activity'; step: ActivityStep }
+  /** Output of a terminal the person opened (a real CLI in a task's working folder) */
+  | { type: 'terminal'; id: string; data: string; end: number }
+  /** That terminal's program ended */
+  | { type: 'terminal:exit'; id: string; code: number | null }
   /** A sign-in that Puff started has ended (the person finished it in the browser, or it failed) */
   | { type: 'signin'; agent: AgentName; ok: boolean; message: string };
 
@@ -285,6 +309,31 @@ export interface AgentCliStatus {
 
 /** signed-in / signed-out as the CLI says; unknown when the CLI has no cheap way to tell */
 export type SignInState = 'signed-in' | 'signed-out' | 'unknown';
+
+/** Which program a terminal runs: one of the agents' own CLIs, or a plain shell */
+export type TerminalCli = AgentName | 'shell';
+
+/** A terminal opened in a task's working folder */
+export interface TerminalInfo {
+  id: string;
+  taskId: string;
+  cli: TerminalCli;
+  title: string;
+  /** The working folder (a git worktree of the project) */
+  cwd: string;
+  /** Where the folder started: the agent's last attempt, or the current code */
+  startedFrom: string;
+  /** The folder was already there from an earlier take-over and holds the person's own work */
+  reused: boolean;
+  /** A short message saying what the task is and what was tried, to paste into the CLI if the person wants to */
+  brief: string;
+}
+
+/** What happened when the person's own changes were checked and merged */
+export interface ManualResult {
+  status: 'done' | 'failed';
+  message: string;
+}
 
 /** What the first-run setup screen shows */
 export interface SetupStatus {

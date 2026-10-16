@@ -38,6 +38,8 @@ const NEXT_STATUS: Partial<Record<TaskStatus, TaskStatus>> = {
 
 const clone = <T>(v: T): T => structuredClone(v);
 
+const AGENT_LABEL = { 'claude-code': 'Claude Code', codex: 'Codex', opencode: 'OpenCode' } as const;
+
 /** What the simulated run says when a task enters a status, so the Activity tab moves in the browser. */
 const SIM_STEPS: Partial<Record<TaskStatus, Array<[ActivityStep['kind'], string, boolean?]>>> = {
   running: [
@@ -98,6 +100,15 @@ const sampleSetup = (databaseOk: boolean, claudeSignedIn = true): SetupStatus =>
 export function createMockApi(opts: MockApiOptions = {}): PuffApi {
   const tickMs = opts.tickMs ?? 2500;
   let databaseUp = !opts.databaseDown;
+  /** What each sample terminal has printed, so a view that opens late catches up (like the real host) */
+  const termOut = new Map<string, { text: string; end: number }>();
+  const termPrint = (id: string, data: string) => {
+    const b = termOut.get(id) ?? { text: '', end: 0 };
+    b.text += data;
+    b.end += data.length;
+    termOut.set(id, b);
+    emit({ type: 'terminal', id, data, end: b.end });
+  };
   // In the setup preview Claude Code starts signed out, so the Sign in flow can be tried
   let claudeSignedIn = !opts.databaseDown;
   const tasks = clone(mockTasks);
@@ -366,6 +377,97 @@ export function createMockApi(opts: MockApiOptions = {}): PuffApi {
     },
     async chatReset() {
       chat.length = 0;
+    },
+    async stopTask(taskId) {
+      const t = findTask(taskId);
+      if (!['running', 'verifying', 'retrying', 'escalated'].includes(t.status))
+        throw new Error('Only a task being worked on can be stopped.');
+      t.status = 'failed';
+      delete t.stalledAt;
+      t.trail = [
+        ...(t.trail ?? []).map((e) =>
+          e.outcome === 'running' ? { ...e, outcome: 'stopped' as const } : e,
+        ),
+      ];
+      t.updatedAt = Date.now();
+      emit({ type: 'task:update', task: clone(t) });
+      return clone(t);
+    },
+    async reassignTask(taskId, agent, model) {
+      const t = findTask(taskId);
+      if (t.status === 'done') throw new Error('This task is already done.');
+      t.preferredAgent = agent;
+      t.model = model || undefined;
+      t.status = 'ready';
+      delete t.stalledAt;
+      t.updatedAt = Date.now();
+      emit({ type: 'task:update', task: clone(t) });
+      return clone(t);
+    },
+    async markTaskDone(taskId, note) {
+      const t = findTask(taskId);
+      t.status = 'done';
+      t.doneByHand = true;
+      if (note?.trim()) t.note = note.trim();
+      delete t.stalledAt;
+      t.updatedAt = Date.now();
+      emit({ type: 'task:update', task: clone(t) });
+      return clone(t);
+    },
+    async addTaskNote(taskId, note) {
+      const t = findTask(taskId);
+      t.note = note.trim() || undefined;
+      emit({ type: 'task:update', task: clone(t) });
+      return clone(t);
+    },
+    async pauseTeam() {
+      const was = timer !== undefined;
+      if (timer) clearInterval(timer);
+      timer = undefined;
+      if (was) emit({ type: 'run', running: false, message: 'Paused: nothing new will start.' });
+      return was;
+    },
+    async openTerminal({ taskId, cli }) {
+      const id = `term_${++seq}`;
+      const t = findTask(taskId);
+      t.status = 'failed';
+      t.worktree = `.puff/worktrees/${taskId}-manual`;
+      emit({ type: 'task:update', task: clone(t) });
+      const name = cli === 'shell' ? 'PowerShell' : AGENT_LABEL[cli];
+      const banner = `\x1b[1;35m${name}\x1b[0m  (sample terminal: the real one runs in the desktop app)\r\n\x1b[2m~/.puff/worktrees/${taskId}-manual\x1b[0m\r\n\r\n> `;
+      termPrint(id, banner);
+      return {
+        id,
+        taskId,
+        cli,
+        title: `${name} · ${t.title}`,
+        cwd: `.puff/worktrees/${taskId}-manual`,
+        startedFrom: "the agent's last attempt",
+        reused: false,
+        brief: `You are continuing a task that a person has taken over in this folder: "${t.title}".\nLook at git status and git diff before changing anything.`,
+      };
+    },
+    async terminalWrite(id, data) {
+      // the sample terminal echoes what is typed
+      termPrint(id, data.replace(/\r/g, '\r\n> '));
+    },
+    async terminalResize() {},
+    async terminalAttach(id) {
+      const b = termOut.get(id);
+      return { data: b?.text ?? '', end: b?.end ?? 0 };
+    },
+    async closeTerminal(id) {
+      emit({ type: 'terminal:exit', id, code: 0 });
+    },
+    async openTaskFolder() {},
+    async landManualChanges(taskId) {
+      const t = findTask(taskId);
+      t.status = 'done';
+      emit({ type: 'task:update', task: clone(t) });
+      return {
+        status: 'done',
+        message: 'Your changes passed the checks and were merged (sample).',
+      };
     },
     async retryTask(taskId) {
       const t = tasks.find((x) => x.id === taskId);

@@ -55,6 +55,7 @@ import {
   type PuffConfig,
 } from '@puff/core';
 import { ChatSession, ClaudeCodeBrain } from '@puff/mcp';
+import { TerminalHost } from './terminal';
 import type { FalkorDB, Graph } from 'falkordb';
 
 /** Parts of the API served from mocks in live mode: the savings, until bench/results.json exists. */
@@ -75,6 +76,10 @@ function findRoot(appDir: string): string {
 export interface BackendHooks {
   /** Show the system "choose a folder" dialog */
   pickDirectory?: () => Promise<string | undefined>;
+  /** Show a folder in the file explorer */
+  openPath?: (path: string) => Promise<void>;
+  /** Run `cb` when the app is quitting (terminals are closed then) */
+  onShutdown?: (cb: () => void) => void;
   /**
    * Set when this is the installed app: the folder holding what ships with it (the default
    * puff.config.yaml and bench/results.json). There is then no checkout of Puff to look around in.
@@ -95,6 +100,13 @@ interface OpenProject {
 }
 
 const NO_PROJECT = 'No project is open. Add one first.';
+
+const TERMINAL_LABEL = {
+  'claude-code': 'Claude Code',
+  codex: 'Codex',
+  opencode: 'OpenCode',
+  shell: 'Shell',
+} as const;
 
 /** The agents Puff knows how to drive, for the setup check when no configuration could be read */
 const DEFAULT_HARNESSES = {
@@ -125,12 +137,15 @@ export async function createBackend(appDir: string, hooks: BackendHooks = {}): P
   let harnesses: Record<string, { command: string }> = DEFAULT_HARNESSES;
   // Signing in to the agent CLIs (the buttons and the chat's /login share this one)
   const signIn = new SignInManager((agent) => harnesses[agent]?.command, emit);
+  // Real terminals the person opens in a task's working folder
+  const terminals = new TerminalHost(emit);
+  hooks.onShutdown?.(() => terminals.closeAll());
 
   const connectLive = async () => {
     // A database port remembered by an earlier setup (~/.puff/.env) is picked up here
     loadDotEnv(userEnvPath());
     try {
-      const built = await buildLive(appDir, hooks, emit, signIn);
+      const built = await buildLive(appDir, hooks, emit, signIn, terminals);
       live = built.api;
       harnesses = built.harnesses;
       error = undefined;
@@ -196,6 +211,7 @@ async function buildLive(
   hooks: BackendHooks,
   emit: (e: PuffEvent) => void,
   signIn: SignInManager,
+  terminals: TerminalHost,
 ): Promise<{ api: Omit<PuffApi, 'onEvent'>; harnesses: Record<string, { command: string }> }> {
   const mock = createMockApi();
   const packaged = hooks.resourcesDir !== undefined;
@@ -497,6 +513,75 @@ async function buildLive(
     },
     async chatReset() {
       current?.chat.reset();
+    },
+
+    // ---- taking control of a task -------------------------------------------------------------
+    async stopTask(taskId) {
+      return need().controller.stopTask(taskId);
+    },
+    async reassignTask(taskId, agent, model) {
+      return need().controller.reassignTask(taskId, agent, model);
+    },
+    async markTaskDone(taskId, note) {
+      return need().controller.markDone(taskId, note);
+    },
+    async addTaskNote(taskId, note) {
+      return need().controller.addNote(taskId, note);
+    },
+    async pauseTeam() {
+      return current?.controller.drain() ?? false;
+    },
+    async openTerminal({ taskId, cli }) {
+      const p = need();
+      const command = cli === 'shell' ? undefined : p.config.harnesses[cli]?.command;
+      if (cli !== 'shell' && !command) throw new Error(`${cli} is not set up for this project.`);
+      const over = await p.controller.takeOver(taskId);
+      const id = terminals.open({
+        taskId,
+        cwd: over.cwd,
+        cli,
+        command,
+      });
+      const task = await getTask(p.graph, taskId);
+      return {
+        id,
+        taskId,
+        cli,
+        title: `${TERMINAL_LABEL[cli]} · ${task?.title ?? taskId}`,
+        cwd: over.cwd,
+        startedFrom: over.startedFrom,
+        reused: over.reused,
+        brief: over.brief,
+      };
+    },
+    async terminalWrite(id, data) {
+      terminals.write(id, data);
+    },
+    async terminalResize(id, cols, rows) {
+      terminals.resize(id, cols, rows);
+    },
+    async terminalAttach(id) {
+      return terminals.attach(id);
+    },
+    async closeTerminal(id) {
+      terminals.close(id);
+    },
+    async openTaskFolder(taskId) {
+      const folder = need().controller.manualFolder(taskId);
+      if (!folder)
+        throw new Error('You have not taken this task over, so it has no working folder.');
+      await hooks.openPath?.(folder);
+    },
+    async landManualChanges(taskId) {
+      const p = need();
+      const result = await p.controller.landManual(taskId);
+      if (result.status === 'done') {
+        // The changes are in: the person's terminals are done with the folder, and Windows cannot delete a
+        // folder a program is sitting in
+        terminals.closeForTask(taskId);
+        await p.controller.removeManualFolder(taskId);
+      }
+      return result;
     },
     async getContextPack(sessionId) {
       const pack = await getContextPack(need().graph, sessionId);
