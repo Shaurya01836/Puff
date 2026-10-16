@@ -47,7 +47,7 @@ Uninstalling removes the app. It leaves `~/.puff` and the database volume alone,
 
 ## Build the installer yourself
 
-Releases are built by GitHub Actions: pushing a tag such as `v0.1.4` runs `.github/workflows/release.yml`, which builds the installer on a Windows machine and attaches `Puff-Setup.exe` to the release. To build it on your own computer:
+Releases are built by GitHub Actions: pushing a tag such as `v0.1.5` runs `.github/workflows/release.yml`, which builds the installer on a Windows machine and attaches `Puff-Setup.exe` to the release. To build it on your own computer:
 
 ```bash
 npm install

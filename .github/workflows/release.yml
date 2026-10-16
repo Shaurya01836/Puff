@@ -1,7 +1,7 @@
 name: Release installer
 
 # Builds the Windows installer on GitHub's own machines and attaches it to a release.
-#   - push a version tag (git tag v0.1.4 && git push origin v0.1.4) to publish a release
+#   - push a version tag (git tag v0.1.5 && git push origin v0.1.5) to publish a release
 #   - or run it by hand from the Actions tab to just build it (the installer is kept as a build artifact)
 # The file is always called Puff-Setup.exe, so one link always points at the newest release:
 #   https://github.com/Shaurya01836/Puff/releases/latest/download/Puff-Setup.exe

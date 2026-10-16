@@ -89,7 +89,7 @@ export function DownloadSection() {
               <Monitor className="h-3.5 w-3.5" /> Docker Desktop (runs FalkorDB)
             </span>
             <span>Git</span>
-            <span>Claude Code, Codex or OpenCode</span>
+            <span>Any one of Claude Code, Codex or OpenCode</span>
           </div>
         </div>
       </TechnicalGridContainer>
