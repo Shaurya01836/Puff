@@ -42,6 +42,24 @@ export function looksLikeCodeFailure(output: string): boolean {
   return /FAIL|failed|error TS\d+/i.test(output);
 }
 
+/**
+ * Say why a test command failed to run in words a person can act on. Windows reports some failures as
+ * huge unsigned numbers (4294963238 is really -4058, "not found"), and npm's own message is buried.
+ */
+export function explainTestError(exitCode: number | null, output: string): string {
+  const code = exitCode !== null && exitCode > 0x7fffffff ? exitCode - 0x100000000 : exitCode;
+  if (/ENOENT/.test(output) && /package\.json/.test(output))
+    return 'The test command could not find a package.json where it ran (the top folder of the project).';
+  if (code === -4058)
+    return 'The test command could not find a file or program it needs (code -4058, "not found").';
+  const last = output
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .at(-1);
+  return `The test command exited with code ${code}${last ? `: ${last.slice(0, 160)}` : ''}.`;
+}
+
 export interface Verdict {
   ok: boolean;
   /** `tests-failed`: the tests ran and some failed. `error`: the command crashed, timed out or never ran. */
@@ -89,10 +107,5 @@ export async function runVerification(
   if (summary ? summary.failed > 0 : looksLikeCodeFailure(output)) {
     return { ...base, ok: false, kind: 'tests-failed', message: 'Tests failed' };
   }
-  return {
-    ...base,
-    ok: false,
-    kind: 'error',
-    message: `The test command exited with code ${r.exitCode}`,
-  };
+  return { ...base, ok: false, kind: 'error', message: explainTestError(r.exitCode, output) };
 }

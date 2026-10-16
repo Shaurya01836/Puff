@@ -15,6 +15,17 @@ export interface Parsed {
 const AUTH =
   /authenticat|oauth|log ?in|sign ?in|credential|unauthori[sz]ed|\b401\b|api key|session expired|token (?:has )?expired/i;
 
+const LIMIT =
+  /session limit|usage limit|rate limit|quota|too many requests|\b429\b|credit balance|resets? (?:at|in)\b/i;
+
+/**
+ * The provider said "no more for now" (a usage or session limit, a rate limit). Trying the same agent again
+ * on the next task only wastes time until the limit lifts, so Puff skips it for the rest of the run.
+ */
+export function isLimitError(error: AgentError): boolean {
+  return error.kind === 'api' && LIMIT.test(error.message);
+}
+
 /** Sort an error message into auth problems and everything else the provider can say. */
 export function classifyError(message: string): AgentError {
   return { kind: AUTH.test(message) ? 'auth' : 'api', message: message.trim().slice(0, 500) };

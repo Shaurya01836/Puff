@@ -221,15 +221,25 @@ export async function promoteReady(graph: Graph): Promise<Task[]> {
  * After a crash or a force-quit, tasks can be stuck mid-run with a session that will never finish.
  * Put them back in the queue and close their sessions as errors. Returns how many tasks were reset.
  */
-export async function recoverInterrupted(graph: Graph): Promise<number> {
-  const stuck = (await listTasks(graph)).filter((t) =>
-    ['running', 'verifying', 'retrying'].includes(t.status),
+export async function recoverInterrupted(
+  graph: Graph,
+  opts: { olderThanMs?: number } = {},
+): Promise<number> {
+  const now = Date.now();
+  const stuck = (await listTasks(graph)).filter(
+    (t) =>
+      ['running', 'verifying', 'retrying'].includes(t.status) &&
+      // With a limit, only tasks that have been silent that long: one that another process is working on
+      // right now keeps updating, so it is left alone
+      (opts.olderThanMs === undefined || now - t.updatedAt > opts.olderThanMs),
   );
   for (const t of stuck) await updateTask(graph, t.id, { status: 'planned' });
   await run(
     graph,
-    `MATCH (se:Session {outcome: 'running'})
+    `MATCH (se:Session {outcome: 'running'})-[:WORKED_ON]->(t:Task)
+     WHERE $all OR t.id IN $ids
      SET se.outcome = 'error', se.summary = 'Interrupted before it finished', se.endedAt = timestamp()`,
+    { all: opts.olderThanMs === undefined, ids: stuck.map((t) => t.id) },
   );
   return stuck.length;
 }

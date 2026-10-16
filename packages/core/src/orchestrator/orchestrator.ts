@@ -5,7 +5,8 @@
 //   - each agent gets at most its configured number of simultaneous runs
 // Merges happen one at a time (see GitRepo.serial), whatever runs in parallel.
 import type { AgentName } from '@puff/shared';
-import { createAdapters } from '../agents/adapters';
+import { ROLE_FOR_TYPE, createAdapters } from '../agents/adapters';
+import { WRITES_FILES } from '../agents/types';
 import { GitRepo } from '../git/repo';
 import {
   claimTask,
@@ -16,6 +17,7 @@ import {
 } from '../memory/tasks';
 import { flushMemoryEvents, runTask, type RunDeps, type TaskRunResult } from './run';
 import { SlotPool, overlappingTasks } from './schedule';
+import { runVerification } from './verify';
 
 export type OrchestratorDeps = Omit<RunDeps, 'signal' | 'unavailable' | 'slots'>;
 
@@ -37,6 +39,9 @@ export class Orchestrator {
   private loop?: Promise<TaskRunResult[]>;
   private readonly unavailable = new Map<AgentName, string>();
   private readonly owner = `puff-${process.pid}-${Date.now().toString(36)}`;
+  private checked = false;
+  /** Set when the run stopped before starting agents because the project cannot be checked */
+  problem?: string;
 
   constructor(private readonly deps: OrchestratorDeps) {}
 
@@ -60,6 +65,31 @@ export class Orchestrator {
   async stop(): Promise<void> {
     this.controller?.abort();
     await this.loop?.catch(() => {});
+  }
+
+  /**
+   * Run the project's check once on the untouched code, before any agent that writes code is started.
+   * If the command cannot run at all (no package.json where it runs, a missing tool), every attempt would
+   * fail only after the agent had spent its tokens, so say so now. Failing tests are allowed through: the
+   * task may be exactly the fix. Returns a message when the run must not start.
+   */
+  private async preflight(signal: AbortSignal): Promise<string | undefined> {
+    const { repo, config, log } = this.deps;
+    const verdict = await repo
+      .withCleanCheckout('preflight', config.worktrees.linkDirs, (dir) =>
+        runVerification(dir, config.verify.testCommand, config.limits.timeoutMs, signal),
+      )
+      .catch((err: Error) => ({ kind: 'error' as const, message: err.message }));
+    if (verdict.kind === 'error')
+      return `No agent was started, and nothing was spent: the project's check cannot run. ${verdict.message ?? ''} The command is "${config.verify.testCommand}". Change it in the project's settings.`.replace(
+        /\s+/g,
+        ' ',
+      );
+    if (verdict.kind === 'tests-failed')
+      log?.(
+        'the project already fails its check before any agent touches it; agents will be judged against that',
+      );
+    return undefined;
   }
 
   /** Agents found unusable during this run, with the reason. */
@@ -93,7 +123,7 @@ export class Orchestrator {
       running.set(taskId, run);
     };
 
-    while (!signal.aborted) {
+    while (!signal.aborted && !this.problem) {
       for (const t of await promoteReady(graph)) emit?.({ type: 'task:update', task: t });
 
       const ready = (await listTasks(graph))
@@ -102,6 +132,14 @@ export class Orchestrator {
 
       for (const task of ready) {
         if (running.size >= maxParallel) break;
+        if (!this.checked && WRITES_FILES[ROLE_FOR_TYPE[task.type]]) {
+          this.problem = await this.preflight(signal);
+          this.checked = true;
+          if (this.problem) {
+            log?.(`✖ ${this.problem}`);
+            break;
+          }
+        }
         // Tasks claimed a moment ago are already 'running' in the graph, so they count as in flight.
         const blockers = await overlappingTasks(graph, task);
         const was = (task.blockedBy ?? []).join();

@@ -21,14 +21,20 @@ import type { Adapters } from '../src/agents/adapters';
 import type { HarnessAdapter, HarnessResult, RunOptions } from '../src/agents/types';
 import { parseConfig, type PuffConfig } from '../src/config';
 import { getContextPack } from '../src/context/compiler';
-import { connect, loadDotEnv, read } from '../src/db/client';
+import { connect, loadDotEnv, read, run as runQuery } from '../src/db/client';
 import { initProjectGraph } from '../src/db/init';
 import { removeLink, GitRepo } from '../src/git/repo';
 import { graphName } from '../src/ids';
 import { indexRepo } from '../src/indexer/index';
 import { parsePuffReport } from '../src/memory/report';
-import { listSessions } from '../src/memory/sessions';
-import { createTask, getTask, listTasks } from '../src/memory/tasks';
+import { listSessions, startSession } from '../src/memory/sessions';
+import {
+  createTask,
+  getTask,
+  listTasks,
+  recoverInterrupted,
+  updateTask,
+} from '../src/memory/tasks';
 import { Orchestrator } from '../src/orchestrator/orchestrator';
 import { runTask, type RunDeps } from '../src/orchestrator/run';
 
@@ -599,4 +605,117 @@ describe.skipIf(!ready)('the run loop (fake agents, real git, real FalkorDB)', (
     // and the clean checkout is gone afterwards
     expect(existsSync(join(f.repoPath, '.puff', 'worktrees', `combined-${t.id}`))).toBe(false);
   }, 120_000);
+
+  it('a project whose check cannot run is refused before any agent is started: nothing is spent, the task stays ready', async () => {
+    const broken: PuffConfig = {
+      ...config,
+      verify: { ...config.verify, testCommand: 'node no-such-file-anywhere.js' },
+    };
+    const codex = fakeAgent('codex', () => ({ output: 'should never be asked' }));
+    const f = await fixture(broken, { codex });
+    const t = await f.task('Anything', { targets: ['taxFor'] });
+    const { repo, graph, project, config: cfg, adapters, emit, log } = f.deps;
+
+    const orch = new Orchestrator({ repo, graph, project, config: cfg, adapters, emit, log });
+    const results = await orch.start();
+
+    expect(results).toEqual([]);
+    expect(codex.calls).toHaveLength(0); // no tokens were spent
+    expect(orch.problem).toMatch(/No agent was started, and nothing was spent/);
+    expect(orch.problem).toContain('node no-such-file-anywhere.js');
+    expect((await getTask(graph, t.id))?.status).toBe('ready'); // still there to run once it is fixed
+    expect(f.logs.join('\n')).toMatch(/project's check cannot run/);
+  }, 120_000);
+
+  it('a project that already fails its tests still runs (the task may be the fix); a planner never needs the check', async () => {
+    const red: PuffConfig = {
+      ...config,
+      verify: {
+        ...config.verify,
+        testCommand: `node -e "console.log('Tests  1 failed (1)'); process.exit(1)"`,
+      },
+    };
+    const codex = fakeAgent('codex', () => ({ output: 'looked at it' }));
+    const f = await fixture(red, { codex });
+    await f.task('Fix it', { targets: ['taxFor'] });
+    const { repo, graph, project, config: cfg, adapters, emit, log } = f.deps;
+    const orch = new Orchestrator({ repo, graph, project, config: cfg, adapters, emit, log });
+    await orch.start();
+    expect(orch.problem).toBeUndefined();
+    expect(codex.calls.length).toBeGreaterThan(0);
+    expect(f.logs.join('\n')).toMatch(/already fails its check/);
+
+    // a plan task reads code and writes none: the (broken) check is irrelevant to it
+    const broken: PuffConfig = {
+      ...config,
+      verify: { ...config.verify, testCommand: 'node nope.js' },
+    };
+    const planner = fakeAgent('claude-code', () => ({ output: 'a plan, but no tasks' }));
+    const g = await fixture(broken, { 'claude-code': planner });
+    await g.task('Plan something', { type: 'plan', preferredAgent: 'claude-code' });
+    const d = g.deps;
+    const plan = new Orchestrator({
+      repo: d.repo,
+      graph: d.graph,
+      project: d.project,
+      config: d.config,
+      adapters: d.adapters,
+      emit: d.emit,
+      log: d.log,
+    });
+    await plan.start();
+    expect(plan.problem).toBeUndefined();
+    expect(planner.calls).toHaveLength(1);
+  }, 180_000);
+
+  it('an agent that hit its usage limit is skipped for the rest of the run, not asked again on every task', async () => {
+    const limited = fakeAgent('codex', () => ({
+      output: '',
+      error: { kind: 'api', message: "api: You've hit your session limit · resets 5:10am" },
+    }));
+    const other = fakeAgent('opencode', (o) => {
+      edit(o.cwd, 'src/cart/tax.ts', 'export function taxFor', '// done\nexport function taxFor');
+      return { output: 'ok' };
+    });
+    // one task at a time, so the second starts only after the first has hit the limit
+    const serial: PuffConfig = { ...FAST, limits: { ...FAST.limits, maxParallel: 1 } };
+    const f = await fixture(serial, { codex: limited, opencode: other });
+    await f.task('first', { targets: ['taxFor'], preferredAgent: 'codex' });
+    await f.task('second', { targets: ['applyDiscount'], preferredAgent: 'codex' });
+    const { repo, graph, project, config: cfg, adapters, emit, log } = f.deps;
+    const orch = new Orchestrator({ repo, graph, project, config: cfg, adapters, emit, log });
+    await orch.start();
+    expect(limited.calls).toHaveLength(1); // asked once, then never again this run
+    expect(orch.blocked.get('codex')).toMatch(/session limit/);
+  }, 180_000);
+
+  it('a task left "running" by a closed app goes back to the queue when the project is opened; one still being worked on is left alone', async () => {
+    const f = await fixture(FAST, {});
+    const stale = await f.task('left behind');
+    const live = await f.task('being worked on right now');
+    for (const t of [stale, live]) await updateTask(f.graph, t.id, { status: 'running' });
+    const staleSession = await startSession(f.graph, {
+      agent: 'codex',
+      taskId: stale.id,
+      role: 'coder',
+    });
+    const liveSession = await startSession(f.graph, {
+      agent: 'codex',
+      taskId: live.id,
+      role: 'coder',
+    });
+    // the first has been silent for hours
+    await runQuery(f.graph, 'MATCH (t:Task {id: $id}) SET t.updatedAt = $at', {
+      id: stale.id,
+      at: Date.now() - 10 * 3_600_000,
+    });
+
+    expect(await recoverInterrupted(f.graph, { olderThanMs: 20 * 60_000 })).toBe(1);
+    expect((await getTask(f.graph, stale.id))?.status).toBe('planned');
+    expect((await getTask(f.graph, live.id))?.status).toBe('running');
+    const outcome = async (id: string, taskId: string) =>
+      (await listSessions(f.graph, taskId)).find((s) => s.id === id)?.outcome;
+    expect(await outcome(staleSession, stale.id)).toBe('error');
+    expect(await outcome(liveSession, live.id)).toBe('running');
+  }, 60_000);
 });

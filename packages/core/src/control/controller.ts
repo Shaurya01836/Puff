@@ -12,6 +12,7 @@ import {
   editTask,
   getTask,
   listTasks,
+  recoverInterrupted,
   removeTask,
   updateTask,
   type NewTask,
@@ -77,6 +78,15 @@ export class ProjectController {
 
   /** Agents can only run when the project is its own git repository; if not, say why instead of failing later. */
   static async create(deps: ControllerDeps): Promise<ProjectController> {
+    // A task left "running" by an app that was closed (or crashed) mid-run would show as running forever.
+    // Anything silent for longer than two agent timeouts cannot still be running, so it goes back to the queue.
+    const reset = await recoverInterrupted(deps.graph, {
+      olderThanMs: deps.config.limits.timeoutMs * 2,
+    }).catch(() => 0);
+    if (reset)
+      deps.log?.(
+        `${reset} task(s) were left running by an earlier session and are back in the queue`,
+      );
     if (deps.runDeps) return new ProjectController(deps, deps.runDeps, undefined);
     try {
       const runDeps = await createRunDeps({
@@ -222,7 +232,15 @@ export class ProjectController {
     const orchestrator = (this.orchestrator = new Orchestrator(this.runDeps));
     this.emit({ type: 'run', running: true });
     orchestrator.start(opts).then(
-      (results) => this.emit({ type: 'run', running: false, ...summarizeRun(results) }),
+      (results) =>
+        this.emit({
+          type: 'run',
+          running: false,
+          // A run that could not start says why, instead of the usual "0 tasks done"
+          ...(orchestrator.problem
+            ? { message: orchestrator.problem, tone: 'bad' as const }
+            : summarizeRun(results)),
+        }),
       (err: Error) => this.emit({ type: 'run', running: false, message: err.message, tone: 'bad' }),
     );
     return true;

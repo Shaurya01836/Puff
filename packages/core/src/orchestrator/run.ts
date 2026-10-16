@@ -7,6 +7,7 @@
 import type { Graph } from 'falkordb';
 import type { ActivityStep, AgentName, PuffEvent, Task } from '@puff/shared';
 import { ROLE_FOR_TYPE, type Adapters } from '../agents/adapters';
+import { isLimitError } from '../agents/parse';
 import { WRITES_FILES, type HarnessResult } from '../agents/types';
 import type { PuffConfig } from '../config';
 import { compileContext } from '../context/compiler';
@@ -354,7 +355,7 @@ async function runAttempt(
 
   // 1. The agent itself failed to run: not a code failure, so no failure memory.
   if (res.error) {
-    if (res.error.kind === 'auth' || res.error.kind === 'unavailable') {
+    if (res.error.kind === 'auth' || res.error.kind === 'unavailable' || isLimitError(res.error)) {
       deps.unavailable ??= new Map();
       deps.unavailable.set(agent, res.error.message);
     }

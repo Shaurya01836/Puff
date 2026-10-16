@@ -314,6 +314,12 @@ npm run puff -- project use my-app
 
 From then on every command works on the active project; `--repo <folder|name>` picks another for one command. `project set` changes a project's test command or linked folders, and `project remove` forgets a project (its folder is never touched; `--delete-memory` also deletes its graph). In the desktop app the project card at the top of the sidebar does the same: switch, **Add a project…** (with a folder picker and the same checks), settings and remove. Your agents and limits stay shared: `npm run puff -- config init` copies the defaults to `~/.puff/config.yaml` for you to edit.
 
+### Protecting your tokens
+
+- **The check is tested before any agent starts.** When a run is about to start an agent that writes code, Puff first runs the project's own check once on the untouched code. If that command cannot run at all (no package.json where it runs, a missing tool), the run stops with the reason, nothing is spent, and the tasks stay ready. A project that already fails its tests still runs, since the task may be the fix.
+- **An agent that hit its usage limit is skipped** for the rest of the run, instead of being asked again by every task.
+- **A task left "running" by a closed app** goes back to the queue the next time the project is opened (anything silent for more than two agent timeouts cannot still be running).
+
 ### Watch the agents work
 
 Open a task and its **Activity** tab shows each step as it happens: the files an agent reads, what it edits, the commands it runs, what it says, and Puff's own steps in between (running the tests, merging, re-testing). A running task opens on it, with a pulse on the tab. The steps are kept with the session, so you can read what an earlier attempt did. In the terminal, `npm run puff -- run` prints the same steps.

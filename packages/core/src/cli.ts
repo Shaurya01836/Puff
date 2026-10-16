@@ -741,6 +741,11 @@ program
       const results = await orchestrator.start({
         agent: o.agent ? agentOf(o.agent) : undefined,
       });
+      if (orchestrator.problem) {
+        console.log(`✖ ${orchestrator.problem}`);
+        process.exitCode = 1;
+        return;
+      }
       if (!results.length)
         console.log(
           'Nothing to run: no ready tasks. Create one with: npm run puff -- task add "…" -t <symbol>',
