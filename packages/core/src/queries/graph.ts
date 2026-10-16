@@ -68,12 +68,11 @@ export async function exportGraph(graph: Graph): Promise<GraphData> {
     { hidden: HIDDEN_LABELS, hiddenEdges: HIDDEN_EDGES },
   );
 
-  const nodes: GraphNode[] = nodeRows.map(({ label, key, props }) => ({
-    id: uiId(label, key),
-    label: uiLabel(label, props),
-    kind: label,
-    props,
-  }));
+  const nodes: GraphNode[] = nodeRows.map(({ label, key, props }) => {
+    // a failure's vector (Q32) is 256 numbers nobody reads in the UI
+    const { embedding: _vector, ...shown } = props;
+    return { id: uiId(label, key), label: uiLabel(label, shown), kind: label, props: shown };
+  });
   const edges: GraphEdge[] = edgeRows.map((e) => ({
     source: uiId(e.al, e.ak),
     target: uiId(e.bl, e.bk),

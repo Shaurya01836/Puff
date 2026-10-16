@@ -202,11 +202,11 @@ Full-text search over failure messages:
 CALL db.idx.fulltext.createNodeIndex('Failure', 'message')
 ```
 
-Stretch: vector index for similar failures:
+Vector index for failures that mean the same (Q32), created once the embedding model is on disk:
 
 ```cypher
 CREATE VECTOR INDEX FOR (f:Failure) ON (f.embedding)
-OPTIONS {dimension: 384, similarityFunction: 'cosine'}
+OPTIONS {dimension: 256, similarityFunction: 'cosine'}
 ```
 
 ---
@@ -246,6 +246,9 @@ All queries use parameters (`$name`). Nothing is built by string concatenation.
 | Q27 | Modules: which folder each function is in, and how modules depend on each other | indexer → expertise, choke points |
 | Q28 | Expertise: what each agent has done in each module | router, Agents screen |
 | Q29 | Choke points: tasks in a choke point's module do not run side by side | scheduler |
+| Q30 | Lanes: weakly connected components (`algo.WCC`) of a plan's tasks, tied by shared code or dependencies | Dry run tab |
+| Q31 | Wait reasons and nearby work: which functions meet, and the shortest call path (`algo.SPpaths`) to running work | scheduler, task cards |
+| Q32 | Similar failures by meaning: a vector index on `Failure.embedding` (`db.idx.vector.queryNodes`) | context compiler |
 
 ### Q1: Index a file (idempotent)
 
@@ -913,6 +916,75 @@ RETURN DISTINCT other.id AS other, CASE WHEN mine.id IN choke THEN mine.name ELS
 
 The wait says why in the schedule trace: "createUser() is a choke point in the users module". Other modules and modules without a choke point still run in parallel. Off with the graph (`PUFF_GRAPH=off`). Test: `modules.test.ts` (Q29).
 
+### Q30: Lanes
+
+On the plan's `GRAPH.COPY` (Q26), every pair of tasks that would collide is tied with a `CONFLICTS` edge: a shared function or one call apart (the Q8 rule, whatever their status), a dependency, or a writer that names no code. Weakly connected components over tasks and those edges are the lanes. A lane runs its tasks one after another; different lanes never touch each other's code, so the number of lanes is how many agents the plan can keep busy without a collision. The edges exist only on the copy.
+
+```cypher
+MATCH (a:Task)-[:TARGETS]->(s:Symbol)-[:CALLS*0..1]-(n:Symbol)<-[:TARGETS]-(b:Task)
+WHERE a.id IN $ids AND b.id IN $ids AND a.id < b.id
+RETURN DISTINCT a.id AS a, b.id AS b, s.name AS s, n.name AS n   // plus dependencies, written below
+
+UNWIND $pairs AS p
+MATCH (a:Task {id: p.a}), (b:Task {id: p.b})
+MERGE (a)-[:CONFLICTS]->(b)
+
+CALL algo.WCC({nodeLabels: ['Task'], relationshipTypes: ['CONFLICTS']})
+YIELD node, componentId
+WITH node, componentId WHERE node.id IN $ids
+RETURN node.id AS id, componentId AS lane
+```
+
+**Why over tasks and not code.** WCC over `CALLS` on the demo is one component of 72 functions plus singletons: everything is connected to everything through the app's entry point. Over the conflict graph it answers a real question (how many agents can this plan use at once). Shown in the Dry run tab with what ties each lane ("audit() and login()", "depends on"). Test: `preview.test.ts` (Q30).
+
+### Q31: Wait reasons and nearby work
+
+When a task waits (Q8), the reason names the two functions and which way the call goes: "login() calls audit(), which task_03 changes", "task_03 changes login(), which calls audit()", "both change audit()". It is the schedule trace's reason and the line under the task on the Tasks screen.
+
+```cypher
+MATCH (:Task {id: $id})-[:TARGETS]->(s:Symbol)
+MATCH (s)-[:CALLS*0..1]-(near:Symbol)<-[:TARGETS]-(other:Task)
+WHERE other.id <> $id AND other.status IN $statuses
+OPTIONAL MATCH (s)-[c:CALLS]->(near)
+RETURN DISTINCT other.id AS id, s.id AS mine, near.id AS theirs,
+       CASE WHEN s = near THEN 'same' WHEN c IS NOT NULL THEN 'calls' ELSE 'called' END AS how
+```
+
+A task that is free to start also records how close the nearest running work is, as the shortest call path in either direction, 2 or 3 calls long: "free to start: …; nearest running work: task_05, 2 calls away (login() → audit() → log())". `shortestPath` cannot do this here (FalkorDB allows it only in `WITH`/`RETURN` and only directed), so it is `algo.SPpaths`:
+
+```cypher
+MATCH (:Task {id: $id})-[:TARGETS]->(s:Symbol), (other:Task)-[:TARGETS]->(t:Symbol)
+WHERE other.id <> $id AND other.status IN $statuses AND other.type IN $writes AND s <> t
+CALL algo.SPpaths({sourceNode: s, targetNode: t, relTypes: ['CALLS'], relDirection: 'both',
+                   maxLen: $max, pathCount: 1})
+YIELD path, pathWeight
+RETURN other.id AS id, pathWeight AS hops, [n IN nodes(path) | n.id] AS path
+ORDER BY hops, id
+```
+
+Test: `graph-decisions.test.ts` (Q8 and Q31).
+
+### Q32: Similar failures by meaning
+
+Full-text search (Q22) finds failures that share words with a task. Q32 finds the ones that mean the same: "Stop leaking user credentials when recording events" finds "password appears in audit log" (cosine 0.39) although they share no word, and full-text finds nothing.
+
+Each failure's message is embedded with **minishlab/potion-base-8M** (MIT, 256 dimensions, 30 MB): a static model2vec model, a BERT word-piece tokenizer and one vector per token, averaged and normalised. It runs in plain TypeScript (`embed/static.ts`, about 1 ms per text), so there is no model server and no native code in the installer. The model is downloaded once into `~/.puff/models` (the app starts it in the background; `puff index` does it too). Vectors are written lazily, before a search, for failures that have none or one from another model.
+
+```cypher
+UNWIND $rows AS r
+MATCH (f:Failure {id: r.id})
+SET f.embedding = vecf32(r.vec), f.embedModel = $model
+
+CALL db.idx.vector.queryNodes('Failure', 'embedding', $k, vecf32($q)) YIELD node, score
+WITH node, 1 - score AS similarity WHERE similarity >= $min        // score is the cosine distance
+MATCH (node)-[:IN]->(s:Symbol)
+RETURN node.id AS id, node.message AS message, s.id AS symbol,
+       coalesce(node.stale, false) AS stale, similarity AS score
+ORDER BY score DESC LIMIT $limit
+```
+
+The context compiler takes vector matches first, then full-text matches it did not already have, and each item says how it was found: "means the same as this task (vector search, similarity 0.53)" or "worded like this task (full-text search)". The minimum similarity is 0.35. `PUFF_EMBED=off` (or no model on disk) leaves full-text alone. Test: `vectors.test.ts` (tokenizer, model, Q32 in the graph and in the context, fallback).
+
 ---
 
 ## Mapping a failure to a function
@@ -949,6 +1021,9 @@ The code is in `packages/core/src/memory/locate.ts` (strategies) and `failures.t
 | Indexes don't serve `<>` filters | Prefer `IN [...]`; fine at our scale |
 | `LIMIT` doesn't limit eager writes | Never `CREATE … LIMIT`; filter before writing |
 | Vector queries don't combine well with property filters | Vector lookup first, then filter and traverse |
+| `db.idx.vector.queryNodes` yields a cosine **distance** (0 is identical), not a similarity | Use `1 - score` and filter on it |
+| `exists((a)-[:CALLS]->(b))` is true in either direction when both nodes are already bound | `OPTIONAL MATCH (a)-[c:CALLS]->(b)` and test `c IS NOT NULL` |
+| `shortestPath` only in `WITH`/`RETURN`, only directed, and hop bounds must be literals | `algo.SPpaths` with `relDirection: 'both'` and `maxLen` as a parameter |
 | A string concatenation that contains an aggregate (`'x' + toString(count(r))`) returns **null** | Return the parts as separate columns and build the string in TypeScript |
 | `ORDER BY` cannot reference a node you only projected as a map (`RETURN properties(t) … ORDER BY t.createdAt`) | Also return the sort key as its own column |
 | A query parameter that is `undefined` throws in the client | Convert optional values to `null` (`input.at ?? null`) and use `coalesce($at, timestamp())` |

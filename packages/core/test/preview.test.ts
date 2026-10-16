@@ -161,6 +161,18 @@ describe.skipIf(!db)('previews on a copy of the graph (real FalkorDB)', () => {
     expect(plan.waves[1]!.start.sort()).toEqual([b.id, d.id].sort());
     expect(plan.stuck).toEqual([]);
 
+    // Q30: a, b and d are tied (shared code, a dependency), c touches nothing of theirs: two lanes
+    expect(plan.lanes).toEqual([
+      { tasks: [a.id, b.id, d.id], ties: ['audit() and login()', 'depends on'] },
+      { tasks: [c.id], ties: [] },
+    ]);
+    // the CONFLICTS edges lived on the copy only
+    const [ties] = await read<{ n: number }>(
+      graph,
+      `MATCH ()-[r:CONFLICTS]->() RETURN count(r) AS n`,
+    );
+    expect(Number(ties!.n)).toBe(0);
+
     // nothing real moved: every task is still where it was, and the copy is gone
     for (const t of [a, b, c, d]) expect((await getTask(graph, t.id))!.status).toBe(t.status);
     expect(

@@ -60,15 +60,20 @@ export async function overlapDetails(
     for (const other of inFlight)
       if (other.targets.some((t) => mine.has(fileOf(t)))) block(other.id, 'same file');
   } else if (task.targets.length > 0) {
-    const rows = await read<{ id: string }>(
+    // Which of my functions meets which of theirs, and how: the same function, or one call apart
+    const rows = await read<{ id: string; mine: string; theirs: string; how: string }>(
       graph,
       `MATCH (:Task {id: $id})-[:TARGETS]->(s:Symbol)
        MATCH (s)-[:CALLS*0..1]-(near:Symbol)<-[:TARGETS]-(other:Task)
        WHERE other.id <> $id AND other.status IN $statuses
-       RETURN DISTINCT other.id AS id`,
+       // exists((s)-[:CALLS]->(near)) ignores the direction when both ends are bound; a match does not
+       OPTIONAL MATCH (s)-[c:CALLS]->(near)
+       RETURN DISTINCT other.id AS id, s.id AS mine, near.id AS theirs,
+              CASE WHEN s = near THEN 'same' WHEN c IS NOT NULL THEN 'calls' ELSE 'called' END AS how
+       ORDER BY id, how DESC, mine, theirs`,
       { id: task.id, statuses: [...IN_FLIGHT] },
     );
-    for (const r of rows) block(r.id, 'same function, or one call apart');
+    for (const r of rows) block(r.id, edgeReason(r.id, r.mine, r.theirs, r.how));
     // Q29: a choke point (the code most paths run through) does not share its module with anyone else
     const choke = await read<{ other: string; symbol: string; module: string }>(
       graph,
@@ -92,6 +97,50 @@ export async function overlapDetails(
   const ids = [...blockers].filter((id) => inFlight.some((t) => t.id === id)).sort();
   return ids.map((id) => ({ id, why: why.get(id) ?? 'overlapping code' }));
 }
+
+const fn = (symbolId: string) => `${symbolId.split('::')[1] ?? symbolId}()`;
+
+/** The overlap in words, naming both functions and which way the call goes */
+function edgeReason(other: string, mine: string, theirs: string, how: string): string {
+  if (how === 'same') return `both change ${fn(mine)}`;
+  if (how === 'calls') return `${fn(mine)} calls ${fn(theirs)}, which ${other} changes`;
+  return `${other} changes ${fn(theirs)}, which calls ${fn(mine)}`;
+}
+
+/** How far apart (in calls) Q31 still reports running work as nearby */
+export const NEARBY_HOPS = 3;
+
+/**
+ * Q31: running work that is near this task in the call graph but not near enough to wait for: the shortest
+ * call path, in either direction (`algo.SPpaths`), from one of its functions to one of theirs, 2 to
+ * NEARBY_HOPS calls long. Such tasks run side by side; the schedule trace says how close they are.
+ */
+export async function nearbyWork(
+  graph: Graph,
+  task: Task,
+): Promise<{ id: string; hops: number; path: string[] }[]> {
+  if (task.targets.length === 0 || !WRITES.has(task.type)) return [];
+  const rows = await read<{ id: string; hops: number; path: string[] }>(
+    graph,
+    `MATCH (:Task {id: $id})-[:TARGETS]->(s:Symbol), (other:Task)-[:TARGETS]->(t:Symbol)
+     WHERE other.id <> $id AND other.status IN $statuses AND other.type IN $writes AND s <> t
+     CALL algo.SPpaths({sourceNode: s, targetNode: t, relTypes: ['CALLS'], relDirection: 'both',
+                        maxLen: $max, pathCount: 1})
+     YIELD path, pathWeight
+     RETURN other.id AS id, pathWeight AS hops, [n IN nodes(path) | n.id] AS path
+     ORDER BY hops, id`,
+    { id: task.id, statuses: [...IN_FLIGHT], writes: [...WRITES], max: NEARBY_HOPS },
+  );
+  const best = new Map<string, { id: string; hops: number; path: string[] }>();
+  for (const r of rows) {
+    const hops = Number(r.hops);
+    if (hops >= 2 && !best.has(r.id)) best.set(r.id, { id: r.id, hops, path: r.path });
+  }
+  return [...best.values()];
+}
+
+/** A call path as people read it: `postLogin() → login() → audit()` */
+export const pathText = (path: string[]): string => path.map(fn).join(' → ');
 
 /** In-flight tasks that overlap this one (ids only). */
 export async function overlappingTasks(

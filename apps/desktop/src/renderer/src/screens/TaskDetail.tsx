@@ -687,6 +687,44 @@ function PreviewTab({ merge, plan }: { merge?: MergePreview; plan?: PlanPreview 
           A dry run of the scheduler on a copy of the graph ({plan.ms} ms): which tasks would start
           together, which would wait, and why. Nothing was claimed or run.
         </p>
+        {plan.lanes && plan.lanes.length > 0 && (
+          <section>
+            <SectionTitle>
+              {plan.lanes.length} independent {plan.lanes.length === 1 ? 'lane' : 'lanes'}
+            </SectionTitle>
+            <p className="mb-2 text-xs leading-relaxed text-ink-3">
+              Tasks are tied when they share code or one depends on the other; the groups are weakly
+              connected components (<code>algo.WCC</code>). A lane runs its tasks one after another,
+              and lanes never touch each other&apos;s code, so up to {plan.lanes.length}{' '}
+              {plan.lanes.length === 1 ? 'agent' : 'agents'} can work on this plan at once.
+            </p>
+            <ol className="flex flex-col gap-2">
+              {plan.lanes.map((lane, i) => (
+                <li key={i} className="rounded-xl border border-line bg-surface-2/60 p-3">
+                  <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-[10px] tracking-wider text-ink-3 uppercase">
+                      Lane {i + 1}
+                    </span>
+                    {lane.ties.map((t) => (
+                      <span
+                        key={t}
+                        className="rounded bg-memory/12 px-1.5 py-0.5 font-mono text-[10px] text-memory"
+                      >
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                  {lane.tasks.map((id) => (
+                    <div key={id} className="text-sm text-ink">
+                      {plan.titles[id] ?? id}
+                    </div>
+                  ))}
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+        <SectionTitle>Waves</SectionTitle>
         <ol className="flex flex-col gap-3">
           {plan.waves.map((w, i) => (
             <li key={i} className="rounded-xl border border-line bg-surface-2/60 p-3">

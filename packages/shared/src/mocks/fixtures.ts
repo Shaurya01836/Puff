@@ -632,6 +632,10 @@ export const mockPlanPreview: PlanPreview = {
     { start: ['task_08'], waits: [] },
   ],
   stuck: [],
+  lanes: [
+    { tasks: ['task_07', 'task_08'], ties: ['login() and audit()', 'depends on'] },
+    { tasks: ['task_06'], ties: [] },
+  ],
 };
 
 export const mockTraces: GraphTrace[] = [

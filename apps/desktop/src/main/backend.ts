@@ -26,6 +26,9 @@ import {
   getContextPack,
   getMemoryFeed,
   listMemory,
+  ensureModel,
+  getEmbedder,
+  embedFailures,
   getTask,
   getTeamTimeline,
   getWhy,
@@ -285,12 +288,27 @@ async function buildLive(
     });
   };
 
+  /** The embedding model download, started once */
+  let modelFetch: Promise<unknown> | undefined;
+
   const open = async (entry: ProjectEntry): Promise<OpenProject> => {
     if (!existsSync(entry.repoPath))
       throw new Error(
         `The folder ${entry.repoPath} no longer exists. Remove the project or restore the folder.`,
       );
     const opened = await openProject(db, entry, userConfig);
+    // Q32: the embedding model for the vector index, downloaded once in the background (30 MB);
+    // until it is on disk, similar failures are found by full-text search alone
+    if (process.env.PUFF_EMBED !== 'off') {
+      modelFetch ??= ensureModel().catch((err: Error) => {
+        console.warn('[puff] embedding model not downloaded:', err.message);
+        modelFetch = undefined;
+      });
+      void modelFetch.then(() => {
+        const embedder = getEmbedder();
+        if (embedder) void embedFailures(opened.graph, embedder).catch(() => {});
+      });
+    }
     const controller = await makeController(opened.project, opened.graph, opened.config);
     return {
       entry,

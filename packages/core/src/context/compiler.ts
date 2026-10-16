@@ -10,7 +10,7 @@ import { newId } from '../ids';
 import { getTask, listTasks } from '../memory/tasks';
 import { pendingHandoffs } from '../memory/memory';
 import { symbolInfos, type SymbolRow } from '../queries/code';
-import { similarFailures, taskRisk, type TaskRisk } from '../queries/insights';
+import { similarFailures, taskRisk, type SimilarFailure, type TaskRisk } from '../queries/insights';
 import { memoryTrust, TRUST_FLOOR, TRUST_LOW } from '../memory/provenance';
 import { estimateTokens, renderPrompt, type PromptInput } from './prompt';
 
@@ -297,7 +297,7 @@ async function buildContext(
 
   // Q22: failures worded like this task (full-text), wherever they are anchored, up to two that the
   // call graph did not already bring in. They rank below everything near the code.
-  const similarIds = new Set<string>();
+  const similarIds = new Map<string, SimilarFailure>();
   if (policy.failures && !policy.projectWide) {
     const have = new Set(failureRows.map((f) => f.id));
     const hits = (
@@ -315,7 +315,10 @@ async function buildContext(
       );
       for (const r of rows) {
         failureRows.push(r);
-        similarIds.add(r.id);
+        similarIds.set(
+          r.id,
+          hits.find((h) => h.id === r.id)!,
+        );
       }
     }
   }
@@ -506,7 +509,7 @@ async function buildContext(
     const symbol = rows.map((r) => r.symbol).sort((a, b) => closeness(a) - closeness(b))[0]!;
     const onTarget = relation(symbol)?.rel === 'self';
     const far = relation(symbol)?.rel === 'callee2';
-    const similar = similarIds.has(f.id);
+    const similar = similarIds.get(f.id);
     const again = f.count > 1 ? ` (seen ${f.count} times)` : '';
     const items: ContextItem[] = [
       {
@@ -515,7 +518,7 @@ async function buildContext(
         text: f.message,
         reason:
           (similar
-            ? `failed in ${nameOf(symbol)}(), worded like this task (full-text search)${again}`
+            ? `failed in ${nameOf(symbol)}(), ${similar.via === 'vector' ? `means the same as this task (vector search, similarity ${similar.score.toFixed(2)})` : 'worded like this task (full-text search)'}${again}`
             : `${where(symbol, 'failed')}${again}`) +
           (fixReverted ? '; its earlier fix was reverted' : ''),
         stale: f.stale || undefined,

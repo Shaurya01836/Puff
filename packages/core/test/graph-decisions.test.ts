@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { graphOff, parseConfig } from '../src/config';
 import { compileContext, DEFAULT_BUDGET_TOKENS, RISK_BUDGET_FACTOR } from '../src/context/compiler';
-import { connect, loadDotEnv, read } from '../src/db/client';
+import { connect, loadDotEnv, read, run } from '../src/db/client';
 import { initProjectGraph } from '../src/db/init';
 import { listTraces, saveTrace, traced } from '../src/db/trace';
 import { graphName } from '../src/ids';
@@ -17,7 +17,12 @@ import { recordFailure, recordSolution } from '../src/memory/memory';
 import { startSession } from '../src/memory/sessions';
 import { createTask, getTask, listTasks, updateTask } from '../src/memory/tasks';
 import { routeTask } from '../src/orchestrator/routing';
-import { overlappingTasks } from '../src/orchestrator/schedule';
+import {
+  nearbyWork,
+  overlapDetails,
+  overlappingTasks,
+  pathText,
+} from '../src/orchestrator/schedule';
 import { computeRisk, taskRisk } from '../src/queries/insights';
 
 const rel = (p: string) => fileURLToPath(new URL(p, import.meta.url));
@@ -222,7 +227,11 @@ describe.skipIf(!db)('what the graph decides (real FalkorDB)', () => {
     });
     await recordSolution(graph, { failureId: f.id, summary: 'Reject a page size below 1' });
     await sleep(1500); // the full-text index is updated asynchronously
-    const ctx = await compileContext(graph, task.id, { role: 'coder', preview: true });
+    // full-text alone (Q22); the vector index (Q32) has its own tests in vectors.test.ts
+    process.env.PUFF_EMBED = 'off';
+    const ctx = await compileContext(graph, task.id, { role: 'coder', preview: true }).finally(
+      () => delete process.env.PUFF_EMBED,
+    );
     const hit = ctx.items.find((i) => i.id === f.id);
     expect(hit?.reason).toBe('failed in listProducts(), worded like this task (full-text search)');
     expect(
@@ -313,5 +322,42 @@ describe.skipIf(!db)('what the graph decides (real FalkorDB)', () => {
     const listed = await listTasks(graph);
     expect(listed.find((t) => t.id === task.id)!.why?.route).toBe('newer pick');
     expect(listed.filter((t) => t.why?.route === 'newer pick')).toHaveLength(1);
+  });
+
+  it('Q8 says which functions meet and which way the call goes; Q31 gives the call path to work that is near', async () => {
+    await run(graph, `MATCH (t:Task) SET t.status = 'done'`);
+    const make = (title: string, target: string) =>
+      createTask(graph, slug, config, { title, type: 'implement', targets: [target] });
+    // login() calls audit(), audit() calls log()
+    const onAudit = await make('change audit', AUDIT);
+    await updateTask(graph, onAudit.id, { status: 'running' });
+    const onLogin = await make('change login', LOGIN);
+    expect(await overlapDetails(graph, onLogin)).toEqual([
+      { id: onAudit.id, why: `login() calls audit(), which ${onAudit.id} changes` },
+    ]);
+    const alsoAudit = await make('change audit too', AUDIT);
+    expect(await overlapDetails(graph, alsoAudit)).toEqual([
+      { id: onAudit.id, why: 'both change audit()' },
+    ]);
+    await updateTask(graph, onAudit.id, { status: 'done' });
+
+    await updateTask(graph, onLogin.id, { status: 'running' });
+    expect(await overlapDetails(graph, alsoAudit)).toEqual([
+      { id: onLogin.id, why: `${onLogin.id} changes login(), which calls audit()` },
+    ]);
+    await updateTask(graph, onLogin.id, { status: 'done' });
+
+    // two calls apart: free to start, and the scheduler can say how close the running work is
+    const onLog = await make('change log', LOG);
+    await updateTask(graph, onLog.id, { status: 'running' });
+    const nearLogin = await make('change login again', LOGIN);
+    expect(await overlapDetails(graph, nearLogin)).toEqual([]);
+    const near = await nearbyWork(graph, nearLogin);
+    expect(near).toEqual([{ id: onLog.id, hops: 2, path: [LOGIN, AUDIT, LOG] }]);
+    expect(pathText(near[0]!.path)).toBe('login() → audit() → log()');
+    // far away code is not reported
+    const far = await make('change listProducts', LIST_PRODUCTS);
+    expect(await nearbyWork(graph, far)).toEqual([]);
+    await updateTask(graph, onLog.id, { status: 'done' });
   });
 });

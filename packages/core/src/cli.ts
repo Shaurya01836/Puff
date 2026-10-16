@@ -19,6 +19,8 @@ import { compileContext } from './context/compiler';
 import { connect, loadDotEnv, projectGraph } from './db/client';
 import { graphStats, initProjectGraph, type ProjectInfo } from './db/init';
 import { graphName, slugify } from './ids';
+import { embedFailures, ensureVectorIndex, getEmbedder } from './embed/lessons';
+import { ensureModel } from './embed/static';
 import { indexRepo } from './indexer/index';
 import { recordTestFailures } from './memory/failures';
 import {
@@ -204,6 +206,20 @@ program
             `  ${s.symbols} symbols · ${s.calls} calls · ${s.imports} imports · ${s.technologies} technologies` +
             (s.staleFlagged ? `\n  ⚠ ${s.staleFlagged} memories marked stale` : ''),
         );
+        // Q32: vectors for the failure index (the model is downloaded once, 30 MB)
+        if (process.env.PUFF_EMBED !== 'off') {
+          try {
+            await ensureModel();
+            const embedder = getEmbedder();
+            if (embedder) {
+              await ensureVectorIndex(graph, embedder.dimension);
+              const n = await embedFailures(graph, embedder);
+              console.log(`  ${n} failure vectors written (${embedder.model})`);
+            }
+          } catch (err) {
+            console.log(`  vectors skipped: ${(err as Error).message}`);
+          }
+        }
       },
       { init: true },
     );

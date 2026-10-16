@@ -3,6 +3,7 @@
 // Both use FalkorDB procedures, so the answer is computed where the data lives.
 import type { Graph } from 'falkordb';
 import { read, run } from '../db/client';
+import { vectorSimilarFailures } from '../embed/lessons';
 
 export interface HotspotRow {
   id: string;
@@ -65,7 +66,10 @@ export interface SimilarFailure {
   message: string;
   symbol: string;
   stale: boolean;
+  /** Cosine similarity for a vector match; the full-text score otherwise */
   score: number;
+  /** How it was found: the vector index (Q32) or full-text search (Q22) */
+  via?: 'vector' | 'fulltext';
 }
 
 /** Words too common to tell two failures apart. */
@@ -118,6 +122,20 @@ export async function similarFailures(
   text: string,
   limit = 5,
 ): Promise<SimilarFailure[]> {
+  // Q32 first: failures that mean the same, by the vector index, when the embedding model is on disk;
+  // then full-text for the ones that share words but were not close enough in meaning
+  const byMeaning = (await vectorSimilarFailures(graph, text, limit).catch(() => undefined)) ?? [];
+  const byWords = await fullTextFailures(graph, text, limit);
+  const seen = new Set(byMeaning.map((f) => f.id));
+  return [...byMeaning, ...byWords.filter((f) => !seen.has(f.id))].slice(0, limit);
+}
+
+/** Q22: past failures that share meaningful words with `text` (full-text search over Failure.message) */
+export async function fullTextFailures(
+  graph: Graph,
+  text: string,
+  limit = 5,
+): Promise<SimilarFailure[]> {
   // Only plain words reach the full-text query: punctuation is query syntax there and breaks it.
   const words = [
     ...new Set((text.toLowerCase().match(/[a-z0-9_]{3,}/g) ?? []).filter((w) => !STOP.has(w))),
@@ -139,7 +157,12 @@ export async function similarFailures(
      ORDER BY score DESC LIMIT $limit`,
     { query: words.join(' | '), limit },
   );
-  return rows.map((r) => ({ ...r, score: Number(r.score), stale: Boolean(r.stale) }));
+  return rows.map((r) => ({
+    ...r,
+    score: Number(r.score),
+    stale: Boolean(r.stale),
+    via: 'fulltext' as const,
+  }));
 }
 
 export interface TaskRisk {

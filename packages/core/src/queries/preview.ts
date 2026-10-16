@@ -243,6 +243,11 @@ export async function previewPlan(
       }
       left = left.filter((t) => !wave.start.includes(t.id));
     }
+    const lanes = await planLanes(
+      copy,
+      all.filter((t) => wanted.has(t.id)),
+      opts.graphOff,
+    );
     return {
       at: Date.now(),
       ms: Math.round(performance.now() - started),
@@ -250,8 +255,83 @@ export async function previewPlan(
       titles: Object.fromEntries([...wanted].map((id) => [id, titles.get(id) ?? id])),
       waves,
       stuck: left.map((t) => t.id),
+      lanes,
     };
   });
+}
+
+/**
+ * Q30: the plan's independent lanes, on the copy. Two tasks are tied when they would collide (a shared
+ * function or one call apart, the Q8 rule, whatever their status), when one depends on the other, or when
+ * either changes code without naming it. The ties are written as CONFLICTS edges (on the copy only), and
+ * weakly connected components (`algo.WCC`) over tasks and those edges are the lanes: a lane runs its
+ * tasks one after another, and different lanes never touch each other's code, so the number of lanes is
+ * how many agents the plan can keep busy without collisions.
+ */
+export async function planLanes(
+  copy: Graph,
+  tasks: Task[],
+  graphOff = false,
+): Promise<{ tasks: string[]; ties: string[] }[]> {
+  const ids = tasks.map((t) => t.id);
+  if (ids.length === 0) return [];
+  const pairs: { a: string; b: string; why: string }[] = [];
+  const writes = (t: Task) => t.type === 'implement' || t.type === 'chore';
+  if (graphOff) {
+    const file = (s: string) => s.split('::')[0];
+    for (const a of tasks)
+      for (const b of tasks)
+        if (a.id < b.id && a.targets.some((x) => b.targets.some((y) => file(x) === file(y))))
+          pairs.push({ a: a.id, b: b.id, why: 'same file' });
+  } else {
+    const rows = await read<{ a: string; b: string; s: string; n: string }>(
+      copy,
+      `MATCH (a:Task)-[:TARGETS]->(s:Symbol)-[:CALLS*0..1]-(n:Symbol)<-[:TARGETS]-(b:Task)
+       WHERE a.id IN $ids AND b.id IN $ids AND a.id < b.id
+       RETURN DISTINCT a.id AS a, b.id AS b, s.name AS s, n.name AS n`,
+      { ids },
+    );
+    for (const r of rows)
+      pairs.push({ a: r.a, b: r.b, why: r.s === r.n ? `${r.s}()` : `${r.s}() and ${r.n}()` });
+  }
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  for (const t of tasks) {
+    for (const d of t.dependsOn) if (byId.has(d)) pairs.push({ a: t.id, b: d, why: 'depends on' });
+    // a writer that names no code could touch anything another writer touches
+    if (writes(t) && t.type === 'implement' && t.targets.length === 0)
+      for (const o of tasks)
+        if (o.id !== t.id && writes(o)) pairs.push({ a: t.id, b: o.id, why: 'names no code' });
+  }
+  await run(
+    copy,
+    `UNWIND $pairs AS p
+     MATCH (a:Task {id: p.a}), (b:Task {id: p.b})
+     MERGE (a)-[:CONFLICTS]->(b)`,
+    { pairs },
+  );
+  const rows = await read<{ id: string; lane: number }>(
+    copy,
+    `CALL algo.WCC({nodeLabels: ['Task'], relationshipTypes: ['CONFLICTS']})
+     YIELD node, componentId
+     WITH node, componentId WHERE node.id IN $ids
+     RETURN node.id AS id, componentId AS lane`,
+    { ids },
+  );
+  const lanes = new Map<number, string[]>();
+  for (const r of rows) lanes.set(Number(r.lane), [...(lanes.get(Number(r.lane)) ?? []), r.id]);
+  const order = new Map(tasks.map((t, i) => [t.id, i]));
+  return [...lanes.values()]
+    .map((members) => {
+      const inLane = new Set(members);
+      const ties = [
+        ...new Set(pairs.filter((p) => inLane.has(p.a) && inLane.has(p.b)).map((p) => p.why)),
+      ];
+      return { tasks: members.sort((x, y) => order.get(x)! - order.get(y)!), ties };
+    })
+    .sort(
+      (x, y) =>
+        y.tasks.length - x.tasks.length || order.get(x.tasks[0]!)! - order.get(y.tasks[0]!)!,
+    );
 }
 
 /** Delete preview copies a crash left behind. */

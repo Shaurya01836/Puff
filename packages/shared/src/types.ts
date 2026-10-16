@@ -187,6 +187,11 @@ export interface PlanPreview {
   waves: PlanWave[];
   /** Tasks that could never start (a dependency outside the plan, or a cycle) */
   stuck: string[];
+  /**
+   * Q30: groups of tasks tied to each other (shared code, a dependency), from algo.WCC; a lane runs one task
+   * after another, and different lanes never collide. Biggest first.
+   */
+  lanes?: { tasks: string[]; ties: string[] }[];
 }
 
 /** One query a decision ran */
