@@ -2,7 +2,7 @@
 // and which past failures are worded like a new task (full-text search over Failure.message).
 // Both use FalkorDB procedures, so the answer is computed where the data lives.
 import type { Graph } from 'falkordb';
-import { read } from '../db/client';
+import { read, run } from '../db/client';
 
 export interface HotspotRow {
   id: string;
@@ -94,6 +94,19 @@ const STOP = new Set([
   'all',
   'any',
   'out',
+  // request words that every API task and test name shares
+  'get',
+  'post',
+  'put',
+  'patch',
+  'delete',
+  'json',
+  'test',
+  'tests',
+  'return',
+  'returns',
+  'expected',
+  'error',
 ]);
 
 /**
@@ -127,4 +140,107 @@ export async function similarFailures(
     { query: words.join(' | '), limit },
   );
   return rows.map((r) => ({ ...r, score: Number(r.score), stale: Boolean(r.stale) }));
+}
+
+export interface TaskRisk {
+  symbol: string;
+  name: string;
+  /** 0 to 1: the share of this project's functions that score lower (0.95 = top 5%) */
+  risk: number;
+  pagerank: number;
+  betweenness: number;
+  openFailures: number;
+}
+
+/**
+ * Q20: how load-bearing each function is. PageRank over CALLS (how much code depends on it, directly
+ * or not) and betweenness (how many call paths run through it), each scaled to the project's highest,
+ * plus a bump for failures nobody has fixed yet. Stored on the Symbol as a percentile, so the threshold
+ * means the same thing in a small project and a large one. Run after every index.
+ */
+export async function computeRisk(graph: Graph): Promise<{ symbols: number }> {
+  const pr = await read<{ id: string; score: number }>(
+    graph,
+    `CALL algo.pageRank('Symbol', 'CALLS') YIELD node, score
+     WITH node, score WHERE coalesce(node.removed, false) = false
+     RETURN node.id AS id, score`,
+  );
+  if (!pr.length) return { symbols: 0 };
+  const bt = await read<{ id: string; score: number }>(
+    graph,
+    `CALL algo.betweenness({nodeLabels: ['Symbol'], relationshipTypes: ['CALLS']}) YIELD node, score
+     WITH node, score WHERE coalesce(node.removed, false) = false
+     RETURN node.id AS id, score`,
+  );
+  const open = await read<{ id: string; open: number }>(
+    graph,
+    `MATCH (f:Failure)-[:IN]->(s:Symbol) WHERE coalesce(f.stale, false) = false
+     OPTIONAL MATCH (f)-[:FIXED_BY]->(sol:Solution)
+     WITH s, f, count(sol) AS fixes WHERE fixes = 0
+     RETURN s.id AS id, count(DISTINCT f) AS open`,
+  );
+  const btBy = new Map(bt.map((r) => [r.id, Number(r.score)]));
+  const openBy = new Map(open.map((r) => [r.id, Number(r.open)]));
+  const maxPr = Math.max(...pr.map((r) => Number(r.score)), 1e-9);
+  const maxBt = Math.max(...bt.map((r) => Number(r.score)), 1e-9);
+  const scored = pr.map((r) => {
+    const pagerank = Number(r.score);
+    const betweenness = btBy.get(r.id) ?? 0;
+    const openFailures = openBy.get(r.id) ?? 0;
+    const combined = pagerank / maxPr + betweenness / maxBt + Math.min(openFailures, 2) * 0.5;
+    return { id: r.id, pagerank, betweenness, openFailures, combined };
+  });
+  const sorted = scored.map((s) => s.combined).sort((a, b) => a - b);
+  const below = (c: number) => {
+    // how many score strictly lower (binary search in the sorted list)
+    let lo = 0;
+    let hi = sorted.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (sorted[mid]! < c) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  };
+  const rows = scored.map((s) => ({
+    id: s.id,
+    pagerank: s.pagerank,
+    betweenness: s.betweenness,
+    openFailures: s.openFailures,
+    risk: sorted.length > 1 ? below(s.combined) / (sorted.length - 1) : 0,
+  }));
+  for (let i = 0; i < rows.length; i += 500) {
+    await run(
+      graph,
+      `UNWIND $rows AS r
+       MATCH (s:Symbol {id: r.id})
+       SET s.pagerank = r.pagerank, s.betweenness = r.betweenness, s.openFailures = r.openFailures,
+           s.risk = r.risk`,
+      { rows: rows.slice(i, i + 500) },
+    );
+  }
+  return { symbols: rows.length };
+}
+
+/** The riskiest function a task targets, when risk has been computed. */
+export async function taskRisk(graph: Graph, taskId: string): Promise<TaskRisk | undefined> {
+  const rows = await read<TaskRisk>(
+    graph,
+    `MATCH (:Task {id: $id})-[:TARGETS]->(s:Symbol) WHERE s.risk IS NOT NULL
+     RETURN s.id AS symbol, s.name AS name, s.risk AS risk, s.pagerank AS pagerank,
+            s.betweenness AS betweenness, coalesce(s.openFailures, 0) AS openFailures
+     ORDER BY s.risk DESC LIMIT 1`,
+    { id: taskId },
+  );
+  const r = rows[0];
+  return r
+    ? {
+        symbol: r.symbol,
+        name: r.name,
+        risk: Number(r.risk),
+        pagerank: Number(r.pagerank),
+        betweenness: Number(r.betweenness),
+        openFailures: Number(r.openFailures),
+      }
+    : undefined;
 }

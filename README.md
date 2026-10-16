@@ -125,7 +125,14 @@ FalkorDB is **not a log sink**. It is where Puff thinks. Take it away and Puff c
 | **What breaks if I change this?** | Reverse `CALLS*1..3` up to the files that define the callers | [Q6](docs/GRAPH_SCHEMA.md#q6-impact-what-breaks-if-i-change-this) |
 | **Which memories are now outdated?** | File hash changed → every Failure/Decision linked to its symbols is marked `stale` | [Q2](docs/GRAPH_SCHEMA.md#q2-mark-memory-stale-when-a-file-changes) |
 | **Why did the agent get this?** | `Session → RECEIVED → ContextPack → INCLUDED {reason} → memory` | [Q5](docs/GRAPH_SCHEMA.md#q5-why-did-this-session-get-this-context) |
+| **Is this code load-bearing?** | `algo.pageRank` and `algo.betweenness` over `CALLS`, plus open failures, stored as a percentile on every function. A task in the top 10% goes to an agent that declares reasoning and gets 1.5× the context budget | [Q20](docs/GRAPH_SCHEMA.md#q20-risk-from-pagerank-and-betweenness) |
+| **Which lessons are two calls away?** | `target → CALLS → m → CALLS → n`: a mistake in `log()` reaches a task on `login()` through `audit()` | [Q21](docs/GRAPH_SCHEMA.md#q21-lessons-two-calls-away) |
+| **Which past failures sound like this task?** | Full-text search over `Failure.message` (`db.idx.fulltext.queryNodes`), for lessons the call graph does not reach | [Q22](docs/GRAPH_SCHEMA.md#q22-failures-worded-like-the-task) |
 | **Separate memory per project** | One graph per project: `puff_<project>` | [Tenancy](docs/GRAPH_SCHEMA.md#database) |
+
+**See the Cypher behind every decision.** Each decision (which agent, what context, when it may start, what went out of date, where a failure belongs) records the queries it ran, with milliseconds and row counts, as a `Trace` in the graph ([Q19](docs/GRAPH_SCHEMA.md#q19-trace-the-queries-behind-a-decision)). Open a task and choose **Graph trace**.
+
+**Turn the graph off to see what it is worth.** `PUFF_GRAPH=off` (or `graph.enabled: false`) runs the same team with routing by escalation order, context of the task and its target files only, overlap by file name, and no stale marking. The Why view and every trace say "graph off". This is arm D of the [transfer benchmark](#benchmark).
 
 These are **multi-hop questions**: function → callers → failed here → fixed by → which agent. A vector store can find one similar item. The graph follows the whole chain in a single query.
 
@@ -229,7 +236,9 @@ WHEN DONE: final block <puff-report>{"decisions":[...],"notes":"..."}</puff-repo
 | ♻️ | Memory correctness: stale-on-change, `SUPERSEDES` for decisions | ✅ |
 | 🔌 | Puff MCP server | ✅ |
 | 📊 | Benchmark: tokens, files read, first-try pass rate, with vs without Puff | ✅ |
-| ✨ | Stretch: PageRank-based complexity, vector search over failures, generic CLI adapter | 🔭 |
+| 🎯 | Risk from PageRank + betweenness drives routing and the context budget; lessons two calls away; failures found by wording | ✅ |
+| 🔎 | **Graph trace**: the Cypher, timing and rows behind every decision; `PUFF_GRAPH=off` ablation switch | ✅ |
+| ✨ | Stretch: vector search over failures, generic CLI adapter | 🔭 |
 
 ## Roadmap
 
@@ -249,6 +258,9 @@ Puff is built in **phases**. Each phase ends with a checkpoint: a working build 
 | **P9 Command center** ✅ | Ask Puff chat with slash commands and a Claude Code orchestrator, task actions (retry, edit, remove, see changes) | "Add a /health endpoint and run it" typed in chat |
 | **P10 Installer** ✅ | Windows installer, first-run setup (database, agent CLIs) | Install, add a project, run a task without the source folder |
 | **P11 Watch agents** ✅ | Live view of what each agent does (Activity tab), re-test of the combined result after every merge | You see files read, edits and commands as they happen |
+| **P13 Foundations** ✅ | `PUFF_GRAPH=off` ablation switch, a trace of the queries behind every decision | The same task routes and gets context differently with the graph on and off |
+| **P14 Proof** | Lesson-transfer benchmark: four arms (no memory, Puff, a flat AGENTS.md, Puff with the graph off), two agents | Repeated-mistake rate per arm, with limits |
+| **P15 The graph decides** ✅ | Risk from PageRank and betweenness in routing and the budget, lessons two calls away, failures found by wording, Graph trace tab, risk badge | Each decision shows its query in the app |
 | **P12 Ship** | One-command demo story, clean-clone test, screenshots | Fresh clone to running demo in minutes |
 | **Stretch** | PageRank (hotspots, done), similar failures (done), vector search, Python support | Each one ships independently |
 
@@ -468,13 +480,6 @@ Same agent and model, the same four tasks, a fresh copy of the demo repo for eve
 
 Method, limits and how to reproduce: **[docs/BENCHMARK.md](docs/BENCHMARK.md)**. Raw results: [`bench/results.json`](bench/results.json).
 
----|---|---|---|
-| Tokens (in + out) | — | — | — |
-| Files read | — | — | — |
-| First-try pass rate | — | — | — |
-| Repeated-mistake rate | — | — | — |
-
-> Numbers will be filled in from `bench/results.json`. If a harness doesn't report token usage, we say so instead of estimating.
 
 ---
 

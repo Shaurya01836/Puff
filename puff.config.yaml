@@ -54,3 +54,12 @@ worktrees:
   # Directories linked into every task worktree from the main checkout (they are git-ignored,
   # so a fresh worktree would otherwise have no dependencies installed).
   linkDirs: [node_modules]
+
+graph:
+  # false (or PUFF_GRAPH=off) runs the team without the graph's decisions, to measure what they are
+  # worth: routing by escalation order, context of the task and its target files only, overlap by file,
+  # nothing marked stale. Every trace and the Why view then say "graph off".
+  enabled: true
+  # A task whose riskiest target is at or above this percentile (PageRank + betweenness over CALLS)
+  # goes to an agent that declares reasoning and gets 1.5x the context budget. 0.9 = the top 10%.
+  riskThreshold: 0.9

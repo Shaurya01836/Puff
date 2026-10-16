@@ -1,5 +1,6 @@
 import { FalkorDB, type Graph } from 'falkordb';
 import { graphName } from '../ids';
+import { noteQuery } from './trace';
 
 export const DEFAULT_FALKORDB_URL = 'falkor://localhost:6379';
 
@@ -48,8 +49,11 @@ export async function run<T>(
   cypher: string,
   params: Record<string, unknown> = {},
 ): Promise<T[]> {
+  const started = performance.now();
   const res = await graph.query<T>(cypher, { params: params as never });
-  return res.data ?? [];
+  const rows = res.data ?? [];
+  noteQuery(cypher, params, performance.now() - started, rows.length);
+  return rows;
 }
 
 /** Run a read-only query and return its rows typed as T. */
@@ -58,6 +62,9 @@ export async function read<T>(
   cypher: string,
   params: Record<string, unknown> = {},
 ): Promise<T[]> {
+  const started = performance.now();
   const res = await graph.roQuery<T>(cypher, { params: params as never });
-  return res.data ?? [];
+  const rows = res.data ?? [];
+  noteQuery(cypher, params, performance.now() - started, rows.length);
+  return rows;
 }

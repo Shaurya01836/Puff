@@ -11,6 +11,7 @@ import {
   LayoutList,
   Link2,
   LoaderCircle,
+  Network,
   Pause,
   RotateCcw,
   Search,
@@ -26,6 +27,9 @@ import { AgentAvatar, AgentChip, StatusPill, WaitingChip } from '@/components/ui
 import { Menu } from '@/components/Menu';
 import { cn } from '@/lib/cn';
 import { AGENT_META, STATUS_META, TONE_COLOR, formatTokens } from '@/lib/theme';
+
+/** Risk at or above this counts as load-bearing code (the default of graph.riskThreshold) */
+const RISKY = 0.9;
 
 const COLUMNS: { title: string; statuses: TaskStatus[]; tone: keyof typeof TONE_COLOR }[] = [
   { title: 'Planned', statuses: ['planned', 'ready'], tone: 'neutral' },
@@ -83,14 +87,19 @@ export function Board({
   const [dropOn, setDropOn] = useState<string>();
   const now = useNow();
 
-  const runningCount = tasks.filter((t) => t.status === 'running' || t.status === 'verifying').length;
+  const runningCount = tasks.filter(
+    (t) => t.status === 'running' || t.status === 'verifying',
+  ).length;
   const queuedCount = tasks.filter((t) => t.status === 'ready' || t.status === 'planned').length;
   const doneCount = tasks.filter((t) => t.status === 'done').length;
 
   const selectedTask = tasks.find((t) => t.id === selectedId) ?? tasks[0];
 
   const agentCount = new Set(tasks.map((t) => t.assignedAgent).filter(Boolean)).size || 3;
-  const totalTokens = tasks.reduce((sum, t) => sum + (t.tokens ? t.tokens.in + t.tokens.out : 0), 0);
+  const totalTokens = tasks.reduce(
+    (sum, t) => sum + (t.tokens ? t.tokens.in + t.tokens.out : 0),
+    0,
+  );
 
   const stats = [
     { label: 'AGENTS ONLINE', value: String(agentCount) },
@@ -319,7 +328,9 @@ export function Board({
                 {/* Agent & Role */}
                 <div className="flex items-center justify-between">
                   <AgentChip
-                    agent={selectedTask.assignedAgent ?? selectedTask.preferredAgent ?? 'claude-code'}
+                    agent={
+                      selectedTask.assignedAgent ?? selectedTask.preferredAgent ?? 'claude-code'
+                    }
                   />
                   <span className="font-mono text-xs text-slate-400">
                     {selectedTask.role ?? 'review'}
@@ -340,7 +351,14 @@ export function Board({
                 <div>
                   <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-widest text-slate-500">
                     <span>PROGRESS</span>
-                    <span>{selectedTask.status === 'done' ? 100 : selectedTask.status === 'running' ? 65 : 0}%</span>
+                    <span>
+                      {selectedTask.status === 'done'
+                        ? 100
+                        : selectedTask.status === 'running'
+                          ? 65
+                          : 0}
+                      %
+                    </span>
                   </div>
                   <div className="mt-2 h-1.5 w-full overflow-hidden bg-surface-3">
                     <div
@@ -428,7 +446,9 @@ export function Board({
               >
                 <header className="flex items-center gap-2 border-b border-line px-3.5 py-2.5">
                   <span className="size-2 rounded-full" style={{ background: color }} />
-                  <h3 className="font-mono text-xs font-semibold tracking-wider text-white uppercase">{col.title}</h3>
+                  <h3 className="font-mono text-xs font-semibold tracking-wider text-white uppercase">
+                    {col.title}
+                  </h3>
                   <span className="ml-auto rounded border border-line bg-surface-2 px-1.5 font-mono text-[10px] text-slate-400 tabular-nums">
                     {items.length}
                   </span>
@@ -555,7 +575,9 @@ function TaskCard({
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
         <StatusPill status={task.status} />
         {working && since && (
-          <span className="font-mono text-[10px] text-slate-400">working for {duration(now - since)}</span>
+          <span className="font-mono text-[10px] text-slate-400">
+            working for {duration(now - since)}
+          </span>
         )}
         {task.stalledAt && working && (
           <span
@@ -564,6 +586,15 @@ function TaskCard({
           >
             <TriangleAlert className="size-3" />
             stalled for {duration(now - task.stalledAt)}
+          </span>
+        )}
+        {task.risk !== undefined && task.risk >= RISKY && (
+          <span
+            title="One of the functions this task changes is among the most depended-on in this code (PageRank and betweenness over the call graph). It goes to an agent that declares reasoning, with more room for what the team learned."
+            className="inline-flex items-center gap-1 rounded bg-rose-500/12 px-1.5 py-0.5 font-mono text-[10px] font-medium text-rose-300"
+          >
+            <Network className="size-3" /> load-bearing · top{' '}
+            {Math.max(1, Math.round((1 - task.risk) * 100))}%
           </span>
         )}
         {task.doneByHand && (

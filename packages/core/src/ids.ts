@@ -10,6 +10,7 @@ export const ID_PREFIX = {
   Procedure: 'proc',
   ContextPack: 'pack',
   Handoff: 'hand',
+  Trace: 'trace',
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIX;

@@ -89,6 +89,14 @@ export async function getWhy(graph: Graph, taskId: string): Promise<WhyPath> {
           .join(', ')
       : 'no declared match (assigned manually)';
     summary = `${taskId} went to ${run.agent}: ${why}.`;
+    // The routing decision as it was made (Q19), when it was recorded
+    const route = await read<{ reason: string }>(
+      graph,
+      `MATCH (t:Trace {kind: 'route'})-[:FOR]->(:Task {id: $id})
+       RETURN t.reason AS reason ORDER BY t.at DESC LIMIT 1`,
+      { id: taskId },
+    );
+    if (route[0]) summary += ` Routing: ${route[0].reason}.`;
 
     const pack = await getContextPack(graph, String(run.session.id));
     if (pack) {
@@ -139,7 +147,9 @@ export async function getWhy(graph: Graph, taskId: string): Promise<WhyPath> {
           if (nodes.has(l.f)) edges.push({ source: l.f, target: l.s, type: 'FIXED_BY' });
       }
       const kinds = pack.items.filter((i) => i.kind !== 'Symbol');
-      summary += ` Context: ${pack.items.length} items (${kinds.length} from memory), ~${pack.tokenEstimate} tokens.`;
+      summary += pack.graphOff
+        ? ` Graph off: the context was the task and its target files only, ~${pack.tokenEstimate} tokens.`
+        : ` Context: ${pack.items.length} items (${kinds.length} from memory), ~${pack.tokenEstimate} tokens.`;
     }
   }
   return { nodes: [...nodes.values()], edges, summary };

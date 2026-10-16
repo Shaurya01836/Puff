@@ -4,7 +4,10 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Graph } from 'falkordb';
+import { graphOff as graphIsOff } from '../config';
 import { read, run } from '../db/client';
+import { saveTrace, traced, type TraceOwner } from '../db/trace';
+import { computeRisk } from '../queries/insights';
 import { langForPath, parseSource } from './parser';
 import { resolveRepo, type SourceFile } from './resolve';
 import { isTestFile, listSourceFiles } from './walk';
@@ -25,6 +28,10 @@ export interface IndexStats {
 export interface IndexOptions {
   /** Rewrite every file even if its hash is unchanged */
   force?: boolean;
+  /** Skip what the graph decides (stale marking, risk): the ablation. Default: PUFF_GRAPH */
+  graphOff?: boolean;
+  /** Store the stale-marking decision as a trace on this task or session */
+  traceFor?: TraceOwner;
 }
 
 const BATCH = 500;
@@ -126,31 +133,46 @@ export async function indexRepo(
      WHERE coalesce(m.stale, false) = false
      SET m.stale = true, m.staleAt = timestamp(), m.staleBecause = s.id
      RETURN count(DISTINCT m) AS flagged`;
-  const edited = await inBatchesRead(changedSymbols, (batch) =>
-    run<{ flagged: number }>(
-      graph,
-      staleBy(`UNWIND $syms AS sym
+  const off = opts.graphOff ?? graphIsOff();
+  const marking = await traced(async () => {
+    if (off) return 0;
+    const edited = await inBatchesRead(changedSymbols, (batch) =>
+      run<{ flagged: number }>(
+        graph,
+        staleBy(`UNWIND $syms AS sym
                MATCH (s:Symbol {id: sym.id})
                WHERE s.bodyHash IS NOT NULL AND s.bodyHash <> sym.hash`),
-      { syms: batch },
-    ),
-  );
-  // Symbols that were deleted, or whose whole file was deleted.
-  const gone = await run<{ flagged: number }>(
-    graph,
-    staleBy(`UNWIND $files AS file
+        { syms: batch },
+      ),
+    );
+    // Symbols that were deleted, or whose whole file was deleted.
+    const gone = await run<{ flagged: number }>(
+      graph,
+      staleBy(`UNWIND $files AS file
              MATCH (:File {path: file.path})-[:DEFINES]->(s:Symbol)
              WHERE NOT s.id IN file.ids AND coalesce(s.removed, false) = false`),
-    {
-      files: [
-        ...changed
-          .filter((s) => before.has(s.path))
-          .map((s) => ({ path: s.path, ids: symbolsByFile.get(s.path) ?? [] })),
-        ...removedPaths.map((path) => ({ path, ids: [] as string[] })),
-      ],
-    },
-  );
-  const staleFlagged = edited + (gone[0]?.flagged ?? 0);
+      {
+        files: [
+          ...changed
+            .filter((s) => before.has(s.path))
+            .map((s) => ({ path: s.path, ids: symbolsByFile.get(s.path) ?? [] })),
+          ...removedPaths.map((path) => ({ path, ids: [] as string[] })),
+        ],
+      },
+    );
+    return edited + (gone[0]?.flagged ?? 0);
+  });
+  const staleFlagged = marking.value;
+  if (opts.traceFor) {
+    await saveTrace(graph, opts.traceFor, {
+      kind: 'stale',
+      reason: off
+        ? 'graph off: nothing marked stale'
+        : `${staleFlagged} memor${staleFlagged === 1 ? 'y' : 'ies'} marked possibly outdated because the code ${staleFlagged === 1 ? 'it is' : 'they are'} about changed (${changedSymbols.length} functions in changed files compared by body hash)`,
+      steps: marking.steps,
+      graphOff: off,
+    });
+  }
 
   // Drop outgoing edges of affected files; they are rewritten below from the fresh parse.
   const affectedList = [...affected];
@@ -260,6 +282,9 @@ export async function indexRepo(
       { uses: batch },
     ),
   );
+
+  // Q20: how load-bearing each function is, for routing and the context budget
+  if (!off) await computeRisk(graph);
 
   return {
     files: sources.length,

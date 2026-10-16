@@ -58,6 +58,11 @@ export interface Task {
   note?: string;
   /** Marked done by the person, not by an agent's verified work */
   doneByHand?: boolean;
+  /**
+   * How load-bearing the riskiest target is (Q20): 0 to 1, the share of the project's functions that
+   * score lower by PageRank and betweenness over CALLS. 0.9 and up counts as risky by default.
+   */
+  risk?: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -125,6 +130,36 @@ export interface ContextPack {
   tokenEstimate: number;
   items: ContextItem[];
   prompt: string;
+  /** Built with the graph switched off (PUFF_GRAPH=off): the task and its target files only */
+  graphOff?: boolean;
+}
+
+/** A decision Puff makes by asking the graph */
+export type TraceKind = 'route' | 'context' | 'schedule' | 'stale' | 'locate';
+
+/** One query a decision ran */
+export interface TraceStep {
+  cypher: string;
+  /** Parameter names only, never their values */
+  params: string[];
+  ms: number;
+  rows: number;
+}
+
+/** The queries behind one decision, and the decision in words */
+export interface GraphTrace {
+  id: string;
+  kind: TraceKind;
+  reason: string;
+  steps: TraceStep[];
+  /** Queries run, including any not kept in steps */
+  queries: number;
+  ms: number;
+  rows: number;
+  graphOff?: boolean;
+  at: number;
+  /** The session it was made for, when it belongs to one attempt */
+  sessionId?: string;
 }
 
 export interface GraphNode {

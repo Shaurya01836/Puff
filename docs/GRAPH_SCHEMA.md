@@ -190,6 +190,8 @@ CREATE INDEX FOR (f:Failure) ON (f.id)
 CREATE INDEX FOR (d:Decision) ON (d.id)
 CREATE INDEX FOR (p:Procedure) ON (p.id)
 CREATE INDEX FOR (so:Solution) ON (so.id)
+CREATE INDEX FOR (t:Trace) ON (t.id)
+CREATE INDEX FOR (t:Trace) ON (t.kind)
 ```
 
 Full-text search over failure messages:
@@ -229,8 +231,12 @@ All queries use parameters (`$name`). Nothing is built by string concatenation.
 | Q14 | Supersede a decision | MCP, `<puff-report>` |
 | Q15 | Handoff between sessions | MCP |
 | Q16 | Graph and memory feed for the UI | Memory graph screen |
-| Q17 | Similar past failures (stretch) | context compiler |
-| Q18 | PageRank on calls (stretch) | router |
+| Q17 | Similar past failures: see Q22 (full-text); the vector version is still a stretch | context compiler |
+| Q18 | PageRank on calls: see Q20 | router |
+| Q19 | Trace: the queries behind each decision | every decision point, Graph trace tab |
+| Q20 | Risk: PageRank + betweenness per function | indexer → router, context budget, Board |
+| Q21 | Lessons two calls away | context compiler |
+| Q22 | Failures worded like the task (full-text) | context compiler |
 
 ### Q1: Index a file (idempotent)
 
@@ -650,7 +656,99 @@ CALL algo.pageRank('Symbol', 'CALLS') YIELD node, score
 SET node.pagerank = score
 ```
 
-> Check the exact signature at [docs.falkordb.com/algorithms](https://docs.falkordb.com/algorithms/) before relying on it.
+Built as Q20 (below), with betweenness added and the score stored as a percentile.
+
+### The graph switch: `PUFF_GRAPH=off`
+
+Every decision below can be switched off to measure what the graph is worth (the ablation used by arm D of the transfer benchmark). `PUFF_GRAPH=off` (or `graph.enabled: false` in `puff.config.yaml`) makes:
+
+| Decision | With the graph | With the graph off |
+|---|---|---|
+| Routing (Q10, Q20) | strengths, past results, risk | the escalation order, cheapest first |
+| Context (Q3, Q21, Q22) | target, callers, lessons near the code, lessons worded like the task, procedures, handoffs | the task and its target files only |
+| Overlap (Q8) | same function or one `CALLS` hop apart | targets in the same file |
+| Staleness (Q2) | memory about changed functions is marked possibly outdated | nothing is marked |
+| Risk (Q20) | computed after every index | not computed |
+
+The Why view and every trace say "graph off" when it was. Test: `packages/core/test/graph-decisions.test.ts` ("the ablation").
+
+### Q19: Trace the queries behind a decision
+
+Each decision runs inside `traced()` (`db/trace.ts`): an `AsyncLocalStorage` collector that `read` and `run` report every query to (Cypher text, parameter **names** only, milliseconds, rows). The decision is then stored once, with its result in words:
+
+```cypher
+MATCH (o:Task {id: $owner})            // or :Session, from a closed set
+CREATE (t:Trace {id: $id, kind: $kind, reason: $reason, steps: $steps, queries: $queries,
+                 ms: $ms, rows: $rows, graphOff: $graphOff, at: timestamp()})-[:FOR]->(o)
+WITH o
+MATCH (old:Trace {kind: $kind})-[:FOR]->(o)
+WITH old ORDER BY old.at DESC SKIP $keep
+DETACH DELETE old                      // keep the last 5 per kind (the scheduler asks again and again)
+```
+
+| Kind | Made in | Stored on | Example reason |
+|---|---|---|---|
+| `route` | `run.ts` (`routeTask`) | Task | "claude-code because checkUser() is in the top 4% of this code by risk (PageRank 0.018, betweenness 20): load-bearing code goes to an agent that declares reasoning" |
+| `context` | `compileContext` | Session | "9 items (4 from memory), ~1480 of 3000 tokens; budget ×1.5 because checkUser() is in the top 4% by risk" |
+| `schedule` | `orchestrator.ts` (`overlappingTasks`) | Task | "waits for task_…: they target the same functions, or functions one CALLS hop away" |
+| `stale` | `indexRepo` after a merge or a revert | Task | "2 memories marked possibly outdated because the code they are about changed" |
+| `locate` | `recordTestFailures` | Session | "\"never writes a password to the logs\" pinned to checkUser() by diff" |
+
+Read back with `listTraces` (both owners, newest first) and shown in the task's **Graph trace** tab. Tests: the run test (every kind after a fail-then-fix run, with `ms > 0`), the team test (`schedule`: "waits for", then "free to start"), `graph-decisions.test.ts` (Q19).
+
+### Q20: Risk from PageRank and betweenness
+
+After every index (`queries/insights.ts`, `computeRisk`):
+
+```cypher
+CALL algo.pageRank('Symbol', 'CALLS') YIELD node, score
+WITH node, score WHERE coalesce(node.removed, false) = false
+RETURN node.id AS id, score
+
+CALL algo.betweenness({nodeLabels: ['Symbol'], relationshipTypes: ['CALLS']}) YIELD node, score
+WITH node, score WHERE coalesce(node.removed, false) = false
+RETURN node.id AS id, score
+
+MATCH (f:Failure)-[:IN]->(s:Symbol) WHERE coalesce(f.stale, false) = false
+OPTIONAL MATCH (f)-[:FIXED_BY]->(sol:Solution)
+WITH s, f, count(sol) AS fixes WHERE fixes = 0
+RETURN s.id AS id, count(DISTINCT f) AS open
+```
+
+Score = PageRank / max + betweenness / max + 0.5 per open failure (at most 2). Stored as a percentile so a threshold means the same in any project:
+
+```cypher
+UNWIND $rows AS r
+MATCH (s:Symbol {id: r.id})
+SET s.pagerank = r.pagerank, s.betweenness = r.betweenness, s.openFailures = r.openFailures, s.risk = r.risk
+```
+
+**Decisions it changes:** a task whose riskiest target is at or above `graph.riskThreshold` (default 0.9, the top 10%) goes first to an agent that declares `reasoning`, and its context budget is ×1.5. The Board shows "load-bearing · top N%" on its card. Verified live: both procedures need both arguments, and `SET` straight after the `CALL` works. Test: `graph-decisions.test.ts` (Q20, two tests).
+
+### Q21: Lessons two calls away
+
+A mistake in `audit()` matters to a task on `login()` because `login()` calls `audit()`, and `log()` matters because `audit()` calls it. The near query (Q3) gains a fourth branch:
+
+```cypher
+MATCH (:Task {id: $id})-[:TARGETS]->(s:Symbol)-[:CALLS]->(m:Symbol)-[:CALLS]->(n:Symbol)
+WHERE n <> s AND coalesce(m.removed, false) = false AND coalesce(n.removed, false) = false
+RETURN s.id AS target, n.id AS near, 'callee2' AS rel, m.id AS via
+```
+
+Ranked below lessons on the target and one hop away. Reason: "failed in log(), which the target login() reaches through audit()". Test: `graph-decisions.test.ts` (Q21).
+
+### Q22: Failures worded like the task
+
+Up to two failures the call graph did not bring in, found by full-text search on the task's words (HTTP verbs and generic words are dropped; punctuation never reaches the query):
+
+```cypher
+CALL db.idx.fulltext.queryNodes('Failure', $query) YIELD node, score   // $query = 'pagination | zero | ...'
+MATCH (node)-[:IN]->(s:Symbol)
+RETURN node.id AS id, node.message AS message, s.id AS symbol, coalesce(node.stale, false) AS stale, score
+ORDER BY score DESC LIMIT $limit
+```
+
+Stale hits are skipped; the rest rank lowest of all memory. Reason: "failed in listProducts(), worded like this task (full-text search)". In the transfer benchmark this is how the rate-limit lesson learned on sign-up reaches the login lockout task, which is not near it in the call graph. Test: `graph-decisions.test.ts` (Q22).
 
 ---
 

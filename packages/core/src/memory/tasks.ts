@@ -42,15 +42,16 @@ interface TaskRow {
   p: Record<string, unknown>;
   targets: string[];
   dependsOn: string[];
+  risk?: number | null;
 }
 
 const TASK_QUERY = `
   MATCH (t:Task)
   WHERE $id IS NULL OR t.id = $id
   OPTIONAL MATCH (t)-[:TARGETS]->(s:Symbol)
-  WITH t, collect(DISTINCT s.id) AS targets
+  WITH t, collect(DISTINCT s.id) AS targets, max(s.risk) AS risk
   OPTIONAL MATCH (t)-[:DEPENDS_ON]->(d:Task)
-  RETURN properties(t) AS p, targets, collect(DISTINCT d.id) AS dependsOn, t.createdAt AS createdAt
+  RETURN properties(t) AS p, targets, collect(DISTINCT d.id) AS dependsOn, risk, t.createdAt AS createdAt
   ORDER BY createdAt`;
 
 /** The stored trail; a missing or unreadable value is an empty trail, never an error. */
@@ -64,7 +65,7 @@ function parseTrail(raw: unknown): TrailEntry[] | undefined {
   }
 }
 
-function toTask({ p, targets, dependsOn }: TaskRow): Task {
+function toTask({ p, targets, dependsOn, risk }: TaskRow): Task {
   const num = (v: unknown) => (v === undefined || v === null ? undefined : Number(v));
   const tokensIn = num(p.tokensIn);
   const testsTotal = num(p.testsTotal);
@@ -89,6 +90,7 @@ function toTask({ p, targets, dependsOn }: TaskRow): Task {
     stalledAt: num(p.stalledAt),
     note: (p.note as string | undefined) ?? undefined,
     doneByHand: p.doneByHand === true ? true : undefined,
+    risk: risk === undefined || risk === null ? undefined : Number(risk),
     tokens: tokensIn === undefined ? undefined : { in: tokensIn, out: num(p.tokensOut) ?? 0 },
     testSummary:
       testsTotal === undefined ? undefined : { passed: num(p.testsPassed) ?? 0, total: testsTotal },

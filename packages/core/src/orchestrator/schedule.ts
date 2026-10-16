@@ -25,12 +25,19 @@ function unknownFootprint(a: Task, b: Task): boolean {
   return aOpen && bOpen; // two untargeted chores
 }
 
+/** The file part of a symbol id (`src/a.ts::f` → `src/a.ts`) */
+const fileOf = (symbolId: string) => symbolId.split('::')[0]!;
+
 /**
  * Q8: in-flight tasks that overlap this one. Overlap means a shared target, or targets one CALLS hop
  * apart. See `unknownFootprint` for tasks that name no targets. Read-only tasks (plans, reviews)
- * never conflict.
+ * never conflict. With the graph off (the ablation) overlap is only "targets in the same file".
  */
-export async function overlappingTasks(graph: Graph, task: Task): Promise<string[]> {
+export async function overlappingTasks(
+  graph: Graph,
+  task: Task,
+  opts: { graphOff?: boolean } = {},
+): Promise<string[]> {
   if (!WRITES.has(task.type)) return [];
   const all = await listTasks(graph);
   const inFlight = all.filter(
@@ -40,7 +47,11 @@ export async function overlappingTasks(graph: Graph, task: Task): Promise<string
   if (inFlight.length === 0) return [];
 
   const blockers = new Set<string>();
-  if (task.targets.length > 0) {
+  if (opts.graphOff) {
+    const mine = new Set(task.targets.map(fileOf));
+    for (const other of inFlight)
+      if (other.targets.some((t) => mine.has(fileOf(t)))) blockers.add(other.id);
+  } else if (task.targets.length > 0) {
     const rows = await read<{ id: string }>(
       graph,
       `MATCH (:Task {id: $id})-[:TARGETS]->(s:Symbol)

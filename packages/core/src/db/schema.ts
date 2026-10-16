@@ -17,6 +17,8 @@ export const RANGE_INDEXES: readonly [label: string, property: string][] = [
   ['Decision', 'id'],
   ['Procedure', 'id'],
   ['ContextPack', 'id'],
+  ['Trace', 'id'],
+  ['Trace', 'kind'],
   ['Handoff', 'id'],
 ];
 

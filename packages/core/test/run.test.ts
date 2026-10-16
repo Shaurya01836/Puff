@@ -23,6 +23,7 @@ import { parseConfig, type PuffConfig } from '../src/config';
 import { getContextPack } from '../src/context/compiler';
 import { connect, loadDotEnv, read, run as runQuery } from '../src/db/client';
 import { initProjectGraph } from '../src/db/init';
+import { listTraces } from '../src/db/trace';
 import { removeLink, GitRepo } from '../src/git/repo';
 import { graphName } from '../src/ids';
 import { indexRepo } from '../src/indexer/index';
@@ -254,6 +255,29 @@ describe.skipIf(!ready)('the run loop (fake agents, real git, real FalkorDB)', (
     expect(gitIn(f.repoPath, 'log', '--oneline')).toMatch(/Merge puff task/);
     expect(gitIn(f.repoPath, 'branch', '--list', 'puff/*')).toContain(`puff/${t.id}-a1`);
     expect(gitIn(f.repoPath, 'branch', '--list', 'puff/*')).not.toContain(`-a2`);
+
+    // Q19: every decision on the way left its queries behind, timed, with the decision in words.
+    const traces = await listTraces(f.graph, t.id);
+    const kinds = new Set(traces.map((x) => x.kind));
+    expect([...kinds].sort()).toEqual(['context', 'locate', 'route', 'stale']);
+    for (const x of traces) {
+      expect(x.reason.length, x.kind).toBeGreaterThan(5);
+      expect(x.steps.length, x.kind).toBeGreaterThan(0);
+      expect(x.ms, x.kind).toBeGreaterThan(0);
+      expect(x.steps[0]!.cypher).toMatch(/MATCH|CALL|UNWIND/);
+    }
+    expect(
+      traces
+        .filter((x) => x.kind === 'context')
+        .map((x) => x.sessionId)
+        .sort(),
+    ).toEqual([s1!.id, s2!.id].sort());
+    expect(traces.find((x) => x.kind === 'locate')).toMatchObject({ sessionId: s1!.id });
+    expect(traces.find((x) => x.kind === 'locate')!.reason).toMatch(
+      /pinned to checkUser\(\) by diff/,
+    );
+    expect(traces.find((x) => x.kind === 'route')!.reason).toMatch(/codex/);
+
     const leftover = existsSync(join(f.repoPath, '.puff', 'worktrees'))
       ? readdirSync(join(f.repoPath, '.puff', 'worktrees'))
       : [];

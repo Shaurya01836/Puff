@@ -3,11 +3,14 @@
 // Everything the agent receives carries a reason, stored on the INCLUDED edge (design rule 6).
 import type { Graph } from 'falkordb';
 import type { ContextItem, ContextPack, MemoryKind, Role } from '@puff/shared';
+import { graphOff as graphIsOff } from '../config';
 import { read, run } from '../db/client';
+import { saveTrace, traced } from '../db/trace';
 import { newId } from '../ids';
 import { getTask, listTasks } from '../memory/tasks';
 import { pendingHandoffs } from '../memory/memory';
 import { symbolInfos, type SymbolRow } from '../queries/code';
+import { similarFailures, taskRisk, type TaskRisk } from '../queries/insights';
 import { estimateTokens, renderPrompt, type PromptInput } from './prompt';
 
 export const DEFAULT_BUDGET_TOKENS = 2000;
@@ -25,12 +28,23 @@ export interface CompileOptions {
   diff?: string;
   testCommand?: string;
   at?: number;
+  /** The ablation: the task and its target files only, nothing chosen by the graph. Default: PUFF_GRAPH */
+  graphOff?: boolean;
+  /** Risk (0 to 1) at or above which the task gets a 1.5× budget; default 0.9 (config graph.riskThreshold) */
+  riskThreshold?: number;
 }
 
 export type CompiledContext = ContextPack & {
   /** Memory items left out to stay inside the budget */
   dropped: number;
+  /** The budget actually used (bigger for risky code) */
+  budgetTokens: number;
+  /** The riskiest function the task targets, when risk is known */
+  risk?: TaskRisk;
 };
+
+/** Load-bearing code gets this much more room for what the team learned about it. */
+export const RISK_BUDGET_FACTOR = 1.5;
 
 interface Policy {
   failures: boolean;
@@ -86,6 +100,11 @@ const RANK = {
   nearUnresolvedFailure: 50,
   nearFixedFailure: 55,
   nearDecision: 60,
+  /** Two calls away from a target (the target calls something that calls it) */
+  farFailure: 62,
+  farDecision: 64,
+  /** Not near the task in the code, but worded like it (full-text search over failures) */
+  similarFailure: 66,
   procedure: 70,
 };
 
@@ -99,12 +118,16 @@ interface Bundle {
   apply: (into: PromptInput) => void;
 }
 
-type Rel = 'self' | 'caller' | 'callee';
+type Rel = 'self' | 'caller' | 'callee' | 'callee2';
 interface Near {
   target: string;
   near: string;
   rel: Rel;
+  /** For a callee two hops away: the function in between */
+  via: string | null;
 }
+/** Closest first, so a symbol that is both a callee and a callee's callee counts as the callee */
+const REL_ORDER: Record<Rel, number> = { self: 0, caller: 1, callee: 1, callee2: 2 };
 
 const short = (s: string, n = 70): string => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
@@ -115,10 +138,46 @@ function handoffText(payload: Record<string, unknown>): string {
   return short(String(text), 300);
 }
 
+/**
+ * Build what an agent is told for this task. Unless it is a preview, the pack is stored (Q4) together
+ * with the trace of every query that chose it (Q19).
+ */
 export async function compileContext(
   graph: Graph,
   taskId: string,
   opts: CompileOptions,
+): Promise<CompiledContext> {
+  const off = opts.graphOff ?? graphIsOff();
+  const { value: pack, steps } = await traced(() =>
+    buildContext(graph, taskId, { ...opts, graphOff: off }),
+  );
+  if (!opts.preview && opts.sessionId) {
+    const memory = pack.items.filter((i) => i.kind !== 'Symbol').length;
+    const risky = pack.risk && pack.budgetTokens > (opts.budgetTokens ?? DEFAULT_BUDGET_TOKENS);
+    await saveTrace(
+      graph,
+      { sessionId: opts.sessionId },
+      {
+        kind: 'context',
+        reason: off
+          ? `graph off: the task and its target files only, ~${pack.tokenEstimate} tokens`
+          : `${pack.items.length} items (${memory} from memory), ~${pack.tokenEstimate} of ${pack.budgetTokens} tokens` +
+            (pack.dropped ? `, ${pack.dropped} left out to fit` : '') +
+            (risky
+              ? `; budget ×${RISK_BUDGET_FACTOR} because ${pack.risk!.name}() is in the top ${Math.max(1, Math.round((1 - pack.risk!.risk) * 100))}% by risk`
+              : ''),
+        steps,
+        graphOff: off,
+      },
+    );
+  }
+  return pack;
+}
+
+async function buildContext(
+  graph: Graph,
+  taskId: string,
+  opts: CompileOptions & { graphOff: boolean },
 ): Promise<CompiledContext> {
   if (!opts.preview && !opts.sessionId)
     throw new Error('compileContext needs a sessionId (or preview: true)');
@@ -133,27 +192,50 @@ export async function compileContext(
     if (!ok.length) throw new Error(`Session ${opts.sessionId} did not work on task ${taskId}`);
   }
 
-  const policy = POLICY[opts.role];
-  const budget = opts.budgetTokens ?? DEFAULT_BUDGET_TOKENS;
+  const off = opts.graphOff;
+  // With the graph off nothing below is chosen by the graph: no callers, no memory, no procedures.
+  const policy: Policy = off
+    ? {
+        failures: false,
+        decisions: false,
+        procedures: false,
+        handoffs: false,
+        callers: false,
+        projectWide: false,
+      }
+    : POLICY[opts.role];
+  const risk = off ? undefined : await taskRisk(graph, taskId);
+  const risky = risk !== undefined && risk.risk >= (opts.riskThreshold ?? 0.9);
+  const budget = Math.round(
+    (opts.budgetTokens ?? DEFAULT_BUDGET_TOKENS) * (risky ? RISK_BUDGET_FACTOR : 1),
+  );
   const targetIds = task.targets;
 
   // --- Where this task sits in the call graph ---------------------------------------------------
-  const near = targetIds.length
-    ? await read<Near>(
-        graph,
-        `MATCH (:Task {id: $id})-[:TARGETS]->(s:Symbol)
-         RETURN s.id AS target, s.id AS near, 'self' AS rel
+  // Q21: lessons travel along the call graph, two calls down: a mistake made in audit() matters to a
+  // task on login() when login() calls checkUser() and checkUser() calls audit().
+  const near = (
+    targetIds.length && !off
+      ? await read<Near>(
+          graph,
+          `MATCH (:Task {id: $id})-[:TARGETS]->(s:Symbol)
+         RETURN s.id AS target, s.id AS near, 'self' AS rel, null AS via
          UNION
          MATCH (:Task {id: $id})-[:TARGETS]->(s:Symbol)<-[:CALLS]-(n:Symbol)
          WHERE coalesce(n.removed, false) = false
-         RETURN s.id AS target, n.id AS near, 'caller' AS rel
+         RETURN s.id AS target, n.id AS near, 'caller' AS rel, null AS via
          UNION
          MATCH (:Task {id: $id})-[:TARGETS]->(s:Symbol)-[:CALLS]->(n:Symbol)
          WHERE coalesce(n.removed, false) = false
-         RETURN s.id AS target, n.id AS near, 'callee' AS rel`,
-        { id: taskId },
-      )
-    : [];
+         RETURN s.id AS target, n.id AS near, 'callee' AS rel, null AS via
+         UNION
+         MATCH (:Task {id: $id})-[:TARGETS]->(s:Symbol)-[:CALLS]->(m:Symbol)-[:CALLS]->(n:Symbol)
+         WHERE n <> s AND coalesce(m.removed, false) = false AND coalesce(n.removed, false) = false
+         RETURN s.id AS target, n.id AS near, 'callee2' AS rel, m.id AS via`,
+          { id: taskId },
+        )
+      : []
+  ).sort((a, b) => REL_ORDER[a.rel] - REL_ORDER[b.rel] || a.near.localeCompare(b.near));
   const callerRows =
     policy.callers && targetIds.length
       ? await read<{ id: string; of: string }>(
@@ -200,6 +282,31 @@ export async function compileContext(
           )
         : [];
 
+  // Q22: failures worded like this task (full-text), wherever they are anchored, up to two that the
+  // call graph did not already bring in. They rank below everything near the code.
+  const similarIds = new Set<string>();
+  if (policy.failures && !policy.projectWide) {
+    const have = new Set(failureRows.map((f) => f.id));
+    const hits = (
+      await similarFailures(graph, [task.title, task.note ?? ''].join(' '), 8).catch(() => [])
+    )
+      .filter((h) => !h.stale && !have.has(h.id))
+      .slice(0, 2);
+    if (hits.length) {
+      const rows = await read<FailureRow>(
+        graph,
+        `MATCH (f:Failure)-[:IN]->(s:Symbol) WHERE f.id IN $ids
+         OPTIONAL MATCH (f)-[:FIXED_BY]->(sol:Solution)
+         RETURN ${failureCols}`,
+        { ids: hits.map((h) => h.id) },
+      );
+      for (const r of rows) {
+        failureRows.push(r);
+        similarIds.add(r.id);
+      }
+    }
+  }
+
   type DecisionRow = { id: string; text: string; stale: boolean; at: number; symbols: string[] };
   const decisionCols = `d.id AS id, d.text AS text, coalesce(d.stale, false) AS stale, d.createdAt AS at, collect(s.id) AS symbols`;
   const decisionRows: DecisionRow[] = !policy.decisions
@@ -219,13 +326,15 @@ export async function compileContext(
           )
         : [];
 
-  const techRows = await read<{ name: string }>(
-    graph,
-    targetIds.length && !policy.projectWide
-      ? `MATCH (s:Symbol)<-[:DEFINES]-(:File)-[:USES]->(t:Technology) WHERE s.id IN $ids RETURN DISTINCT t.name AS name ORDER BY name`
-      : `MATCH (:File)-[:USES]->(t:Technology) RETURN DISTINCT t.name AS name ORDER BY name`,
-    targetIds.length && !policy.projectWide ? { ids: targetIds } : {},
-  );
+  const techRows = off
+    ? []
+    : await read<{ name: string }>(
+        graph,
+        targetIds.length && !policy.projectWide
+          ? `MATCH (s:Symbol)<-[:DEFINES]-(:File)-[:USES]->(t:Technology) WHERE s.id IN $ids RETURN DISTINCT t.name AS name ORDER BY name`
+          : `MATCH (:File)-[:USES]->(t:Technology) RETURN DISTINCT t.name AS name ORDER BY name`,
+        targetIds.length && !policy.projectWide ? { ids: targetIds } : {},
+      );
   const technologies = techRows.map((t) => t.name);
 
   type ProcRow = { id: string; text: string; tech: string | null };
@@ -253,6 +362,7 @@ export async function compileContext(
     ...callerRows.map((c) => c.id),
     ...failureRows.map((f) => f.symbol),
     ...decisionRows.flatMap((d) => d.symbols),
+    ...near.flatMap((n) => (n.via ? [n.via] : [])),
   ]);
   const infos = new Map((await symbolInfos(graph, [...wanted])).map((s) => [s.id, s]));
   const nameOf = (id: string) => infos.get(id)?.name ?? id.split('::')[1] ?? id;
@@ -287,7 +397,7 @@ export async function compileContext(
   ];
   // The planner cannot target what it cannot see: show it the files and the functions in them.
   const codeMap =
-    opts.role === 'planner'
+    opts.role === 'planner' && !off
       ? (
           await read<{ file: string; symbols: string[] }>(
             graph,
@@ -335,10 +445,12 @@ export async function compileContext(
   // --- Memory bundles, each with its reason -----------------------------------------------------
   const targetSet = new Set(targetIds);
   /** How a symbol relates to the task: a target itself, or a caller/callee of one. */
-  const relation = (symbol: string): { rel: Rel; target: string } | undefined => {
-    if (targetSet.has(symbol)) return { rel: 'self', target: symbol };
+  const relation = (
+    symbol: string,
+  ): { rel: Rel; target: string; via: string | null } | undefined => {
+    if (targetSet.has(symbol)) return { rel: 'self', target: symbol, via: null };
     const hit = near.find((n) => n.near === symbol);
-    return hit ? { rel: hit.rel, target: hit.target } : undefined;
+    return hit ? { rel: hit.rel, target: hit.target, via: hit.via } : undefined;
   };
   const where = (symbol: string, kind: string): string => {
     const r = relation(symbol);
@@ -346,10 +458,14 @@ export async function compileContext(
     if (!r) return `${kind} in ${name}, one of the most recent in this project`;
     if (r.rel === 'self') return `${kind} in ${name}, which this task targets`;
     const t = `${nameOf(r.target)}()`;
+    if (r.rel === 'callee2')
+      return `${kind} in ${name}, which the target ${t} reaches through ${nameOf(r.via ?? '')}()`;
     return r.rel === 'caller'
       ? `${kind} in ${name}, which calls the target ${t}`
       : `${kind} in ${name}, which the target ${t} calls`;
   };
+  const closeness = (symbol: string) =>
+    REL_ORDER[relation(symbol)?.rel ?? 'callee2'] + (relation(symbol) ? 0 : 1);
 
   const bundles: Bundle[] = [];
 
@@ -359,21 +475,19 @@ export async function compileContext(
     const f = rows[0]!;
     const solution = rows.filter((r) => r.solId).sort((a, b) => (b.solAt ?? 0) - (a.solAt ?? 0))[0];
     // Prefer the symbol that is closest to the task for the explanation.
-    const symbol = rows
-      .map((r) => r.symbol)
-      .sort((a, b) => {
-        const ra = relation(a)?.rel === 'self' ? 0 : 1;
-        const rb = relation(b)?.rel === 'self' ? 0 : 1;
-        return ra - rb;
-      })[0]!;
+    const symbol = rows.map((r) => r.symbol).sort((a, b) => closeness(a) - closeness(b))[0]!;
     const onTarget = relation(symbol)?.rel === 'self';
+    const far = relation(symbol)?.rel === 'callee2';
+    const similar = similarIds.has(f.id);
     const again = f.count > 1 ? ` (seen ${f.count} times)` : '';
     const items: ContextItem[] = [
       {
         kind: 'Failure',
         id: f.id,
         text: f.message,
-        reason: `${where(symbol, 'failed')}${again}`,
+        reason: similar
+          ? `failed in ${nameOf(symbol)}(), worded like this task (full-text search)${again}`
+          : `${where(symbol, 'failed')}${again}`,
         stale: f.stale || undefined,
       },
     ];
@@ -387,13 +501,17 @@ export async function compileContext(
       });
     }
     bundles.push({
-      rank: solution
-        ? onTarget
-          ? RANK.fixedFailure
-          : RANK.nearFixedFailure
-        : onTarget
-          ? RANK.unresolvedFailure
-          : RANK.nearUnresolvedFailure,
+      rank: similar
+        ? RANK.similarFailure
+        : far
+          ? RANK.farFailure
+          : solution
+            ? onTarget
+              ? RANK.fixedFailure
+              : RANK.nearFixedFailure
+            : onTarget
+              ? RANK.unresolvedFailure
+              : RANK.nearUnresolvedFailure,
       at: f.at,
       stale: f.stale,
       memory: true,
@@ -404,12 +522,15 @@ export async function compileContext(
   }
 
   for (const d of decisionRows) {
-    const symbol = [...d.symbols].sort(
-      (a, b) => (relation(a)?.rel === 'self' ? 0 : 1) - (relation(b)?.rel === 'self' ? 0 : 1),
-    )[0]!;
+    const symbol = [...d.symbols].sort((a, b) => closeness(a) - closeness(b))[0]!;
     const onTarget = relation(symbol)?.rel === 'self';
     bundles.push({
-      rank: onTarget || policy.projectWide ? RANK.targetDecision : RANK.nearDecision,
+      rank:
+        onTarget || policy.projectWide
+          ? RANK.targetDecision
+          : relation(symbol)?.rel === 'callee2'
+            ? RANK.farDecision
+            : RANK.nearDecision,
       at: d.at,
       stale: d.stale,
       memory: true,
@@ -501,6 +622,9 @@ export async function compileContext(
     items,
     prompt,
     dropped,
+    budgetTokens: budget,
+    ...(risk ? { risk } : {}),
+    ...(off ? { graphOff: true } : {}),
   };
   if (!opts.preview)
     await persistPack(
@@ -534,13 +658,14 @@ async function persistPack(
     graph,
     `MATCH (se:Session {id: $sid})
      CREATE (se)-[:RECEIVED]->(:ContextPack {id: $id, role: $role, tokenEstimate: $tokens, prompt: $prompt,
-                                             createdAt: coalesce($at, timestamp())})`,
+                                             graphOff: $graphOff, createdAt: coalesce($at, timestamp())})`,
     {
       sid: pack.sessionId,
       id: pack.id,
       role,
       tokens: pack.tokenEstimate,
       prompt: pack.prompt,
+      graphOff: pack.graphOff ?? false,
       at: at ?? null,
     },
   );
@@ -598,10 +723,11 @@ export async function getContextPack(
   graph: Graph,
   sessionId: string,
 ): Promise<ContextPack | undefined> {
-  const packs = await read<{ id: string; tokens: number; prompt: string }>(
+  const packs = await read<{ id: string; tokens: number; prompt: string; graphOff: boolean }>(
     graph,
     `MATCH (:Session {id: $sid})-[:RECEIVED]->(p:ContextPack)
-     RETURN p.id AS id, p.tokenEstimate AS tokens, p.prompt AS prompt ORDER BY p.createdAt DESC LIMIT 1`,
+     RETURN p.id AS id, p.tokenEstimate AS tokens, p.prompt AS prompt,
+            coalesce(p.graphOff, false) AS graphOff ORDER BY p.createdAt DESC LIMIT 1`,
     { sid: sessionId },
   );
   const pack = packs[0];
@@ -625,6 +751,7 @@ export async function getContextPack(
     sessionId,
     tokenEstimate: Number(pack.tokens),
     prompt: pack.prompt,
+    ...(pack.graphOff ? { graphOff: true } : {}),
     items: rows.map((r) => ({
       kind: r.kind as MemoryKind,
       id: String(r.props.id),

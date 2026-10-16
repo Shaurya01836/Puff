@@ -50,9 +50,29 @@ export const configSchema = z.object({
     })
     .prefault({}),
   worktrees: z.object({ linkDirs: z.array(z.string()).default(['node_modules']) }).prefault({}),
+  graph: z
+    .object({
+      /**
+       * false runs Puff without its graph decisions (the ablation): routing takes the escalation order,
+       * context is the task and its target files only, overlap is by file path, nothing is marked stale.
+       * PUFF_GRAPH=off does the same without editing the file.
+       */
+      enabled: z.boolean().default(true),
+      /** Risk (0 to 1, a percentile) at or above which a task counts as touching load-bearing code */
+      riskThreshold: z.number().min(0).max(1).default(0.9),
+    })
+    .prefault({}),
 });
 
 export type PuffConfig = z.infer<typeof configSchema>;
+
+/** True when the graph's decisions are switched off: PUFF_GRAPH=off (or 0/false), else `graph.enabled: false`. */
+export function graphOff(config?: Pick<PuffConfig, 'graph'>): boolean {
+  const env = process.env.PUFF_GRAPH?.trim().toLowerCase();
+  if (env === 'off' || env === '0' || env === 'false') return true;
+  if (env === 'on' || env === '1' || env === 'true') return false;
+  return config?.graph?.enabled === false;
+}
 export type HarnessConfig = z.infer<typeof harnessSchema>;
 
 /** Parse and validate config text; agent names used in escalation/verify must exist in harnesses. */

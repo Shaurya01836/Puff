@@ -3,6 +3,7 @@ import type {
   ActivityStep,
   AgentProfile,
   ContextPack,
+  GraphTrace,
   MemoryEvent,
   Savings,
   SessionInfo,
@@ -121,6 +122,7 @@ export const mockTasks: Task[] = [
     worktree: '.puff/worktrees/task_07',
     tokens: { in: 7_450, out: 1_620 },
     testSummary: { passed: 11, total: 12 },
+    risk: 0.96,
     createdAt: min(6),
     updatedAt: min(22),
   }),
@@ -545,6 +547,81 @@ export const mockContextPack: ContextPack = {
     'WHEN DONE: final block <puff-report>{"decisions":[...],"notes":"..."}</puff-report>',
   ].join('\n'),
 };
+
+export const mockTraces: GraphTrace[] = [
+  {
+    id: 'trace_03',
+    kind: 'context',
+    reason:
+      '9 items (4 from memory), ~1,480 of 3000 tokens; budget ×1.5 because checkUser() is in the top 4% by risk',
+    queries: 14,
+    ms: 9.8,
+    rows: 61,
+    at: min(62),
+    sessionId: 'ses_08',
+    steps: [
+      {
+        cypher:
+          "MATCH (:Task {id: $id})-[:TARGETS]->(s:Symbol)-[:CALLS]->(m:Symbol)-[:CALLS]->(n:Symbol)\n  WHERE n <> s\n  RETURN s.id AS target, n.id AS near, 'callee2' AS rel, m.id AS via",
+        params: ['id'],
+        ms: 1.9,
+        rows: 12,
+      },
+      {
+        cypher:
+          'MATCH (f:Failure)-[:IN]->(s:Symbol) WHERE s.id IN $ids\n  OPTIONAL MATCH (f)-[:FIXED_BY]->(sol:Solution)\n  RETURN f.id AS id, f.message AS message',
+        params: ['ids'],
+        ms: 1.2,
+        rows: 2,
+      },
+    ],
+  },
+  {
+    id: 'trace_02',
+    kind: 'schedule',
+    reason:
+      'free to start: no running task touches the same functions or their direct callers and callees',
+    queries: 2,
+    ms: 2.1,
+    rows: 0,
+    at: min(61),
+    steps: [
+      {
+        cypher:
+          'MATCH (:Task {id: $id})-[:TARGETS]->(s:Symbol)\n  MATCH (s)-[:CALLS*0..1]-(near:Symbol)<-[:TARGETS]-(other:Task)\n  WHERE other.id <> $id AND other.status IN $statuses\n  RETURN DISTINCT other.id AS id',
+        params: ['id', 'statuses'],
+        ms: 1.4,
+        rows: 0,
+      },
+    ],
+  },
+  {
+    id: 'trace_01',
+    kind: 'route',
+    reason:
+      'claude-code because checkUser() is in the top 4% of this code by risk (PageRank 0.018, betweenness 20): load-bearing code goes to an agent that declares reasoning',
+    queries: 2,
+    ms: 3.4,
+    rows: 4,
+    at: min(60),
+    steps: [
+      {
+        cypher:
+          "MATCH (:Task {id: $id})-[:REQUIRES]->(c:Capability)<-[:HAS_STRENGTH]-(a:Agent)\n  OPTIONAL MATCH (a)-[:RAN]->(s:Session)-[:WORKED_ON]->(:Task)-[:REQUIRES]->(c)\n  WHERE s.outcome IN ['success', 'failure']\n  RETURN a.name AS agent, size(ss) AS runs",
+        params: ['id'],
+        ms: 2.2,
+        rows: 3,
+      },
+      {
+        cypher:
+          'MATCH (:Task {id: $id})-[:TARGETS]->(s:Symbol) WHERE s.risk IS NOT NULL\n  RETURN s.id AS symbol, s.risk AS risk ORDER BY s.risk DESC LIMIT 1',
+        params: ['id'],
+        ms: 1.2,
+        rows: 1,
+      },
+    ],
+  },
+];
 
 export const mockWhy: WhyPath = {
   summary:

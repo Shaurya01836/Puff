@@ -19,6 +19,7 @@ import {
 import type {
   AgentName,
   ContextPack,
+  GraphTrace,
   ManualResult,
   SessionInfo,
   Task,
@@ -42,17 +43,23 @@ interface Detail {
   sessions: SessionInfo[];
   pack?: ContextPack;
   why: WhyPath;
+  traces: GraphTrace[];
 }
 
 async function loadDetail(taskId: string): Promise<Detail> {
-  const [{ task, sessions }, why] = await Promise.all([puff.getTask(taskId), puff.getWhy(taskId)]);
+  const [{ task, sessions }, why, traces] = await Promise.all([
+    puff.getTask(taskId),
+    puff.getWhy(taskId),
+    // an older backend without traces is not an error: the tab is just empty
+    puff.getTraces(taskId).catch(() => [] as GraphTrace[]),
+  ]);
   const latest = sessions.at(-1);
   // A session that has not been given context yet has no pack; that is fine, not an error.
   const pack = latest ? await puff.getContextPack(latest.id).catch(() => undefined) : undefined;
-  return { task, sessions, pack, why };
+  return { task, sessions, pack, why, traces };
 }
 
-export type Tab = 'activity' | 'terminal' | 'context' | 'changes' | 'why' | 'sessions';
+export type Tab = 'activity' | 'terminal' | 'context' | 'changes' | 'why' | 'graph' | 'sessions';
 
 const CLIS: { cli: TerminalCli; label: string }[] = [
   { cli: 'claude-code', label: 'Claude Code' },
@@ -342,6 +349,10 @@ export function TaskDetail({
                 ['context', 'Context received'],
                 ['changes', `Changes${diff ? ` · ${diff.files.length}` : ''}`],
                 ['why', 'Why?'],
+                [
+                  'graph',
+                  `Graph trace${detail?.traces.length ? ` · ${detail.traces.length}` : ''}`,
+                ],
                 ['sessions', `Sessions${detail ? ` · ${detail.sessions.length}` : ''}`],
               ] as const
             ).map(([id, label]) => (
@@ -377,6 +388,7 @@ export function TaskDetail({
           {detail && tab === 'context' && <ContextTab task={detail.task} pack={detail.pack} />}
           {detail && tab === 'changes' && <ChangesTab diff={diff} status={detail.task.status} />}
           {detail && tab === 'why' && <WhyTab why={detail.why} />}
+          {detail && tab === 'graph' && <TraceTab traces={detail.traces} />}
           {detail && tab === 'sessions' && <SessionsTab sessions={detail.sessions} />}
         </div>
       </aside>
@@ -603,6 +615,78 @@ function WhyTab({ why }: { why: WhyPath }) {
           })}
         </ol>
       </section>
+    </div>
+  );
+}
+
+const TRACE_KIND: Record<GraphTrace['kind'], string> = {
+  route: 'Which agent',
+  context: 'What it was told',
+  schedule: 'When it could start',
+  stale: 'What went out of date',
+  locate: 'Where a failure belongs',
+};
+
+/** Every decision Puff made for this task, with the Cypher it ran on FalkorDB and how long it took. */
+function TraceTab({ traces }: { traces: GraphTrace[] }) {
+  const [open, setOpen] = useState<string>();
+  if (traces.length === 0)
+    return (
+      <p className="text-sm text-ink-3">
+        No decisions recorded yet. They appear once the team picks this task up.
+      </p>
+    );
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-xs leading-relaxed text-ink-3">
+        Each decision below was made by asking the graph. Open one to see the queries it ran on
+        FalkorDB, newest first.
+      </p>
+      {traces.map((t) => (
+        <section key={t.id} className="rounded-xl border border-line bg-surface-2/60">
+          <button
+            onClick={() => setOpen(open === t.id ? undefined : t.id)}
+            className="flex w-full flex-col gap-1.5 p-3 text-left"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded bg-memory/15 px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-memory">
+                {t.kind}
+              </span>
+              <span className="text-xs font-medium text-ink">{TRACE_KIND[t.kind]}</span>
+              {t.graphOff && (
+                <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-mono text-[10px] text-amber-300">
+                  graph off
+                </span>
+              )}
+              <span className="ml-auto font-mono text-[10px] tabular-nums text-ink-3">
+                {t.queries} {t.queries === 1 ? 'query' : 'queries'} · {t.ms.toFixed(1)} ms ·{' '}
+                {t.rows} rows
+              </span>
+            </div>
+            <div className="text-[13px] leading-snug text-ink-2">{t.reason}</div>
+          </button>
+          {open === t.id && (
+            <ol className="flex flex-col gap-2 border-t border-line p-3">
+              {t.steps.map((s, i) => (
+                <li key={i}>
+                  <div className="mb-1 font-mono text-[10px] tabular-nums text-ink-3">
+                    {s.ms.toFixed(2)} ms · {s.rows} rows
+                    {s.params.length ? ` · $${s.params.join(', $')}` : ''}
+                  </div>
+                  <pre className="overflow-x-auto rounded-lg border border-line bg-surface p-2.5 font-mono text-[11px] leading-relaxed whitespace-pre text-ink-2">
+                    {s.cypher}
+                  </pre>
+                </li>
+              ))}
+              {t.queries > t.steps.length && (
+                <li className="font-mono text-[10px] text-ink-3">
+                  …and {t.queries - t.steps.length} more
+                </li>
+              )}
+            </ol>
+          )}
+        </section>
+      ))}
     </div>
   );
 }

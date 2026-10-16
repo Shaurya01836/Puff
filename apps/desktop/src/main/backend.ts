@@ -28,6 +28,7 @@ import {
   getTask,
   getTeamTimeline,
   getWhy,
+  listTraces,
   graphName,
   initRepo,
   inspectRepo,
@@ -608,6 +609,9 @@ async function buildLive(
     },
     async getWhy(taskId) {
       return getWhy(need().graph, taskId);
+    },
+    async getTraces(taskId) {
+      return listTraces(need().graph, taskId);
     },
     async getMemoryFeed(_projectId, limit) {
       return current ? getMemoryFeed(current.graph, limit) : [];

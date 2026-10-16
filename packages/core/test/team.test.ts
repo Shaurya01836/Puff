@@ -21,6 +21,7 @@ import { parseConfig, type PuffConfig } from '../src/config';
 import { renderPrompt, type PromptInput } from '../src/context/prompt';
 import { connect, loadDotEnv, read } from '../src/db/client';
 import { initProjectGraph } from '../src/db/init';
+import { listTraces } from '../src/db/trace';
 import { GitRepo, removeLink } from '../src/git/repo';
 import { graphName } from '../src/ids';
 import { indexRepo } from '../src/indexer/index';
@@ -469,7 +470,7 @@ describe.skipIf(!ready)('coordination (fake agents, real git, real FalkorDB)', (
       active++;
       peak = Math.max(peak, active);
       spans[title] = { start: Date.now(), end: 0 };
-      await sleep(2500); // long enough that two slow worktree creations still overlap
+      await sleep(4000); // long enough that two slow worktree creations still overlap
       const file = title.includes('login')
         ? 'src/auth/login.ts'
         : title.includes('cart')
@@ -503,6 +504,13 @@ describe.skipIf(!ready)('coordination (fake agents, real git, real FalkorDB)', (
     expect(blocked[0]!.type === 'task:update' && blocked[0]!.task.blockedBy).toEqual([a.id]);
     expect((await getTask(f.graph, b.id))!.blockedBy).toBeUndefined();
     expect(f.logs.some((l) => l.includes(`${b.id} waits for ${a.id}`))).toBe(true);
+    // the scheduler's decisions are traced: first "waits for a", then "free to start"
+    const schedule = (await listTraces(f.graph, b.id)).filter((t) => t.kind === 'schedule');
+    expect(schedule.map((t) => t.reason.split(':')[0]).reverse()).toEqual([
+      `waits for ${a.id}`,
+      'free to start',
+    ]);
+    expect(schedule.every((t) => t.steps.some((s) => s.cypher.includes('CALLS*0..1')))).toBe(true);
     void c;
     void d;
   }, 120_000);

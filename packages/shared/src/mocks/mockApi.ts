@@ -21,6 +21,7 @@ import {
   mockSavings,
   mockSessions,
   mockTasks,
+  mockTraces,
   mockWhy,
 } from './fixtures';
 import { mockGraph, neighbourhood } from './graph';
@@ -589,6 +590,9 @@ export function createMockApi(opts: MockApiOptions = {}): PuffApi {
     },
     async getWhy() {
       return clone(mockWhy);
+    },
+    async getTraces() {
+      return clone(mockTraces);
     },
     async getGraph(_projectId, focusId, depth) {
       return clone(focusId ? neighbourhood(mockGraph, focusId, depth) : mockGraph);

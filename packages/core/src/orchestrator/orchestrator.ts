@@ -7,6 +7,8 @@
 import type { AgentName } from '@puff/shared';
 import { ROLE_FOR_TYPE, createAdapters } from '../agents/adapters';
 import { WRITES_FILES } from '../agents/types';
+import { graphOff } from '../config';
+import { saveTrace, traced } from '../db/trace';
 import { GitRepo } from '../git/repo';
 import {
   claimTask,
@@ -183,8 +185,25 @@ export class Orchestrator {
           }
         }
         // Tasks claimed a moment ago are already 'running' in the graph, so they count as in flight.
-        const blockers = await overlappingTasks(graph, task);
+        const off = graphOff(config);
+        const check = await traced(() => overlappingTasks(graph, task, { graphOff: off }));
+        const blockers = check.value;
         const was = (task.blockedBy ?? []).join();
+        // One trace per change of answer (and one when it is free to start), not one per loop
+        if (blockers.join() !== was || blockers.length === 0) {
+          await saveTrace(
+            graph,
+            { taskId: task.id },
+            {
+              kind: 'schedule',
+              reason: blockers.length
+                ? `waits for ${blockers.join(', ')}: ${off ? 'graph off, they target the same file' : 'they target the same functions, or functions one CALLS hop away'}`
+                : `free to start: no running task touches ${off ? 'the same file (graph off)' : 'the same functions or their direct callers and callees'}`,
+              steps: check.steps,
+              graphOff: off,
+            },
+          );
+        }
         if (blockers.join() !== was) {
           const updated = await updateTask(graph, task.id, {
             blockedBy: blockers.length ? blockers : null,

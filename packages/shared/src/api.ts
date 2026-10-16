@@ -6,6 +6,7 @@ import type {
   ChatMessage,
   ContextPack,
   GraphData,
+  GraphTrace,
   ManualResult,
   MemoryEvent,
   ProjectSummary,
@@ -83,6 +84,8 @@ export interface PuffApi {
   getTaskDiff(taskId: string): Promise<TaskDiffInfo | undefined>;
   getContextPack(sessionId: string): Promise<ContextPack>;
   getWhy(taskId: string): Promise<WhyPath>;
+  /** The queries behind each decision Puff made for this task (route, context, schedule, stale, locate), newest first */
+  getTraces(taskId: string): Promise<GraphTrace[]>;
   getGraph(projectId: string, focusId?: string, depth?: number): Promise<GraphData>;
   getMemoryFeed(projectId: string, limit?: number): Promise<MemoryEvent[]>;
   listAgents(projectId: string): Promise<AgentProfile[]>;
@@ -171,6 +174,7 @@ export const PUFF_INVOKE_METHODS = [
   'getTaskDiff',
   'getContextPack',
   'getWhy',
+  'getTraces',
   'getGraph',
   'getMemoryFeed',
   'listAgents',

@@ -421,6 +421,20 @@ in a final block:
 <puff-report>{"decisions":[{"symbol":"...","text":"..."}],"notes":"..."}</puff-report>
 ```
 
+### What the graph adds to the context (P15)
+
+- **Two calls down** (Q21): besides the targets' direct callers and callees, lessons on functions the target reaches through one other function are included, ranked below closer ones, with the path in the reason ("reaches through audit()").
+- **Worded like the task** (Q22): up to two failures found by full-text search on the task's title and note, when the call graph did not bring them in. They rank lowest; stale ones are skipped.
+- **Risky code gets more room** (Q20): when the riskiest target is at or above `graph.riskThreshold`, the budget is ×1.5 (`RISK_BUDGET_FACTOR`).
+
+## The graph decides, and shows how (P13, P15)
+
+**Risk** (`queries/insights.ts`, Q20). After every index, `computeRisk` runs `algo.pageRank` and `algo.betweenness` over `CALLS`, adds a bump for unfixed failures, and stores `pagerank`, `betweenness`, `openFailures` and `risk` (a percentile, 0 to 1) on each `Symbol`. `routeTask` (`orchestrator/routing.ts`) puts agents that declare `reasoning` first for a task whose riskiest target is at or above the threshold, and says so in words. Tasks carry `risk` (the maximum over their targets) for the Board's "load-bearing" badge.
+
+**Traces** (`db/trace.ts`, Q19). `traced(fn)` runs a decision with an `AsyncLocalStorage` collector; `read` and `run` in `db/client.ts` time every query and report the Cypher, parameter names (never values), milliseconds and rows to it. `saveTrace` stores one `(:Trace)-[:FOR]->(:Task|:Session)` per decision, keeps the last five per kind, and never throws. The five kinds and where they are made: `route` (`run.ts`), `context` (`compileContext`), `schedule` (`orchestrator.ts`, only when the answer changes or the task is free to start), `stale` (`indexRepo` with `traceFor`, after a merge or a revert), `locate` (`recordTestFailures`). The app reads them with `getTraces(taskId)` and shows them in the task's **Graph trace** tab.
+
+**The switch** (`config.ts` `graphOff()`). `PUFF_GRAPH=off` (or `0`/`false`; `on` forces it on) wins over `graph.enabled` in the config. Off: `routeTask` returns the escalation order, `compileContext` builds the task and its target files only (`graphOff` is stored on the ContextPack), `overlappingTasks` compares target files, `indexRepo` marks nothing stale and computes no risk. Every trace made while it is off says so.
+
 ---
 
 ## Watching agents and re-testing merges
@@ -748,6 +762,8 @@ npm run puff -- context <taskId>
 **Arms:** (a) plain harness, (b) harness + Puff context. Same model and prompt wording otherwise, a fresh worktree per run, 2–3 runs per arm.
 
 **Metrics:** tokens in/out, files read (where the stream exposes Read calls), first-try pass rate, **repeated-mistake rate**, wall time.
+
+**The transfer benchmark (P14, `bench/transfer.ts`, `puff bench-transfer`).** Five traps, each with a learn task and a different transfer task on related code. Learn: a real agent tries the learn task; if it avoids the trap, the recorded careless change is run instead ("replayed"); either way Puff's real locator records the failure, its fix and a decision. Transfer: a fresh agent in four arms: `none` (the task alone), `puff` (graph-selected context), `flat` (every lesson in an `AGENTS.md`, plus one line telling the agent to read it), `graph-off` (`PUFF_GRAPH=off`: the task and its target files). A repeated mistake is a named trap test failing on that first attempt. Every task is checked first (`PUFF_BENCH_CHECK=1`): the untouched repo fails the hidden spec unless refusing is the right answer, a correct change passes, the careless change trips a trap test. `--dry-run` prints each arm's prompt without running agents. Method and results: [BENCHMARK.md](BENCHMARK.md).
 
 ---
 

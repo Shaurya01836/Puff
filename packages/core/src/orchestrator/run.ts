@@ -9,7 +9,7 @@ import type { ActivityStep, Actor, AgentName, PuffEvent, Task, TrailEntry } from
 import { ROLE_FOR_TYPE, type Adapters } from '../agents/adapters';
 import { isLimitError } from '../agents/parse';
 import { WRITES_FILES, type HarnessResult } from '../agents/types';
-import type { PuffConfig } from '../config';
+import { graphOff, type PuffConfig } from '../config';
 import { compileContext } from '../context/compiler';
 import { GitRepo, type Worktree } from '../git/repo';
 import { indexRepo } from '../indexer/index';
@@ -26,7 +26,8 @@ import {
 } from '../memory/sessions';
 import { getTask, updateTask } from '../memory/tasks';
 import { read, run as runQuery } from '../db/client';
-import { candidateAgents } from './routing';
+import { routeTask } from './routing';
+import { saveTrace, traced } from '../db/trace';
 import type { SlotPool } from './schedule';
 import { runVerification, type Verdict } from './verify';
 
@@ -122,7 +123,21 @@ async function emitSession(deps: RunDeps, taskId: string, sessionId: string): Pr
  */
 async function plan(deps: RunDeps, task: Task, forced?: AgentName): Promise<AgentName[]> {
   const usable = (a: AgentName) => deps.adapters[a] !== undefined && !deps.unavailable?.has(a);
-  const candidates = await candidateAgents(deps.graph, deps.config, task.id);
+  const routed = await traced(() => routeTask(deps.graph, deps.config, task.id));
+  const candidates = routed.value.agents;
+  const chosen = forced ?? task.preferredAgent;
+  await saveTrace(
+    deps.graph,
+    { taskId: task.id },
+    {
+      kind: 'route',
+      reason: chosen
+        ? `${chosen}, chosen by the person (the graph suggested: ${routed.value.reason})`
+        : routed.value.reason,
+      steps: routed.steps,
+      graphOff: routed.value.graphOff,
+    },
+  );
   const first = forced ?? task.preferredAgent ?? candidates.find(usable);
   if (!first) return [];
   const chain = deps.config.escalation as AgentName[];
@@ -382,6 +397,8 @@ async function runAttempt(
       budgetTokens: config.limits.contextTokenBudget * (role === 'planner' ? 2 : 1),
       testCommand: config.verify.testCommand,
       maxTasks: config.limits.maxTasksPerPlan,
+      graphOff: graphOff(config),
+      riskThreshold: config.graph.riskThreshold,
     });
     await emitSession(deps, task.id, sessionId);
 
@@ -581,7 +598,7 @@ async function runAttempt(
     const landed = await repo.serial(async () => {
       const m = await repo.mergeNow(wt, `Merge puff task ${task.id}: ${task.title}`);
       if (!m.merged) return { m };
-      await indexRepo(graph, deps.project);
+      await indexRepo(graph, deps.project, { traceFor: { taskId: task.id } });
       if (!config.verify.retestAfterMerge) return { m };
 
       // Passing in its own worktree is not the same as passing together with everything merged before it.
@@ -612,7 +629,7 @@ async function runAttempt(
         }));
       if (combined.kind !== 'tests-failed') return { m, combined };
       const undo = await repo.revertMerge(m.sha!);
-      if (undo.reverted) await indexRepo(graph, deps.project);
+      if (undo.reverted) await indexRepo(graph, deps.project, { traceFor: { taskId: task.id } });
       return { m, combined, undo };
     });
     const merge = landed.m;

@@ -1,6 +1,7 @@
 // From raw test output to anchored Failure memory. This is what the orchestrator calls after a
 // verification run fails (P3); it also backs `puff failure add` for manual use.
 import type { Graph } from 'falkordb';
+import { saveTrace, traced } from '../db/trace';
 import { existingSymbols } from '../queries/code';
 import { recordFailure, sanitizeMessage, type FailureResult } from './memory';
 import {
@@ -36,6 +37,30 @@ export interface RecordedFailure extends FailureResult {
 }
 
 export async function recordTestFailures(
+  graph: Graph,
+  input: RecordTestFailuresInput,
+): Promise<RecordedFailure[]> {
+  const { value, steps } = await traced(() => locateAndRecord(graph, input));
+  await saveTrace(
+    graph,
+    { sessionId: input.sessionId },
+    {
+      kind: 'locate',
+      reason: value.length
+        ? value
+            .map(
+              (r) =>
+                `"${r.message.slice(0, 80)}" pinned to ${r.symbolIds.map((s) => `${s.split('::')[1] ?? s}()`).join(', ')} by ${r.via}`,
+            )
+            .join('; ')
+        : 'the failure could not be tied to any function, so nothing was remembered',
+      steps,
+    },
+  );
+  return value;
+}
+
+async function locateAndRecord(
   graph: Graph,
   input: RecordTestFailuresInput,
 ): Promise<RecordedFailure[]> {
