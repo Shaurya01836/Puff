@@ -14,9 +14,25 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-Node%2022-3178c6)](#tech-stack)
 [![Status](https://img.shields.io/badge/status-building-yellow)](#roadmap)
 
-[Problem](#the-problem) · [Solution](#the-solution) · [How it uses FalkorDB](#how-puff-uses-falkordb) · [How agents use Puff](#how-agents-use-puff) · [Quick start](#quick-start) · [Docs](#documentation)
+[Problem](#the-problem) · [Solution](#the-solution) · [How it uses FalkorDB](#how-puff-uses-falkordb) · [How agents use Puff](#how-agents-use-puff) · [Install](#install-the-windows-app) · [Quick start](#quick-start) · [Docs](#documentation)
+
+### ⬇ [Download Puff for Windows](https://github.com/Shaurya01836/Puff/releases/latest/download/Puff-Setup.exe)
+
+Windows 10/11 · about 115 MB · [all releases](https://github.com/Shaurya01836/Puff/releases/latest) · [install guide](docs/INSTALL.md)
 
 </div>
+
+---
+
+## Install the Windows app
+
+1. **Download** [`Puff-Setup.exe`](https://github.com/Shaurya01836/Puff/releases/latest/download/Puff-Setup.exe) and run it. Windows may warn about an unknown publisher (the installer is not code-signed yet): choose **More info**, then **Run anyway**.
+2. **Have Docker Desktop running.** On first start Puff shows a setup screen; press **Start the database** and it starts FalkorDB for you.
+3. **Have at least one agent CLI installed:** Claude Code, Codex or OpenCode. The same screen lists which are installed and signed in, and has a **Sign in** button for Claude Code and Codex.
+4. **Press Add a project…**, choose a git repository (TypeScript or JavaScript), give the team a goal, and press **Run team**.
+
+Already installed? Run the new installer: it updates in place and keeps your projects and memory. Details, where files are kept, and building the installer yourself are in [docs/INSTALL.md](docs/INSTALL.md). macOS and Linux: run from source ([Quick start](#quick-start)).
+
 
 ---
 
@@ -244,7 +260,7 @@ Details: [docs/ARCHITECTURE.md → Build phases](docs/ARCHITECTURE.md#build-phas
 
 > 🚧 Puff is being built during Graph Hacks (15–18 Oct 2026). **Phases P0 to P11 are in:** the code graph, shared memory (failures tied to the function they happened in, fixes, decisions, procedures, handoffs), the context compiler with its "why" trail, real agents, **and team coordination**. Claude Code, Codex and OpenCode run tasks in isolated git worktrees, Puff verifies with the project's own tests, records what went wrong, retries with the lesson and escalates. Give it a goal and a planner agent splits it into tasks; independent tasks run in parallel and a task that touches the same code as one already running waits. Tasks that were really run by agents were verified on the demo repo (OpenCode and Codex, both merged with tests passing; a real OpenCode planner turned a goal into three linked tasks). Memory stays correct: editing a function marks what was learned about *that function* "possibly outdated" (not the whole file), a replaced decision is kept but superseded, and a Puff MCP server lets Claude Code and OpenCode read and write memory mid-task. You can add any TypeScript or JavaScript repository as a project and switch between projects in the app or the CLI, and you can talk to Puff: slash commands answer at once, and plain sentences go to a Claude Code orchestrator that can only use Puff's tools (it adds tasks and goals, retries failures, reads the project memory, and asks you before it runs anything). A first benchmark has run (see [Benchmark](#benchmark)); the sample data in the quick start below is seeded, not real.
 
-**Just want to use it?** Install the Windows app (no source code, Node or npm needed): see [docs/INSTALL.md](docs/INSTALL.md). The rest of this section is for running from a checkout.
+**Just want to use it?** [Download the Windows app](#install-the-windows-app) (no source code, Node or npm needed). The rest of this section is for running from a checkout.
 
 **Prerequisites:** Node 22.12+, Docker (or [falkordblite](docs/ARCHITECTURE.md#option-b-no-docker-falkordblite)), git. Agent CLIs (`claude`, `codex`, `opencode`) are needed from phase P3.
 
@@ -422,7 +438,7 @@ npm run dev
 | `npm run mcp` | Puff MCP server over stdio (needs `PUFF_PROJECT`; optional `PUFF_SESSION`). Tools: `get_context`, `impact_of`, `find_symbols`, `record_decision` / `record_failure` / `record_solution`, `confirm_memory`, `handoff`, `why` |
 | `npm run puff -- mcp-config` | Print the MCP config to point Claude Code or OpenCode at this project |
 | `npm run typecheck` · `npm test` · `npm run format` | Checks (also run in CI) |
-| `npm run build:desktop` | Package the installable app (.exe / .dmg / AppImage) |
+| `npm run build:desktop` | Build the Windows installer (`apps/desktop/release/Puff-Setup.exe`) |
 
 **UI work:** screens live in `apps/desktop/src/renderer/src/screens`. They only talk to `puff` (`lib/api.ts`), which is the `PuffApi` from `packages/shared`. Inside Electron they are served live from FalkorDB (the badge in the top bar says what is still sample data). In the browser-only mode (`npm run dev:web`) every call returns mock data from `packages/shared/src/mocks`. **Run team** runs the ready tasks through the same orchestrator as `puff run`, and the board, agent pool and memory graph update live.
 
