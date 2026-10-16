@@ -21,6 +21,8 @@ import {
   mockSavings,
   mockSessions,
   mockTasks,
+  mockMergePreview,
+  mockPlanPreview,
   mockTraces,
   mockWhy,
 } from './fixtures';
@@ -593,6 +595,12 @@ export function createMockApi(opts: MockApiOptions = {}): PuffApi {
     },
     async getTraces() {
       return clone(mockTraces);
+    },
+    async getMergePreview(taskId) {
+      return { ...clone(mockMergePreview), taskId };
+    },
+    async getPlanPreview() {
+      return clone(mockPlanPreview);
     },
     async getGraph(_projectId, focusId, depth) {
       return clone(focusId ? neighbourhood(mockGraph, focusId, depth) : mockGraph);

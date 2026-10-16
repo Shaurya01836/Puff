@@ -21,6 +21,8 @@ import type {
   ContextPack,
   GraphTrace,
   ManualResult,
+  MergePreview,
+  PlanPreview,
   SessionInfo,
   Task,
   TaskDiffInfo,
@@ -44,6 +46,9 @@ interface Detail {
   pack?: ContextPack;
   why: WhyPath;
   traces: GraphTrace[];
+  /** Code tasks: what the merge changes in the graph (Q25). Plans: how their tasks will run (Q26). */
+  mergePreview?: MergePreview;
+  planPreview?: PlanPreview;
 }
 
 async function loadDetail(taskId: string): Promise<Detail> {
@@ -56,10 +61,15 @@ async function loadDetail(taskId: string): Promise<Detail> {
   const latest = sessions.at(-1);
   // A session that has not been given context yet has no pack; that is fine, not an error.
   const pack = latest ? await puff.getContextPack(latest.id).catch(() => undefined) : undefined;
-  return { task, sessions, pack, why, traces };
+  const [mergePreview, planPreview] = await Promise.all([
+    task.type === 'plan' ? undefined : puff.getMergePreview(taskId).catch(() => undefined),
+    task.type === 'plan' ? puff.getPlanPreview(taskId).catch(() => undefined) : undefined,
+  ]);
+  return { task, sessions, pack, why, traces, mergePreview, planPreview };
 }
 
-export type Tab = 'activity' | 'terminal' | 'context' | 'changes' | 'why' | 'graph' | 'sessions';
+export type Tab =
+  'activity' | 'terminal' | 'context' | 'changes' | 'preview' | 'why' | 'graph' | 'sessions';
 
 const CLIS: { cli: TerminalCli; label: string }[] = [
   { cli: 'claude-code', label: 'Claude Code' },
@@ -348,6 +358,7 @@ export function TaskDetail({
                 ['terminal', `Terminal${terms.length ? ` · ${terms.length}` : ''}`],
                 ['context', 'Context received'],
                 ['changes', `Changes${diff ? ` · ${diff.files.length}` : ''}`],
+                ['preview', detail?.task.type === 'plan' ? 'Dry run' : 'Merge preview'],
                 ['why', 'Why?'],
                 [
                   'graph',
@@ -387,6 +398,9 @@ export function TaskDetail({
           )}
           {detail && tab === 'context' && <ContextTab task={detail.task} pack={detail.pack} />}
           {detail && tab === 'changes' && <ChangesTab diff={diff} status={detail.task.status} />}
+          {detail && tab === 'preview' && (
+            <PreviewTab merge={detail.mergePreview} plan={detail.planPreview} />
+          )}
           {detail && tab === 'why' && <WhyTab why={detail.why} />}
           {detail && tab === 'graph' && <TraceTab traces={detail.traces} />}
           {detail && tab === 'sessions' && <SessionsTab sessions={detail.sessions} />}
@@ -650,7 +664,122 @@ const TRACE_KIND: Record<GraphTrace['kind'], string> = {
   stale: 'What went out of date',
   locate: 'Where a failure belongs',
   revert: 'What a revert undid',
+  preview: 'What the merge will change',
 };
+
+const fn = (id: string) => `${id.split('::')[1] ?? id}()`;
+
+/** Merge preview (Q25) or, for a plan, a dry run of the scheduler (Q26), both made on a copy of the graph */
+function PreviewTab({ merge, plan }: { merge?: MergePreview; plan?: PlanPreview }) {
+  if (plan) {
+    return (
+      <div className="flex flex-col gap-4">
+        <p className="text-xs leading-relaxed text-ink-3">
+          A dry run of the scheduler on a copy of the graph ({plan.ms} ms): which tasks would start
+          together, which would wait, and why. Nothing was claimed or run.
+        </p>
+        <ol className="flex flex-col gap-3">
+          {plan.waves.map((w, i) => (
+            <li key={i} className="rounded-xl border border-line bg-surface-2/60 p-3">
+              <div className="mb-2 font-mono text-[10px] tracking-wider text-ink-3 uppercase">
+                Wave {i + 1}
+              </div>
+              {w.start.map((id) => (
+                <div key={id} className="flex items-center gap-2 text-sm text-ink">
+                  <span className="size-1.5 rounded-full bg-emerald-400" />
+                  {plan.titles[id] ?? id}
+                </div>
+              ))}
+              {w.waits.map((x) => (
+                <div key={x.task} className="mt-1 flex items-start gap-2 text-xs text-ink-3">
+                  <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-amber-400" />
+                  <span>
+                    <span className="text-ink-2">{plan.titles[x.task] ?? x.task}</span> waits:{' '}
+                    {x.reason}
+                  </span>
+                </div>
+              ))}
+            </li>
+          ))}
+        </ol>
+        {plan.stuck.length > 0 && (
+          <p className="text-xs text-rose-300">
+            Could never start: {plan.stuck.map((id) => plan.titles[id] ?? id).join(', ')}
+          </p>
+        )}
+      </div>
+    );
+  }
+  if (!merge)
+    return (
+      <p className="text-sm text-ink-3">
+        No merge preview yet. It is made on a copy of the graph when this task&apos;s tests pass,
+        just before the merge.
+      </p>
+    );
+  const list = (title: string, items: string[], tone: string) =>
+    items.length > 0 && (
+      <section>
+        <SectionTitle>{title}</SectionTitle>
+        <ul className="flex flex-wrap gap-1.5">
+          {items.map((i) => (
+            <li key={i} className={cn('rounded-md px-2 py-0.5 font-mono text-[11px]', tone)}>
+              {i}
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="rounded-xl border border-brand/25 bg-brand/8 p-4 text-sm leading-relaxed text-ink-2">
+        {merge.summary}
+        <div className="mt-1 font-mono text-[10px] text-ink-3">
+          Made on a copy of the graph in {merge.ms} ms, before merging
+        </div>
+      </div>
+      {merge.newCallersOfRisky.length > 0 && (
+        <section>
+          <SectionTitle>New callers of load-bearing code</SectionTitle>
+          <ul className="flex flex-col gap-1">
+            {merge.newCallersOfRisky.map((c) => (
+              <li key={`${c.from}>${c.to}`} className="text-sm text-rose-300">
+                {fn(c.from)} now calls {fn(c.to)} (top {Math.max(1, Math.round((1 - c.risk) * 100))}
+                % by risk)
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {merge.wouldGoStale.length > 0 && (
+        <section>
+          <SectionTitle>Lessons this merge would make possibly outdated</SectionTitle>
+          <ul className="flex flex-col gap-1">
+            {merge.wouldGoStale.map((m) => (
+              <li key={m.id} className="text-sm text-amber-200">
+                <span className="mr-1.5 text-[11px] text-ink-3">{m.kind}</span>
+                {m.text}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {list('Functions added', merge.symbolsAdded.map(fn), 'bg-emerald-500/12 text-emerald-300')}
+      {list('Functions changed', merge.symbolsChanged.map(fn), 'bg-amber-500/12 text-amber-200')}
+      {list('Functions removed', merge.symbolsRemoved.map(fn), 'bg-rose-500/12 text-rose-300')}
+      {list(
+        'Calls added',
+        merge.callsAdded.map((c) => `${fn(c.from)} → ${fn(c.to)}`),
+        'bg-surface-3 text-ink-2',
+      )}
+      {list(
+        'Calls removed',
+        merge.callsRemoved.map((c) => `${fn(c.from)} → ${fn(c.to)}`),
+        'bg-surface-3 text-ink-3 line-through',
+      )}
+    </div>
+  );
+}
 
 /** Every decision Puff made for this task, with the Cypher it ran on FalkorDB and how long it took. */
 function TraceTab({ traces }: { traces: GraphTrace[] }) {

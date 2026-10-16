@@ -29,6 +29,9 @@ import {
   getTeamTimeline,
   getWhy,
   listTraces,
+  getMergePreview,
+  graphOff,
+  planPreviewFor,
   graphName,
   initRepo,
   inspectRepo,
@@ -612,6 +615,18 @@ async function buildLive(
     },
     async getTraces(taskId) {
       return listTraces(need().graph, taskId);
+    },
+    async getMergePreview(taskId) {
+      return getMergePreview(need().graph, taskId);
+    },
+    async getPlanPreview(taskId) {
+      const p = need();
+      return planPreviewFor(p.graph, {
+        slug: p.project.slug,
+        taskId,
+        maxParallel: p.config.limits.maxParallel,
+        graphOff: graphOff(p.config),
+      });
     },
     async getMemoryFeed(_projectId, limit) {
       return current ? getMemoryFeed(current.graph, limit) : [];

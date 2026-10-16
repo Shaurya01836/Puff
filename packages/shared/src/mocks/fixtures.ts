@@ -4,6 +4,8 @@ import type {
   AgentProfile,
   ContextPack,
   GraphTrace,
+  MergePreview,
+  PlanPreview,
   MemoryEvent,
   Savings,
   SessionInfo,
@@ -550,6 +552,52 @@ export const mockContextPack: ContextPack = {
     '',
     'WHEN DONE: final block <puff-report>{"decisions":[...],"notes":"..."}</puff-report>',
   ].join('\n'),
+};
+
+export const mockMergePreview: MergePreview = {
+  taskId: 'task_08',
+  at: min(68),
+  ms: 412,
+  symbolsAdded: ['src/auth/audit.ts::redact'],
+  symbolsRemoved: [],
+  symbolsChanged: ['src/auth/audit.ts::audit'],
+  callsAdded: [{ from: 'src/auth/audit.ts::audit', to: 'src/auth/audit.ts::redact' }],
+  callsRemoved: [],
+  wouldGoStale: [
+    {
+      id: 'fail_01',
+      kind: 'Failure',
+      text: 'login.spec: password appears in audit log',
+    },
+  ],
+  newCallersOfRisky: [],
+  summary:
+    '1 function(s) added; 1 changed; 1 call(s) added, 0 removed; 1 lesson(s) would become possibly outdated',
+};
+
+export const mockPlanPreview: PlanPreview = {
+  at: min(4),
+  ms: 96,
+  tasks: ['task_06', 'task_07', 'task_08'],
+  titles: {
+    task_06: 'Add per-IP rate limiter middleware',
+    task_07: 'Log failed login attempts',
+    task_08: 'Redact credentials before audit()',
+  },
+  waves: [
+    {
+      start: ['task_06', 'task_07'],
+      waits: [
+        {
+          task: 'task_08',
+          for: ['task_07'],
+          reason: 'depends on "Log failed login attempts"',
+        },
+      ],
+    },
+    { start: ['task_08'], waits: [] },
+  ],
+  stuck: [],
 };
 
 export const mockTraces: GraphTrace[] = [

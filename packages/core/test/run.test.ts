@@ -29,6 +29,7 @@ import { graphName } from '../src/ids';
 import { indexRepo } from '../src/indexer/index';
 import { parsePuffReport } from '../src/memory/report';
 import { syncReverts } from '../src/memory/provenance';
+import { getMergePreview } from '../src/queries/preview';
 import { listSessions, startSession } from '../src/memory/sessions';
 import {
   createTask,
@@ -270,7 +271,13 @@ describe.skipIf(!ready)('the run loop (fake agents, real git, real FalkorDB)', (
     // Q19: every decision on the way left its queries behind, timed, with the decision in words.
     const traces = await listTraces(f.graph, t.id);
     const kinds = new Set(traces.map((x) => x.kind));
-    expect([...kinds].sort()).toEqual(['context', 'locate', 'route', 'stale']);
+    expect([...kinds].sort()).toEqual(['context', 'locate', 'preview', 'route', 'stale']);
+    // Q25: before the merge, the branch was previewed on a copy of the graph
+    const preview = await getMergePreview(f.graph, t.id);
+    expect(preview?.symbolsChanged).toContain('src/auth/login.ts::checkUser');
+    expect(preview?.wouldGoStale.map((m) => m.text).join()).toMatch(
+      /never writes a password to the logs/,
+    );
     for (const x of traces) {
       expect(x.reason.length, x.kind).toBeGreaterThan(5);
       expect(x.steps.length, x.kind).toBeGreaterThan(0);

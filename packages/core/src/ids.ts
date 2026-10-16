@@ -11,6 +11,7 @@ export const ID_PREFIX = {
   ContextPack: 'pack',
   Handoff: 'hand',
   Trace: 'trace',
+  Preview: 'prev',
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIX;

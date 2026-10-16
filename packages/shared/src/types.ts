@@ -139,7 +139,45 @@ export interface ContextPack {
 }
 
 /** A decision Puff makes by asking the graph */
-export type TraceKind = 'route' | 'context' | 'schedule' | 'stale' | 'locate' | 'revert';
+export type TraceKind =
+  'route' | 'context' | 'schedule' | 'stale' | 'locate' | 'revert' | 'preview';
+
+/** What merging a task would change in the graph, found on a copy before the merge (Q25) */
+export interface MergePreview {
+  taskId: string;
+  at: number;
+  ms: number;
+  symbolsAdded: string[];
+  symbolsRemoved: string[];
+  /** Functions whose body changed */
+  symbolsChanged: string[];
+  callsAdded: { from: string; to: string }[];
+  callsRemoved: { from: string; to: string }[];
+  /** Lessons about changed code that the merge would mark possibly outdated */
+  wouldGoStale: { id: string; kind: string; text: string }[];
+  /** New calls into load-bearing functions (risk at or above the threshold) */
+  newCallersOfRisky: { from: string; to: string; risk: number }[];
+  summary: string;
+}
+
+/** One step of a dry run of the scheduler */
+export interface PlanWave {
+  /** Tasks that would start together */
+  start: string[];
+  /** Tasks that would wait, for what, and why */
+  waits: { task: string; for: string[]; reason: string }[];
+}
+
+/** How a goal's tasks would run, without running them (Q26) */
+export interface PlanPreview {
+  at: number;
+  ms: number;
+  tasks: string[];
+  titles: Record<string, string>;
+  waves: PlanWave[];
+  /** Tasks that could never start (a dependency outside the plan, or a cycle) */
+  stuck: string[];
+}
 
 /** One query a decision ran */
 export interface TraceStep {

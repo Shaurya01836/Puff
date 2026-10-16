@@ -240,6 +240,8 @@ All queries use parameters (`$name`). Nothing is built by string concatenation.
 | Q22 | Failures worded like the task (full-text) | context compiler |
 | Q23 | Repair on revert: downgrade what a reverted merge taught | after Puff's re-test revert, on every merge and on project open |
 | Q24 | Trust: how far to believe a lesson | context compiler, Context tab |
+| Q25 | Merge preview: what a branch changes in the graph, on a `GRAPH.COPY` | run loop before each merge, Merge preview tab |
+| Q26 | Plan preview: a dry run of the scheduler on a `GRAPH.COPY` | planner, Dry run tab |
 
 ### Q1: Index a file (idempotent)
 
@@ -815,6 +817,38 @@ RETURN f.id AS id, count(DISTINCT se) AS repeated
 plus each agent's record (`(a:Agent)-[:RAN]->(s:Session)` outcomes). The score (`trustScore`, plain TypeScript so every step has a reason): start at 0.6; +0.1 per confirmation (2 at most); +0.08 per session that succeeded with it in context (3 at most); −0.15 per repeat despite being shown (2 at most); −0.2 if stale; −0.4 if learned in a reverted merge, else −0.3 if derived from one; ±0.1 for the learning agent's success rate once it has 3 runs. Clamped to 0..1.
 
 **Decisions it changes:** context ranking adds `(1 − trust) × 20` to a lesson's rank, so less trusted lessons sink; below 0.35 a lesson is left out, and the context trace lists it with its reasons; below 0.5 it is included but marked "low confidence: …" in the prompt. Confirming a lesson (`confirm_memory`) adds trust and can bring it back. The trust is stored on the `INCLUDED` edge and shown as a bar in the task's Context tab. Tests: `trust.test.ts`.
+
+### Previews on a copy: `GRAPH.COPY` (P18)
+
+`GRAPH.COPY puff_<project> puff_<project>__preview_<purpose>_<time>` copies the whole project graph in milliseconds. Puff changes the copy, compares it with the real graph, and deletes it in a `finally` (`withGraphCopy`). Copies are named with `__preview_`, hidden from `puff graphs`, and any a crash left behind are deleted when the project graph is opened.
+
+### Q25: Merge preview
+
+When a task's tests pass, before it is merged, the task's worktree is indexed **into a copy** with the real indexer (so the copy also marks memory about changed functions stale). The copy is then compared with the real graph:
+
+```cypher
+MATCH (s:Symbol) WHERE coalesce(s.removed, false) = false RETURN s.id AS id, s.bodyHash AS hash
+MATCH (a:Symbol)-[:CALLS]->(b:Symbol) WHERE coalesce(a.removed, false) = false AND coalesce(b.removed, false) = false
+RETURN a.id + ' -> ' + b.id AS edge
+MATCH (m) WHERE labels(m)[0] IN ['Failure', 'Decision'] AND coalesce(m.stale, false) = true
+RETURN m.id AS id, labels(m)[0] AS kind, coalesce(m.message, m.text) AS text
+MATCH (s:Symbol) WHERE s.risk >= $t RETURN s.id AS id, s.risk AS risk
+```
+
+run on both graphs, and diffed in code: functions added, removed and changed (by body hash), calls added and removed, lessons that **would become possibly outdated**, and **new calls into load-bearing functions** (risk at or above the threshold). Stored as `(Task)-[:PREVIEWED]->(:MergePreview {summary, data})` (newest only), recorded as a `preview` trace, shown in the task's **Merge preview** tab, and written to the activity feed as "Merge preview: …". A preview that fails never blocks the merge. Switched off with the graph (`PUFF_GRAPH=off`). Test: `preview.test.ts` (Q25), `run.test.ts`.
+
+### Q26: Plan preview
+
+For a plan, a dry run of the scheduler on a copy: tasks start in waves as the scheduler would start them (dependencies done, no overlapping running task by Q8, at most `maxParallel` at once), and each wait says why:
+
+```cypher
+MATCH (:Task {id: $id})-[:TARGETS]->(s:Symbol)
+MATCH (s)-[:CALLS*0..1]-(near:Symbol)<-[:TARGETS]-(other:Task)
+WHERE other.id <> $id AND other.status IN $statuses
+RETURN DISTINCT other.id AS id
+```
+
+The plan's tasks are found through `(Session)-[:SPAWNED]->(Task)`. Tasks started in a wave are marked running **in the copy**, so the next check sees them; nothing real is claimed or run. Shown in the plan task's **Dry run** tab; the planner's log says "dry run: N wave(s), M task(s) can start at once". Test: `preview.test.ts` (Q26, two tests).
 
 ---
 

@@ -7,6 +7,8 @@ import type {
   ContextPack,
   GraphData,
   GraphTrace,
+  MergePreview,
+  PlanPreview,
   ManualResult,
   MemoryEvent,
   ProjectSummary,
@@ -86,6 +88,10 @@ export interface PuffApi {
   getWhy(taskId: string): Promise<WhyPath>;
   /** The queries behind each decision Puff made for this task (route, context, schedule, stale, locate), newest first */
   getTraces(taskId: string): Promise<GraphTrace[]>;
+  /** What merging this task would change in the graph, found on a copy before the merge */
+  getMergePreview(taskId: string): Promise<MergePreview | undefined>;
+  /** For a plan: how its tasks would run (which start together, which wait and why), on a copy */
+  getPlanPreview(taskId: string): Promise<PlanPreview | undefined>;
   getGraph(projectId: string, focusId?: string, depth?: number): Promise<GraphData>;
   getMemoryFeed(projectId: string, limit?: number): Promise<MemoryEvent[]>;
   listAgents(projectId: string): Promise<AgentProfile[]>;
@@ -175,6 +181,8 @@ export const PUFF_INVOKE_METHODS = [
   'getContextPack',
   'getWhy',
   'getTraces',
+  'getMergePreview',
+  'getPlanPreview',
   'getGraph',
   'getMemoryFeed',
   'listAgents',

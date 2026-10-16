@@ -1,5 +1,6 @@
 import type { FalkorDB, Graph } from 'falkordb';
 import { allCapabilities, type PuffConfig } from '../config';
+import { graphName } from '../ids';
 import { projectGraph, read, run } from './client';
 import { FULLTEXT_INDEXES, RANGE_INDEXES, isAlreadyIndexedError, rangeIndexCypher } from './schema';
 import { backfillProvenance } from '../memory/provenance';
@@ -46,6 +47,13 @@ export async function initProjectGraph(
 
   await syncAgentPool(graph, config);
   await backfillProvenance(graph);
+  // preview copies (P18) left behind by a crash
+  const prefix = `${graphName(project.slug)}__preview_`;
+  for (const g of (await db.list().catch(() => [] as string[])).filter((n) => n.startsWith(prefix)))
+    await db
+      .selectGraph(g)
+      .delete()
+      .catch(() => {});
   return graph;
 }
 

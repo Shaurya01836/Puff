@@ -276,7 +276,9 @@ program
   .action(async () => {
     const db = await connect(program.opts<{ db?: string }>().db);
     try {
-      const graphs = (await db.list()).filter((g) => g.startsWith('puff_'));
+      const graphs = (await db.list()).filter(
+        (g) => g.startsWith('puff_') && !g.includes('__preview_'),
+      );
       console.log(graphs.length ? graphs.join('\n') : '(no Puff graphs yet)');
     } finally {
       await db.close();

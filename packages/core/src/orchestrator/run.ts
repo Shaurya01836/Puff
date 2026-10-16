@@ -29,6 +29,7 @@ import { read, run as runQuery } from '../db/client';
 import { routeTask } from './routing';
 import { saveTrace, traced } from '../db/trace';
 import { linkDerived, recordMerge, recordRevert, syncReverts } from '../memory/provenance';
+import { previewMerge, previewPlan, saveMergePreview } from '../queries/preview';
 import type { SlotPool } from './schedule';
 import { runVerification, type Verdict } from './verify';
 
@@ -636,6 +637,20 @@ async function runAttempt(
       summary: summarize(res.output),
     });
     if (applied?.tasks.length) log(`plan created ${applied.tasks.length} task(s)`);
+    if (role === 'planner' && applied?.tasks.length && !graphOff(config)) {
+      // Q26: a dry run of the scheduler on a copy, so the order and the waits are known up front
+      const dry = await previewPlan(graph, {
+        slug: deps.project.slug,
+        taskIds: applied.tasks.map((t) => t.id),
+        maxParallel: config.limits.maxParallel,
+      }).catch(() => undefined);
+      if (dry) {
+        const waits = dry.waves.reduce((n, w) => n + w.waits.length, 0);
+        log(
+          `dry run: ${dry.waves.length} wave(s), ${dry.waves[0]?.start.length ?? 0} task(s) can start at once${waits ? `, ${waits} wait(s)` : ''}`,
+        );
+      }
+    }
     await emitSession(deps, task.id, sessionId);
     for (const t of applied?.tasks ?? []) await emitTask(deps, t);
     await cleanup(true);
@@ -701,6 +716,38 @@ async function runAttempt(
 
   if (verdict.ok) {
     await repo.commit(wt, `puff: ${task.title}`);
+    // Q25: what this merge will change in the graph, found on a copy before anything is merged.
+    // A preview that cannot be made never blocks the merge.
+    if (!graphOff(config)) {
+      note('phase', 'Previewing the merge on a copy of the graph');
+      const previewed = await traced(() =>
+        previewMerge(graph, {
+          slug: deps.project.slug,
+          taskId: task.id,
+          branchPath: wt.path,
+          riskThreshold: config.graph.riskThreshold,
+        }),
+      ).catch((err: Error) => {
+        note('phase', `Could not preview the merge: ${err.message}`, { ok: false });
+        return undefined;
+      });
+      if (previewed) {
+        const p = previewed.value;
+        await saveMergePreview(graph, p);
+        await saveTrace(
+          graph,
+          { taskId: task.id },
+          {
+            kind: 'preview',
+            reason: `merge preview in ${p.ms} ms: ${p.summary}`,
+            steps: previewed.steps,
+          },
+        );
+        note('phase', `Merge preview: ${p.summary}`, {
+          ok: p.newCallersOfRisky.length === 0 && p.wouldGoStale.length === 0,
+        });
+      }
+    }
     // Merge and re-index together under the repository lock, so parallel tasks never read the main
     // checkout halfway through each other's merge. The re-index flags memory about changed code as stale.
     note('phase', 'Merging into the main branch');

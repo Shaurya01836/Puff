@@ -40,8 +40,26 @@ export async function connect(
   return db;
 }
 
-export const projectGraph = (db: FalkorDB, projectSlug: string): Graph =>
-  db.selectGraph(graphName(projectSlug));
+/** Which connection opened each graph, so a copy of it can be opened on the same connection */
+const owners = new WeakMap<Graph, FalkorDB>();
+
+export const projectGraph = (db: FalkorDB, projectSlug: string): Graph => {
+  const graph = db.selectGraph(graphName(projectSlug));
+  owners.set(graph, db);
+  return graph;
+};
+
+/** Another graph (a copy) on the connection that opened `graph`. */
+export function openSibling(graph: Graph, name: string): Graph {
+  const db = owners.get(graph);
+  if (!db)
+    throw new Error(
+      'This graph was not opened through projectGraph(), so its copy cannot be opened',
+    );
+  const sibling = db.selectGraph(name);
+  owners.set(sibling, db);
+  return sibling;
+}
 
 /** Run a write query and return its rows typed as T. */
 export async function run<T>(
