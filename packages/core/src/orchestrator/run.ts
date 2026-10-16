@@ -6,7 +6,7 @@
 // not create failure memory, because they say nothing about the code.
 import type { Graph } from 'falkordb';
 import type { ActivityStep, Actor, AgentName, PuffEvent, Task, TrailEntry } from '@puff/shared';
-import { ROLE_FOR_TYPE, type Adapters } from '../agents/adapters';
+import { ROLE_FOR_TYPE, checkCommands, type Adapters } from '../agents/adapters';
 import { isLimitError } from '../agents/parse';
 import { WRITES_FILES, type HarnessResult } from '../agents/types';
 import { graphOff, type PuffConfig } from '../config';
@@ -101,6 +101,17 @@ export async function flushMemoryEvents(
   }
 }
 
+/**
+ * A reviewer's verdict: the last "verdict: pass/fail" it wrote (bold or not), else a line that is just
+ * PASS or FAIL. Undefined when it gave none.
+ */
+export function readVerdict(text: string): 'pass' | 'fail' | undefined {
+  const marked = [...text.matchAll(/verdict\W{0,4}\s*(pass|fail)/gi)].at(-1);
+  if (marked) return marked[1]!.toLowerCase() as 'pass' | 'fail';
+  const bare = [...text.matchAll(/^\W*(PASS|FAIL)\W*$/gm)].at(-1);
+  return bare ? (bare[1]!.toLowerCase() as 'pass' | 'fail') : undefined;
+}
+
 /** Make sure existing memory is not replayed as "new" the first time a run flushes events. */
 async function primeMemoryEvents(deps: Pick<RunDeps, 'graph' | 'emit'>): Promise<void> {
   if (!seenMemory.has(deps.graph)) await flushMemoryEvents(deps, true);
@@ -161,6 +172,18 @@ export async function runTask(
   const { limits } = config;
   const retriesPerAgent = limits.retriesBeforeEscalate;
 
+  // Work that already landed (the app closed between the merge and marking it done) is not redone:
+  // running it again only makes every agent report "nothing to change" and spends their tokens.
+  if (WRITES_FILES[role]) {
+    const landed = await deps.repo.landedMerge(taskId).catch(() => undefined);
+    if (landed) {
+      const reason = `Already merged in ${landed.slice(0, 7)}: nothing left to do`;
+      await emitTask(deps, await updateTask(graph, taskId, { status: 'done' }));
+      log(`✔ ${taskId} was already merged (${landed.slice(0, 7)}); not running it again`);
+      return { taskId, status: 'done', attempts: [], reason };
+    }
+  }
+
   const agents = await plan(deps, task0, opts.agent);
   if (agents.length === 0) {
     const reason = 'No agent is available for this task (none installed or signed in)';
@@ -172,6 +195,7 @@ export async function runTask(
   let tokens = { in: 0, out: 0 };
   let agentIdx = 0;
   let failuresOnAgent = 0;
+  let previousNoChange = false;
   /** Failures recorded by earlier attempts of this task: whatever finally passes is their fix */
   const learned = new Set<string>();
 
@@ -231,6 +255,16 @@ export async function runTask(
       await flushMemoryEvents(deps);
       return { taskId, status: 'failed', attempts, reason: attempt.summary.detail };
     }
+    // Two different agents in a row found nothing to change: a third will not either. Stop, and say why.
+    if (attempt.noChange && previousNoChange) {
+      const reason =
+        'Two agents in a row found nothing to change. The task may already be done, or need rewording.';
+      await emitTask(deps, await updateTask(graph, taskId, { status: 'failed', tokens }));
+      await flushMemoryEvents(deps);
+      log(`✖ ${taskId}: ${reason}`);
+      return { taskId, status: 'failed', attempts, reason };
+    }
+    previousNoChange = attempt.noChange === true;
 
     // Decide what happens next: another go with the same agent, or move up the chain.
     if (attempt.summary.outcome === 'error' || attempt.skipRetry) {
@@ -276,6 +310,8 @@ interface AttemptOutcome {
   skipRetry?: boolean;
   /** Give up on the whole task (e.g. a merge conflict) */
   stop?: boolean;
+  /** A writer changed no files */
+  noChange?: boolean;
   aborted?: boolean;
 }
 
@@ -455,6 +491,7 @@ async function runAttempt(
         timeoutMs: config.limits.timeoutMs,
         model: task.model ?? config.harnesses[agent]?.model,
         signal: runSignal,
+        allowCommands: checkCommands(config.verify.testCommand),
         onOutput: () => {
           lastOutput = Date.now();
           if (stalled && !stallKilled) {
@@ -539,6 +576,19 @@ async function runAttempt(
       log(`✖ ${agent} produced no plan: ${why}`);
       return { summary: summary('failure', `no plan: ${why}`), tokens, skipRetry: true };
     }
+    // A review that ends in FAIL is a failed review, whatever the process exit code was. Another
+    // agent would review the same code, so the task stops here with the reviewer's reasons.
+    if (role === 'verifier' && readVerdict(res.output) === 'fail') {
+      await end({ outcome: 'failure', ...facts, summary: summarize(res.output) });
+      await emitSession(deps, task.id, sessionId);
+      await cleanup(true);
+      log(`✖ ${agent} reviewed it: FAIL`);
+      return {
+        summary: summary('failure', `review: FAIL. ${summarize(res.output, 160)}`),
+        tokens,
+        stop: true,
+      };
+    }
     await end({
       outcome: 'success',
       ...facts,
@@ -553,8 +603,21 @@ async function runAttempt(
 
   const { files, diff } = await repo.changes(wt);
 
-  // 3. A writer that changed nothing would "pass" the existing tests. That is not a success.
+  // 3. A writer that changed nothing would "pass" the existing tests. That is not a success, unless
+  //    this task's work is already merged (then there really is nothing left to do).
   if (files.length === 0) {
+    const landed = await repo.landedMerge(task.id).catch(() => undefined);
+    if (landed) {
+      await end({
+        outcome: 'success',
+        ...facts,
+        summary: `Nothing to change: this task was already merged in ${landed.slice(0, 7)}.`,
+      });
+      await emitSession(deps, task.id, sessionId);
+      await cleanup(true);
+      log(`✔ ${task.id} was already merged (${landed.slice(0, 7)})`);
+      return { summary: summary('success', `already merged in ${landed.slice(0, 7)}`), tokens };
+    }
     await end({
       outcome: 'failure',
       ...facts,
@@ -563,7 +626,12 @@ async function runAttempt(
     await emitSession(deps, task.id, sessionId);
     await cleanup(true);
     log(`✖ ${agent} changed no files`);
-    return { summary: summary('failure', `${agent} changed no files`), tokens, skipRetry: true };
+    return {
+      summary: summary('failure', `${agent} changed no files`),
+      tokens,
+      skipRetry: true,
+      noChange: true,
+    };
   }
 
   // 4. Verify with the project's own tests.

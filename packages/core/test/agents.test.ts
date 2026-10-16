@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
-import { createAdapter } from '../src/agents/adapters';
+import { checkCommands, claudeTools, createAdapter } from '../src/agents/adapters';
 import { classifyError, parseClaude, parseCodex, parseOpenCode } from '../src/agents/parse';
 import { launchTarget, resolveExecutable, runProcess, shimTarget } from '../src/agents/spawn';
 import { summarize } from '../src/orchestrator/run';
@@ -299,5 +299,39 @@ describe('adapters (a fake CLI stands in for the real one)', () => {
     });
     expect(crash.error?.kind).toBe('crash');
     expect(existsSync(script)).toBe(true);
+  });
+});
+
+describe('what an agent may run to check its work', () => {
+  it("allows the project's own check command, and for an app in a subfolder its install, run and test", () => {
+    expect(checkCommands('npm test')).toEqual(['npm test']);
+    expect(checkCommands('npm --prefix my-app exec -- tsc --noEmit -p my-app')).toEqual([
+      'npm --prefix my-app exec -- tsc --noEmit -p my-app',
+      'npm --prefix my-app install',
+      'npm --prefix my-app ci',
+      'npm --prefix my-app test',
+      'npm --prefix my-app run',
+      'npm --prefix my-app exec -- tsc',
+    ]);
+    expect(checkCommands(undefined)).toEqual([]);
+  });
+
+  it('a verifier may run the checks but never edit; a planner only reads; a coder does both', () => {
+    const extra = ['npm --prefix my-app run'];
+    const verifier = claudeTools('verifier', extra);
+    expect(verifier).toEqual(
+      expect.arrayContaining([
+        'Read',
+        'Bash(npm run lint:*)',
+        'Bash(npm install:*)',
+        'Bash(npm --prefix my-app run:*)',
+      ]),
+    );
+    expect(verifier).not.toEqual(expect.arrayContaining(['Edit']));
+    expect(verifier.some((t) => /^(Edit|Write|MultiEdit)$/.test(t))).toBe(false);
+    expect(claudeTools('planner', extra).some((t) => t.startsWith('Bash(npm'))).toBe(false);
+    expect(claudeTools('coder', extra)).toEqual(
+      expect.arrayContaining(['Edit', 'Bash(npm test:*)', 'Bash(npm --prefix my-app run:*)']),
+    );
   });
 });

@@ -327,6 +327,29 @@ export class GitRepo {
    * What a task changed, for people to read. A finished task is found through the commit that merged
    * it; otherwise the newest attempt branch that was kept (failed attempts keep theirs).
    */
+  /**
+   * The commit that merged this task into the current branch, unless it was reverted since. Used to see
+   * that an interrupted task's work already landed, so it is not run again.
+   */
+  async landedMerge(taskId: string): Promise<string | undefined> {
+    const lines = (out: string) =>
+      out
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
+    const merged = await git(
+      ['log', 'HEAD', `--grep=^Merge puff task ${taskId}:`, '--format=%H', '-n', '1'],
+      this.root,
+    );
+    const sha = merged.code === 0 ? lines(merged.out)[0] : undefined;
+    if (!sha) return undefined;
+    const reverted = await git(
+      ['log', 'HEAD', `--grep=This reverts commit ${sha}`, '--format=%H', '-n', '1'],
+      this.root,
+    );
+    return reverted.code === 0 && lines(reverted.out).length ? undefined : sha;
+  }
+
   async taskDiff(taskId: string): Promise<TaskDiff | undefined> {
     const clip = (diff: string) =>
       diff.length > MAX_DIFF_BYTES ? `${diff.slice(0, MAX_DIFF_BYTES)}\n… (diff truncated)` : diff;

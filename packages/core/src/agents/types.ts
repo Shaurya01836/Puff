@@ -57,6 +57,8 @@ export interface RunOptions {
   onOutput?: () => void;
   /** Called for each step the agent takes, as it happens. Without it the agent runs exactly as before. */
   onActivity?: (step: ActivityDraft) => void;
+  /** The project's own check commands, which the agent may run without asking (where the CLI asks) */
+  allowCommands?: string[];
 }
 
 export interface HarnessAdapter {

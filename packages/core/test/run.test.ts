@@ -38,7 +38,7 @@ import {
 } from '../src/memory/tasks';
 import { ProjectController } from '../src/control/controller';
 import { Orchestrator } from '../src/orchestrator/orchestrator';
-import { runTask, type RunDeps } from '../src/orchestrator/run';
+import { readVerdict, runTask, type RunDeps } from '../src/orchestrator/run';
 
 const rel = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 const DEMO = rel('../../../demo/shop-api');
@@ -99,6 +99,16 @@ const gitIn = (cwd: string, ...args: string[]) =>
     cwd,
     encoding: 'utf8',
   }).trim();
+
+describe("reading a reviewer's verdict", () => {
+  it('takes the last "verdict" line, bold or not, else a bare PASS or FAIL line', () => {
+    expect(readVerdict('**Verdict: FAIL.** I could not run any checks.')).toBe('fail');
+    expect(readVerdict('Looks good.\nVERDICT: PASS')).toBe('pass');
+    expect(readVerdict('First verdict: pass\n...on second thought, verdict - FAIL')).toBe('fail');
+    expect(readVerdict('Findings...\n\nFAIL\n')).toBe('fail');
+    expect(readVerdict('Everything passed and nothing failed.')).toBeUndefined();
+  });
+});
 
 describe.skipIf(!ready)('the run loop (fake agents, real git, real FalkorDB)', () => {
   const cleanups: (() => Promise<void>)[] = [];
@@ -330,6 +340,95 @@ describe.skipIf(!ready)('the run loop (fake agents, real git, real FalkorDB)', (
     expect((await listSessions(f.graph, t.id))[0]!.outcome).toBe('failure');
     expect(await read(f.graph, `MATCH (f:Failure) RETURN f.id`)).toEqual([]);
     expect(await getTask(f.graph, t.id)).toMatchObject({ status: 'failed' });
+  }, 120_000);
+
+  it('two agents in a row that change nothing stop the task, instead of a third one trying', async () => {
+    const nothing = () => ({ output: 'Nothing needed changing: it is already there.' });
+    const codex = fakeAgent('codex', nothing);
+    const claude = fakeAgent('claude-code', nothing);
+    const opencode = fakeAgent('opencode', nothing);
+    const f = await fixture(FAST, { codex, 'claude-code': claude, opencode });
+    const t = await f.task('Add lockout');
+
+    const result = await runTask(f.deps, t.id);
+
+    expect(result.status).toBe('failed');
+    expect(result.attempts).toHaveLength(2);
+    expect(result.reason).toMatch(/Two agents in a row found nothing to change/);
+    expect(codex.calls.length + claude.calls.length + opencode.calls.length).toBe(2);
+  }, 120_000);
+
+  it('a task whose work already merged (the app closed before it was marked done) is done, not run again', async () => {
+    const codex = fakeAgent('codex', (o) => {
+      edit(
+        o.cwd,
+        'src/auth/login.ts',
+        "audit('login.failed', { email });",
+        "audit('login.failed', { email, reason: 'bad' });",
+      );
+      return { output: 'Added a reason.' };
+    });
+    const f = await fixture(FAST, { codex });
+    const t = await f.task('Add a reason to failed logins');
+    expect((await runTask(f.deps, t.id)).status).toBe('done');
+    // the app closed between the merge and "done": the task is back in the queue
+    await updateTask(f.graph, t.id, { status: 'ready' });
+
+    const again = await runTask(f.deps, t.id);
+
+    expect(again).toMatchObject({ status: 'done', attempts: [] });
+    expect(again.reason).toMatch(/^Already merged in [0-9a-f]{7}/);
+    expect(codex.calls).toHaveLength(1); // no agent was asked a second time
+    expect((await getTask(f.graph, t.id))!.status).toBe('done');
+  }, 120_000);
+
+  it('a merge that was reverted does not count as done', async () => {
+    const codex = fakeAgent('codex', (o) => {
+      edit(
+        o.cwd,
+        'src/auth/login.ts',
+        "audit('login.failed', { email });",
+        "audit('login.failed', { email, reason: 'bad' });",
+      );
+      return { output: 'Added a reason.' };
+    });
+    const f = await fixture(FAST, { codex });
+    const t = await f.task('Add a reason to failed logins');
+    await runTask(f.deps, t.id);
+    const sha = await f.deps.repo.landedMerge(t.id);
+    expect(sha).toMatch(/^[0-9a-f]{40}$/);
+    gitIn(
+      f.repoPath,
+      '-c',
+      'user.name=t',
+      '-c',
+      'user.email=t@t',
+      'revert',
+      '--no-edit',
+      '-m',
+      '1',
+      sha!,
+    );
+    expect(await f.deps.repo.landedMerge(t.id)).toBeUndefined();
+  }, 120_000);
+
+  it('a reviewer that ends with VERDICT: FAIL fails the review, and no other agent re-reviews it; it may run the checks', async () => {
+    const claude = fakeAgent('claude-code', () => ({
+      output: 'I ran the checks.\n1. Lint config does not match ESLint 8.\n\n**Verdict: FAIL**',
+    }));
+    const codex = fakeAgent('codex', () => ({ output: 'VERDICT: PASS' }));
+    const f = await fixture(FAST, { 'claude-code': claude, codex });
+    const t = await f.task('Review the copy buttons', { type: 'verify', targets: [] });
+
+    const result = await runTask(f.deps, t.id);
+
+    expect(result.status).toBe('failed');
+    expect(result.attempts).toHaveLength(1);
+    expect(result.reason).toMatch(/^review: FAIL/);
+    expect(codex.calls).toHaveLength(0);
+    expect((await listSessions(f.graph, t.id))[0]!.outcome).toBe('failure');
+    expect(claude.calls[0]!.prompt).toContain('VERDICT: PASS or VERDICT: FAIL');
+    expect(claude.calls[0]!.allowCommands).toContain(FAST.verify.testCommand);
   }, 120_000);
 
   it('stops cleanly when asked: the agent is told, the task goes back to the queue, nothing is left behind', async () => {

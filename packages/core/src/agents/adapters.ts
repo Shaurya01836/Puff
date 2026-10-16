@@ -17,16 +17,45 @@ const CLAUDE_READ = [
   'Bash(git status:*)',
   'Bash(git log:*)',
 ];
-const CLAUDE_WRITE = [
-  ...CLAUDE_READ,
-  'Edit',
-  'Write',
-  'MultiEdit',
+/** Running the project's checks: tests, lint, type check, build, and installing what they need */
+const CLAUDE_CHECK = [
   'Bash(npm test:*)',
   'Bash(npm run test:*)',
+  'Bash(npm run lint:*)',
+  'Bash(npm run build:*)',
+  'Bash(npm run typecheck:*)',
+  'Bash(npm install:*)',
+  'Bash(npm ci:*)',
   'Bash(npx vitest:*)',
   'Bash(npx jest:*)',
+  'Bash(npx tsc:*)',
+  'Bash(npx eslint:*)',
 ];
+
+const CLAUDE_WRITE = [...CLAUDE_READ, 'Edit', 'Write', 'MultiEdit', ...CLAUDE_CHECK];
+
+/**
+ * The project's check command, and for an app in a subfolder (`npm --prefix my-app ...`) the same
+ * checks run in that folder, so a verifier can install, lint, type-check and build there.
+ */
+export function checkCommands(testCommand: string | undefined): string[] {
+  if (!testCommand?.trim()) return [];
+  const out = [testCommand.trim()];
+  const prefix = /^npm\s+--prefix\s+(\S+)/.exec(testCommand.trim());
+  if (prefix) {
+    const p = `npm --prefix ${prefix[1]}`;
+    out.push(`${p} install`, `${p} ci`, `${p} test`, `${p} run`, `${p} exec -- tsc`);
+  }
+  return [...new Set(out)];
+}
+
+/** What Claude Code may use in a role: read-only roles may still run the checks, never edit */
+export function claudeTools(role: Role, allowCommands: string[] = []): string[] {
+  const extra = allowCommands.map((c) => `Bash(${c}:*)`);
+  if (WRITES_FILES[role]) return [...new Set([...CLAUDE_WRITE, ...extra])];
+  if (role === 'verifier') return [...new Set([...CLAUDE_READ, ...CLAUDE_CHECK, ...extra])];
+  return CLAUDE_READ;
+}
 
 interface Spec {
   /** Arguments after the configured base args */
@@ -38,11 +67,11 @@ interface Spec {
 
 const SPECS: Record<AgentName, Spec> = {
   'claude-code': {
-    args: ({ role, model }) => [
+    args: ({ role, model, allowCommands }) => [
       '--permission-mode',
       WRITES_FILES[role] ? 'acceptEdits' : 'default',
       '--allowedTools',
-      (WRITES_FILES[role] ? CLAUDE_WRITE : CLAUDE_READ).join(','),
+      claudeTools(role, allowCommands).join(','),
       ...(model ? ['--model', model] : []),
     ],
     parse: parseClaude,

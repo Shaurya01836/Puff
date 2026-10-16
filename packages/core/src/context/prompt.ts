@@ -124,7 +124,7 @@ export function renderPrompt(i: PromptInput): string {
         lines.push('DIFF:', '```diff', diff, '```');
       }
       lines.push(
-        'Check the change against the decisions and past failures below, then report pass or fail with reasons.',
+        'Check the change against the decisions and past failures below. Run the tests and checks you are allowed to run. Report what you found with reasons, and end with exactly one line: VERDICT: PASS or VERDICT: FAIL.',
         '',
       );
       break;
