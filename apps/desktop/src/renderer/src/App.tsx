@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Activity } from 'lucide-react';
 import type { BackendInfo, GraphData, ProjectSummary, Task } from '@puff/shared';
 import { MOCK_PROJECT_ID } from '@puff/shared/mocks';
 import type { MascotState } from '@/components/Mascot';
@@ -24,6 +25,16 @@ const TITLES: Record<Screen, { title: string; subtitle: string }> = {
   team: { title: 'Team', subtitle: 'Who did what, and who handed what to whom' },
   agents: { title: 'Agents', subtitle: 'Strengths, results and savings' },
 };
+
+const TICKER_MESSAGES = [
+  'CODEX RESOLVED 2 CALLERS OF LOGIN()',
+  'CLAUDE CODE WROTE 1 LESSON TO GRAPH',
+  'OPENCODE PINNED DOCS/API/REFERENCE.MD',
+  'GRAPH +1 SYMBOL · +3 EDGES',
+  'CLAUDE CODE VERIFIED CONTEXTPACK',
+  'CODEX OPENED WORKTREE WT_SESSION',
+  'FALKORDB CHECKPOINT WRITTEN TO DISK',
+];
 
 /** What the data badge says: honest about which parts are live and which are mocked. */
 function badgeFor(info?: BackendInfo): string | undefined {
@@ -201,55 +212,84 @@ export function App() {
     );
   }
 
+  const [tickerIndex, setTickerIndex] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTickerIndex((i) => (i + 1) % TICKER_MESSAGES.length);
+    }, 4000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const tickerText = notice?.text ?? TICKER_MESSAGES[tickerIndex];
+
   return (
-    <div className="flex h-full">
-      <Sidebar
-        screen={screen}
-        onScreen={setScreen}
-        mascot={mascot}
-        agents={agents}
-        info={info}
-        projects={projects}
-        onReindex={reindex}
-        onSwitchProject={switchProject}
-        onAddProject={() => setImportOpen(true)}
-        onProjectSettings={setSettingsFor}
-        counts={{ board: tasks.filter((t) => t.status !== 'done').length }}
-      />
-      <main className="flex min-w-0 flex-1 flex-col">
-        <TopBar
-          {...TITLES[screen]}
-          running={running}
-          onToggleRun={toggleRun}
-          onGoal={createGoal}
-          onNewTask={() => setNewTaskOpen(true)}
-          chatOpen={chatOpen}
-          onToggleChat={() => setChatOpen((open) => !open)}
-          badge={badgeFor(info)}
-          runBlockedReason={
-            info?.noProject ? 'Add a project first.' : live ? info.runBlocked : undefined
-          }
-        />
-        <div className="min-h-0 flex-1 overflow-auto">
-          {info?.noProject && <Welcome onAdd={() => setImportOpen(true)} agents={setup?.agents} />}
-          {!info?.noProject && screen === 'graph' && (
-            <MemoryGraph
-              projectId={projectId}
-              graph={graph}
-              feedIsSample={!live || info.seeded === true}
-            />
-          )}
-          {!info?.noProject && screen === 'board' && <Board tasks={tasks} onOpen={setOpenTask} />}
-          {!info?.noProject && screen === 'team' && (
-            <Team events={timeline} onOpenTask={setOpenTask} />
-          )}
-          {!info?.noProject && screen === 'agents' && (
-            <Agents agents={agents} savings={savings} mock={savingsMocked} />
-          )}
+    <div className="flex h-full flex-col bg-abyss text-ink">
+      {/* Top window chrome matching Screenshot 3 & 4 */}
+      <div className="flex h-8 shrink-0 items-center gap-3 border-b border-line bg-surface-2 px-4 select-none">
+        <div className="flex gap-1.5">
+          <span className="size-2 bg-slate-700" />
+          <span className="size-2 bg-slate-700" />
+          <span className="size-2 bg-slate-700" />
         </div>
-      </main>
-      {chatOpen && (
+        <span className="font-mono text-[11px] text-slate-500">
+          Puff — {info?.projectName ?? 'puff_demo'}
+        </span>
+        <span className="ml-auto hidden items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-emerald-400 sm:flex">
+          <span className="size-1.5 animate-pulse-dot rounded-full bg-emerald-400" />
+          graph connected
+        </span>
+      </div>
+
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+        <Sidebar
+          screen={screen}
+          onScreen={setScreen}
+          mascot={mascot}
+          agents={agents}
+          info={info}
+          projects={projects}
+          onReindex={reindex}
+          onSwitchProject={switchProject}
+          onAddProject={() => setImportOpen(true)}
+          onProjectSettings={setSettingsFor}
+          counts={{ board: tasks.filter((t) => t.status !== 'done').length }}
+        />
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <TopBar
+            {...TITLES[screen]}
+            running={running}
+            onToggleRun={toggleRun}
+            onGoal={createGoal}
+            onNewTask={() => setNewTaskOpen(true)}
+            chatOpen={chatOpen}
+            onToggleChat={() => setChatOpen((open) => !open)}
+            badge={badgeFor(info)}
+            runBlockedReason={
+              info?.noProject ? 'Add a project first.' : live ? info.runBlocked : undefined
+            }
+          />
+          <div className="min-h-0 flex-1 overflow-auto">
+            {info?.noProject && <Welcome onAdd={() => setImportOpen(true)} agents={setup?.agents} />}
+            {!info?.noProject && screen === 'graph' && (
+              <MemoryGraph
+                projectId={projectId}
+                graph={graph}
+                feedIsSample={!live || info.seeded === true}
+              />
+            )}
+            {!info?.noProject && screen === 'board' && <Board tasks={tasks} onOpen={setOpenTask} />}
+            {!info?.noProject && screen === 'team' && (
+              <Team events={timeline} onOpenTask={setOpenTask} />
+            )}
+            {!info?.noProject && screen === 'agents' && (
+              <Agents agents={agents} savings={savings} mock={savingsMocked} />
+            )}
+          </div>
+        </main>
+
+        {/* Antigravity / Cursor style slide-over Chat Panel */}
         <ChatPanel
+          open={chatOpen}
           messages={chat.messages}
           info={chat.info}
           busy={chat.busy}
@@ -259,7 +299,21 @@ export function App() {
           onReset={() => void chat.reset()}
           onClose={() => setChatOpen(false)}
         />
-      )}
+      </div>
+
+      {/* Bottom status bar ticker matching Screenshot 3 & 4 */}
+      <footer className="flex h-7 shrink-0 items-center justify-between gap-4 border-t border-line bg-surface-2 px-4 font-mono text-[10px] uppercase tracking-widest text-slate-500 select-none">
+        <span className="inline-flex shrink-0 items-center gap-1.5 text-slate-400">
+          <Activity className="size-3.5 text-emerald-400" />
+          FALKORDB://{(info?.projectName ?? 'puff_demo').toUpperCase()}
+        </span>
+        <span className="hidden min-w-0 flex-1 items-center gap-1.5 sm:flex">
+          <span className="size-1.5 shrink-0 animate-pulse-dot rounded-full bg-emerald-400" />
+          <span className="truncate text-slate-300">{tickerText}</span>
+          <span className="animate-caret shrink-0 text-emerald-400">▌</span>
+        </span>
+        <span className="shrink-0 text-slate-500">V0.1.0</span>
+      </footer>
       {newTaskOpen && (
         <NewTaskDialog
           symbols={symbols}

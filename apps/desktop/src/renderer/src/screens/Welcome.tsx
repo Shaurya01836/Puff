@@ -16,7 +16,7 @@ export function Welcome({ onAdd, agents }: { onAdd: () => void; agents?: AgentCl
         </p>
         <button
           onClick={onAdd}
-          className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-brand to-brand-deep px-5 py-2.5 text-sm font-semibold text-white shadow-[0_6px_20px_-6px_rgb(139_124_246/0.7)] hover:brightness-110"
+          className="mt-6 inline-flex items-center gap-2 rounded bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-400"
         >
           <FolderPlus className="size-4" />
           Add a project…

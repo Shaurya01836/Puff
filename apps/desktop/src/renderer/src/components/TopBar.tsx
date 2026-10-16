@@ -44,22 +44,22 @@ export function TopBar({
   };
 
   return (
-    <header className="flex items-center gap-6 border-b border-line bg-abyss/60 px-6 py-3.5 backdrop-blur">
+    <header className="flex items-center gap-4 border-b border-line bg-surface-2 px-5 py-2.5">
       <div className="min-w-0">
-        <h1 className="font-display text-lg leading-tight font-semibold tracking-tight">{title}</h1>
-        <p className="truncate text-xs text-ink-3">{subtitle}</p>
+        <h1 className="font-display text-base font-bold tracking-tight text-white">{title}</h1>
+        <p className="truncate font-mono text-[10px] uppercase tracking-widest text-slate-400">{subtitle}</p>
       </div>
 
       <form
         onSubmit={submit}
-        className="group mx-auto flex h-10 w-full max-w-xl items-center gap-2.5 rounded-xl border border-line bg-surface px-3 transition-colors focus-within:border-brand/60 focus-within:shadow-[0_0_0_4px_rgb(139_124_246/0.12)]"
+        className="group mx-auto flex h-9 w-full max-w-lg items-center gap-2 border border-line bg-surface px-3 transition-colors focus-within:border-emerald-500/60"
       >
-        <Sparkles className="size-4 shrink-0 text-brand-soft" />
+        <Sparkles className="size-3.5 shrink-0 text-emerald-400" />
         <input
           value={goal}
           onChange={(e) => setGoal(e.target.value)}
           placeholder="Give the team a goal, e.g. “Add rate limiting to login and update docs”"
-          className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
+          className="min-w-0 flex-1 bg-transparent font-sans text-xs text-slate-200 outline-none placeholder:text-slate-500"
           aria-label="New goal"
         />
         <Kbd>
@@ -67,27 +67,27 @@ export function TopBar({
         </Kbd>
       </form>
 
-      <div className="flex shrink-0 items-center gap-3">
+      <div className="flex shrink-0 items-center gap-2.5">
         {badge && <MockBadge label={badge} />}
         <button
           onClick={onToggleChat}
           aria-pressed={chatOpen}
           title="Talk to Puff (Ctrl+K)"
           className={cn(
-            'inline-flex h-10 items-center gap-2 rounded-xl border px-3.5 text-sm font-medium transition-colors',
+            'inline-flex h-8 items-center gap-1.5 border px-3 text-xs font-medium transition-colors',
             chatOpen
-              ? 'border-brand/50 bg-brand/15 text-ink'
-              : 'border-line-strong bg-surface-2 hover:bg-surface-3',
+              ? 'border-emerald-500/50 bg-emerald-500/15 text-white'
+              : 'border-line bg-surface text-slate-300 hover:bg-surface-3 hover:text-white',
           )}
         >
-          <MessageSquare className="size-4" />
+          <MessageSquare className="size-3.5" />
           Ask Puff
         </button>
         <button
           onClick={onNewTask}
-          className="inline-flex h-10 items-center gap-2 rounded-xl border border-line-strong bg-surface-2 px-3.5 text-sm font-medium hover:bg-surface-3"
+          className="inline-flex h-8 items-center gap-1.5 bg-white px-3 text-xs font-semibold text-slate-950 transition-opacity hover:opacity-90"
         >
-          <Plus className="size-4" />
+          <Plus className="size-3.5" />
           New task
         </button>
         <button
@@ -96,13 +96,13 @@ export function TopBar({
           title={runBlockedReason ? `Can't run yet: ${runBlockedReason}` : undefined}
           className={cn(
             'disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none',
-            'inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold transition-all',
+            'inline-flex h-8 items-center gap-1.5 px-3.5 text-xs font-semibold transition-all',
             running
-              ? 'border border-line-strong bg-surface-2 text-ink hover:bg-surface-3'
-              : 'bg-gradient-to-br from-brand to-brand-deep text-white shadow-[0_6px_20px_-6px_rgb(139_124_246/0.7)] hover:brightness-110',
+              ? 'border border-line bg-surface-3 text-white hover:bg-line-strong'
+              : 'bg-emerald-500 text-slate-950 hover:bg-emerald-400',
           )}
         >
-          {running ? <Pause className="size-4" /> : <Play className="size-4 fill-current" />}
+          {running ? <Pause className="size-3.5" /> : <Play className="size-3.5 fill-current" />}
           {running ? 'Pause team' : 'Run team'}
         </button>
       </div>

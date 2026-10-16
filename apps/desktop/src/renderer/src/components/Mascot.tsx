@@ -1,4 +1,4 @@
-import puffSvg from '@/assets/puff.svg';
+import { PuffMark } from '@/components/landing/puff-logo';
 import { cn } from '@/lib/cn';
 
 export type MascotState = 'idle' | 'working' | 'happy' | 'worried';
@@ -11,13 +11,13 @@ export const MASCOT_LINES: Record<MascotState, string> = {
 };
 
 const GLOW: Record<MascotState, string> = {
-  idle: 'rgb(139 124 246 / 0.35)',
-  working: 'rgb(45 212 224 / 0.45)',
-  happy: 'rgb(74 222 128 / 0.45)',
-  worried: 'rgb(244 93 109 / 0.5)',
+  idle: 'rgba(0, 212, 146, 0.28)',
+  working: 'rgba(52, 211, 153, 0.45)',
+  happy: 'rgba(52, 211, 153, 0.45)',
+  worried: 'rgba(244, 63, 94, 0.5)',
 };
 
-/** Placeholder SVG mascot; swap for the 3D renders (one PNG per state) when they arrive. */
+/** Authentic Puff mascot from landing page. */
 export function Mascot({
   state = 'idle',
   size = 56,
@@ -28,20 +28,21 @@ export function Mascot({
   className?: string;
 }) {
   return (
-    <span className={cn('relative inline-grid shrink-0 place-items-center', className)}>
+    <span
+      className={cn('relative inline-grid shrink-0 place-items-center', className)}
+      style={{ width: size, height: size }}
+    >
       <span
-        className="absolute inset-[12%] rounded-full blur-xl transition-colors duration-700"
+        className="absolute inset-[10%] rounded-full blur-xl transition-colors duration-700"
         style={{ background: GLOW[state] }}
         aria-hidden
       />
-      <img
-        src={puffSvg}
-        alt={`Puff is ${state}`}
-        width={size}
-        height={size}
-        className={cn('relative select-none', state === 'working' && 'animate-bob')}
-        draggable={false}
-      />
+      <span
+        className={cn('relative flex items-center justify-center', state === 'working' && 'animate-bob')}
+        style={{ width: size, height: size }}
+      >
+        <PuffMark className="h-full w-full select-none" label={`Puff is ${state}`} />
+      </span>
     </span>
   );
 }

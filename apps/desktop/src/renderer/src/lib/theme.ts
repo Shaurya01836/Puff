@@ -3,40 +3,43 @@ import type { AgentName, MemoryEventType, TaskStatus } from '@puff/shared';
 /** Validated categorical palette (see styles.css). Keep in sync with --color-claude/codex/opencode. */
 export const AGENT_META: Record<
   AgentName,
-  { label: string; short: string; color: string; text: string; tagline: string }
+  { label: string; short: string; color: string; text: string; tagline: string; roles: string }
 > = {
   'claude-code': {
     label: 'Claude Code',
     short: 'CC',
-    color: '#e16a3e',
+    color: '#d97757',
     text: 'text-claude',
     tagline: 'Plans, reasons and verifies',
+    roles: 'PLAN · VERIFY · REVIEW',
   },
   codex: {
     label: 'Codex',
     short: 'CX',
-    color: '#00aa95',
+    color: '#10a37f',
     text: 'text-codex',
     tagline: 'Fast implementation and refactors',
+    roles: 'IMPLEMENTATION · REFACTOR',
   },
   opencode: {
     label: 'OpenCode',
     short: 'OC',
-    color: '#5b89f6',
+    color: '#9d7cd8',
     text: 'text-opencode',
     tagline: 'Cheap edits, docs and boilerplate',
+    roles: 'DOCS · FORMATTING',
   },
 };
 
 export type StatusTone = 'neutral' | 'brand' | 'info' | 'good' | 'warn' | 'bad';
 
 export const TONE_COLOR: Record<StatusTone, string> = {
-  neutral: '#6b7894',
-  brand: '#8b7cf6',
+  neutral: '#64748b',
+  brand: '#00d492',
   info: '#38bdf8',
-  good: '#4ade80',
-  warn: '#f5b83d',
-  bad: '#f45d6d',
+  good: '#34d399',
+  warn: '#fbbf24',
+  bad: '#f43f5e',
 };
 
 export const STATUS_META: Record<TaskStatus, { label: string; tone: StatusTone; live?: boolean }> =

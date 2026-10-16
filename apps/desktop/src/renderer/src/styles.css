@@ -10,34 +10,34 @@
  * Status colours are reserved for state and always ship with an icon + label.
  */
 @theme {
-  /* surfaces, darkest to lightest */
-  --color-abyss: #070a12;
-  --color-surface: #0d1322;
-  --color-surface-2: #121a2c;
-  --color-surface-3: #18223a;
-  --color-line: #1d2740;
-  --color-line-strong: #2a3756;
+  /* surfaces, darkest to lightest (matched with landing page #08090c, #0b0d12, #0e1116) */
+  --color-abyss: #08090c;
+  --color-surface: #0b0d12;
+  --color-surface-2: #0e1116;
+  --color-surface-3: #161e2e;
+  --color-line: #1c2433;
+  --color-line-strong: #334155;
 
   /* ink */
-  --color-ink: #e7ecf6;
-  --color-ink-2: #a9b4cc;
-  --color-ink-3: #6b7894;
+  --color-ink: #f8fafc;
+  --color-ink-2: #cbd5e1;
+  --color-ink-3: #64748b;
 
-  /* brand + memory accent */
-  --color-brand: #8b7cf6;
-  --color-brand-soft: #b4a5ff;
-  --color-brand-deep: #5b45d6;
-  --color-memory: #2dd4e0;
+  /* brand + memory accent (emerald from landing page) */
+  --color-brand: #00d492;
+  --color-brand-soft: #34d399;
+  --color-brand-deep: #059669;
+  --color-memory: #00d492;
 
-  /* agents (validated categorical) */
-  --color-claude: #e16a3e;
-  --color-codex: #00aa95;
-  --color-opencode: #5b89f6;
+  /* agents (landing page official brand colors) */
+  --color-claude: #d97757;
+  --color-codex: #10a37f;
+  --color-opencode: #9d7cd8;
 
   /* status (reserved) */
-  --color-good: #4ade80;
-  --color-warn: #f5b83d;
-  --color-bad: #f45d6d;
+  --color-good: #34d399;
+  --color-warn: #fbbf24;
+  --color-bad: #f43f5e;
   --color-info: #38bdf8;
 
   --font-sans: 'Inter Variable', 'Segoe UI', system-ui, sans-serif;
@@ -47,16 +47,38 @@
   --animate-bob: bob 2.6s ease-in-out infinite;
   --animate-breathe: breathe 2.4s ease-in-out infinite;
   --animate-spin-slow: spin 3.5s linear infinite;
-  --animate-fade-in: fade-in 0.35s ease-out both;
-  --animate-slide-in: slide-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-fade-in: fade-in 0.25s ease-out both;
+  --animate-slide-in: slide-in 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-live-ring: liveRing 1.8s ease-out infinite;
+  --animate-pulse-dot: pulseDot 1.5s ease-in-out infinite;
+  --animate-caret: caret 1.1s steps(1, end) infinite;
+  --animate-sheen: sheen 1.9s ease-in-out infinite;
 
+  @keyframes liveRing {
+    0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55); }
+    70% { box-shadow: 0 0 0 4px rgba(52, 211, 153, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+  }
+  @keyframes pulseDot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+  @keyframes caret {
+    0%, 45% { opacity: 1; }
+    50%, 95% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+  @keyframes sheen {
+    0% { transform: translateX(-140%) skewX(-12deg); }
+    100% { transform: translateX(360%) skewX(-12deg); }
+  }
   @keyframes bob {
     0%,
     100% {
       transform: translateY(0) rotate(0deg);
     }
     50% {
-      transform: translateY(-5px) rotate(-2deg);
+      transform: translateY(-4px) rotate(-1deg);
     }
   }
   @keyframes breathe {
@@ -106,44 +128,45 @@ body {
 }
 
 ::selection {
-  background: color-mix(in oklab, var(--color-brand) 45%, transparent);
+  background: color-mix(in oklab, var(--color-brand) 30%, transparent);
 }
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: var(--color-line-strong);
-  border-radius: 8px;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
 }
 
 @utility panel {
-  background: color-mix(in oklab, var(--color-surface) 92%, transparent);
+  background: var(--color-surface);
   border: 1px solid var(--color-line);
-  border-radius: 14px;
+  border-radius: 6px;
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.03),
+    inset 0 1px 0 rgb(255 255 255 / 0.02),
     0 8px 24px -12px rgb(0 0 0 / 0.6);
 }
 
 @utility text-gradient {
-  background: linear-gradient(100deg, var(--color-brand-soft), var(--color-memory));
+  background: linear-gradient(100deg, var(--color-brand-soft), var(--color-brand));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
-/* The "sea floor" behind the memory graph: soft glow + faint dot grid. */
+/* The dark technical floor behind the memory graph: subtle dot grid on #08090c */
 @utility sea {
   background:
-    radial-gradient(1200px 600px at 30% 20%, rgb(139 124 246 / 0.1), transparent 60%),
-    radial-gradient(900px 500px at 80% 90%, rgb(45 212 224 / 0.07), transparent 60%),
-    radial-gradient(circle at 1px 1px, rgb(169 180 204 / 0.07) 1px, transparent 0) 0 0 / 22px 22px,
-    var(--color-surface);
+    radial-gradient(circle at 1px 1px, rgb(51 65 85 / 0.28) 1px, transparent 0) 0 0 / 22px 22px,
+    var(--color-abyss);
 }
 
 /* Animated border for cards whose agent is working right now. */
@@ -158,7 +181,7 @@ body {
     background: conic-gradient(
       from var(--live-angle, 0deg),
       transparent 0 60%,
-      var(--live-color, var(--color-memory)) 80%,
+      var(--live-color, var(--color-brand)) 80%,
       transparent 100%
     );
     -webkit-mask:

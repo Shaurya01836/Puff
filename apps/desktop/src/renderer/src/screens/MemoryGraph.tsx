@@ -289,30 +289,31 @@ export function MemoryGraph({
         </div>
 
         {/* top-left: hero numbers */}
+        {/* top-left: hero numbers */}
         <div className="pointer-events-none absolute top-4 left-4 flex gap-2">
           {stats.map((s) => (
             <div
               key={s.label}
-              className="rounded-xl border border-line bg-abyss/70 px-3 py-2 backdrop-blur"
+              className="border border-line bg-surface/90 px-3.5 py-2 backdrop-blur"
             >
-              <div className="font-display text-lg leading-none font-semibold tabular-nums">
+              <div className="font-display text-lg font-bold leading-none tabular-nums text-white">
                 {s.value}
               </div>
-              <div className="mt-1 text-[10px] tracking-wider text-ink-3 uppercase">{s.label}</div>
+              <div className="mt-1 font-mono text-[10px] tracking-widest text-slate-500 uppercase">{s.label}</div>
             </div>
           ))}
         </div>
 
         {/* top-right: layer toggles */}
-        <div className="absolute top-4 right-4 flex items-center gap-1.5 rounded-xl border border-line bg-abyss/70 p-1 backdrop-blur">
+        <div className="absolute top-4 right-4 flex items-center gap-1.5 border border-line bg-surface/90 p-1 backdrop-blur">
           {GROUPS.map((g) => (
             <button
               key={g.id}
               onClick={() => setGroups((s) => ({ ...s, [g.id]: !s[g.id] }))}
               aria-pressed={groups[g.id]}
               className={cn(
-                'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs transition-colors',
-                groups[g.id] ? 'bg-surface-3 text-ink' : 'text-ink-3 hover:text-ink-2',
+                'inline-flex items-center gap-1.5 px-2.5 py-1 font-mono text-xs transition-colors',
+                groups[g.id] ? 'bg-surface-3 text-white font-medium' : 'text-slate-400 hover:text-slate-200',
               )}
             >
               <span
@@ -323,12 +324,12 @@ export function MemoryGraph({
                 }}
               />
               {g.label}
-              <span className="text-ink-3 tabular-nums">{groupCounts[g.id]}</span>
+              <span className="text-slate-400 tabular-nums">{groupCounts[g.id]}</span>
             </button>
           ))}
           <button
             onClick={() => fit(400)}
-            className="ml-1 rounded-lg p-1.5 text-ink-3 hover:bg-surface-3 hover:text-ink"
+            className="ml-1 p-1.5 text-slate-400 hover:bg-surface-3 hover:text-white"
             title="Fit to view"
           >
             <Maximize2 className="size-3.5" />
@@ -336,12 +337,12 @@ export function MemoryGraph({
         </div>
 
         {focus && (
-          <div className="absolute top-20 left-4 inline-flex items-center gap-2 rounded-lg border border-brand/30 bg-brand/10 px-3 py-1.5 text-xs text-brand-soft backdrop-blur">
+          <div className="absolute top-20 left-4 inline-flex items-center gap-2 border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 font-mono text-xs text-emerald-400 backdrop-blur">
             <Crosshair className="size-3.5" />
-            Neighbourhood of <b className="font-medium text-ink">{focus.label}</b>
+            Neighbourhood of <b className="font-semibold text-white">{focus.label}</b>
             <button
               onClick={() => setFocus(undefined)}
-              className="ml-1 text-ink-3 hover:text-ink"
+              className="ml-1 text-slate-400 hover:text-white"
               title="Show all"
             >
               <X className="size-3.5" />
@@ -350,7 +351,7 @@ export function MemoryGraph({
         )}
 
         {/* bottom-left: legend */}
-        <div className="pointer-events-none absolute bottom-4 left-4 flex max-w-[60%] flex-wrap gap-x-3 gap-y-1.5 rounded-xl border border-line bg-abyss/70 px-3 py-2 backdrop-blur">
+        <div className="pointer-events-none absolute bottom-4 left-4 flex max-w-[60%] flex-wrap gap-x-3.5 gap-y-1.5 border border-line bg-surface/90 px-3 py-2 backdrop-blur">
           {[
             'Symbol',
             'File',
@@ -361,9 +362,9 @@ export function MemoryGraph({
             'Decision',
             'Procedure',
           ].map((k) => (
-            <span key={k} className="inline-flex items-center gap-1.5 text-[11px] text-ink-2">
+            <span key={k} className="inline-flex items-center gap-1.5 font-mono text-[10px] text-slate-400">
               <span
-                className={cn('size-2', k === 'File' ? 'rounded-[2px]' : 'rounded-full')}
+                className={cn('size-2', k === 'File' ? 'rounded-[1px]' : 'rounded-full')}
                 style={{ background: NODE_COLORS[k] }}
               />
               {k}
@@ -373,10 +374,10 @@ export function MemoryGraph({
 
         {/* bottom-right: inspector */}
         {selected && (
-          <div className="absolute right-4 bottom-4 w-80 animate-fade-in rounded-xl border border-line-strong bg-abyss/90 p-4 backdrop-blur">
+          <div className="absolute right-4 bottom-4 w-80 animate-fade-in border border-line-strong bg-surface p-4 shadow-2xl backdrop-blur">
             <div className="flex items-center justify-between">
               <span
-                className="rounded-md px-2 py-0.5 text-[11px] font-medium"
+                className="px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider"
                 style={{
                   color: nodeColor(selected),
                   background: `color-mix(in oklab, ${nodeColor(selected)} 14%, transparent)`,
@@ -384,14 +385,14 @@ export function MemoryGraph({
               >
                 {selected.kind}
               </span>
-              <button onClick={() => setSelected(undefined)} className="text-ink-3 hover:text-ink">
+              <button onClick={() => setSelected(undefined)} className="text-slate-400 hover:text-white">
                 <X className="size-4" />
               </button>
             </div>
-            <div className="mt-2 text-sm font-medium">{selected.label}</div>
+            <div className="mt-2 font-display text-sm font-semibold text-white">{selected.label}</div>
             {memoryStateOf(selected) && (
               <div
-                className="mt-1.5 inline-block rounded bg-warn/10 px-1.5 py-0.5 text-[11px] text-warn"
+                className="mt-1.5 inline-block border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10px] text-amber-400"
                 title={
                   memoryStateOf(selected) === 'outdated'
                     ? 'The code this is about changed after it was recorded. It is shown to agents labelled "possibly outdated".'
@@ -401,12 +402,12 @@ export function MemoryGraph({
                 {memoryStateOf(selected) === 'outdated' ? 'possibly outdated' : 'superseded'}
               </div>
             )}
-            <div className="mt-1 font-mono text-[11px] break-all text-ink-3">{selected.id}</div>
-            <div className="mt-3 flex items-center justify-between text-xs text-ink-3">
+            <div className="mt-1 font-mono text-[11px] break-all text-sky-400">{selected.id}</div>
+            <div className="mt-3 flex items-center justify-between font-mono text-xs text-slate-400">
               <span>{neighbours.get(selected.id)?.size ?? 0} connections</span>
               <button
                 onClick={() => void focusOn(selected)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-surface-3 px-2.5 py-1 text-ink hover:bg-line-strong"
+                className="inline-flex items-center gap-1.5 border border-line bg-surface-2 px-2.5 py-1 text-slate-200 hover:bg-surface-3 hover:text-white"
               >
                 <Crosshair className="size-3.5" />
                 Focus 2 hops
@@ -416,16 +417,16 @@ export function MemoryGraph({
         )}
       </div>
 
-      <Panel className="flex min-h-0 flex-col p-4">
+      <div className="flex w-80 min-h-0 flex-col border-l border-line bg-surface p-4">
         <SectionTitle
           right={
             feedIsSample ? (
-              <span className="rounded-full bg-warn/10 px-2 py-0.5 text-[11px] text-warn">
+              <span className="border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-amber-400">
                 sample
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1.5 text-[11px] text-memory">
-                <span className="size-1.5 animate-breathe rounded-full bg-memory" />
+              <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-emerald-400">
+                <span className="size-1.5 animate-pulse-dot rounded-full bg-emerald-400" />
                 live
               </span>
             )
@@ -437,22 +438,22 @@ export function MemoryGraph({
           {feed.map((e) => (
             <li
               key={e.id}
-              className="flex animate-fade-in gap-3 rounded-lg p-2 transition-colors hover:bg-surface-2"
+              className="flex animate-fade-in gap-3 border-b border-line/50 p-2.5 transition-colors hover:bg-surface-2 last:border-b-0"
             >
               <EventIcon type={e.type} />
               <div className="min-w-0">
-                <div className="flex items-baseline gap-2 text-[11px]">
-                  <span className="font-medium" style={{ color: MEMORY_EVENT_META[e.type].color }}>
+                <div className="flex items-baseline gap-2 font-mono text-[11px]">
+                  <span className="font-semibold" style={{ color: MEMORY_EVENT_META[e.type].color }}>
                     {MEMORY_EVENT_META[e.type].label}
                   </span>
-                  <span className="text-ink-3">{timeAgo(e.at)}</span>
+                  <span className="text-slate-500">{timeAgo(e.at)}</span>
                 </div>
-                <div className="text-[13px] leading-snug text-ink-2">{e.text}</div>
+                <div className="mt-0.5 text-xs leading-snug text-slate-300">{e.text}</div>
               </div>
             </li>
           ))}
         </ol>
-      </Panel>
+      </div>
     </div>
   );
 }
