@@ -18,7 +18,7 @@ npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
 
 ## Install
 
-1. Run `Puff-Setup-<version>.exe`. It is a normal guided installer: pick the folder (the default is per user, so it needs no administrator rights) and finish.
+1. Download `Puff-Setup.exe` from the latest release (the Download button on the website goes there) and run it. It is a normal guided installer: pick the folder (the default is per user, so it needs no administrator rights) and finish.
 2. Windows may show a SmartScreen "unknown publisher" warning, because the installer is not code-signed yet. Choose **More info**, then **Run anyway**.
 3. Start **Puff** from the Start menu or the desktop shortcut.
 
@@ -47,9 +47,11 @@ Uninstalling removes the app. It leaves `~/.puff` and the database volume alone,
 
 ## Build the installer yourself
 
+Releases are built by GitHub Actions: pushing a tag such as `v0.1.4` runs `.github/workflows/release.yml`, which builds the installer on a Windows machine and attaches `Puff-Setup.exe` to the release. To build it on your own computer:
+
 ```bash
 npm install
-npm run package -w @puff/desktop            # the installer: apps/desktop/release/Puff-Setup-<version>.exe
+npm run package -w @puff/desktop            # the installer: apps/desktop/release/Puff-Setup.exe
 npm run package:dir -w @puff/desktop        # an unpacked app folder only (faster, for testing)
 ```
 

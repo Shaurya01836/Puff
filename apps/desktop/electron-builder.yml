@@ -29,7 +29,7 @@ win:
   target:
     - target: nsis
       arch: x64
-  artifactName: Puff-Setup-${version}.${ext}
+  artifactName: Puff-Setup.${ext}
 nsis:
   # A guided installer that lets the person pick the folder; per-user, so it needs no administrator rights.
   oneClick: false
