@@ -4,6 +4,10 @@ import { useState } from "react";
 import { Download, Terminal, Check, Copy, Laptop, Monitor, ShieldCheck } from "lucide-react";
 import { TechnicalGridContainer } from "./technical-grid";
 
+/** The newest release's installer. The file is always called Puff-Setup.exe, so this link never changes. */
+const INSTALLER_URL = "https://github.com/Shaurya01836/Puff/releases/latest/download/Puff-Setup.exe";
+const RELEASES_URL = "https://github.com/Shaurya01836/Puff/releases/latest";
+
 export function DownloadSection() {
   const [copiedCmd, setCopiedCmd] = useState(false);
 
@@ -39,11 +43,12 @@ export function DownloadSection() {
 
           <div className="flex flex-col items-center justify-center gap-4 pt-4 sm:flex-row">
             <a
-              href="#desktop-release"
+              href={INSTALLER_URL}
+              rel="noopener"
               className="inline-flex w-full items-center justify-center gap-2.5 whitespace-nowrap bg-white px-6 py-3.5 text-sm font-semibold text-slate-950 transition-[transform,opacity] duration-150 ease-out hover:opacity-90 active:scale-[0.97] sm:w-auto"
             >
               <Download className="h-4 w-4" />
-              Download Desktop App (.dmg / .exe)
+              Download for Windows (.exe)
             </a>
 
             <button
@@ -60,14 +65,31 @@ export function DownloadSection() {
             </button>
           </div>
 
-          <div className="flex items-center justify-center gap-6 pt-6 text-xs font-mono text-slate-500">
+          <p className="mx-auto max-w-xl text-xs leading-relaxed text-slate-500">
+            Windows 10 or 11, 64-bit, about 115 MB. Already installed? Run the new installer and it
+            updates in place, keeping your projects and memory. The installer is not code-signed
+            yet, so Windows may warn about an unknown publisher: choose{" "}
+            <span className="text-slate-300">More info</span>, then{" "}
+            <span className="text-slate-300">Run anyway</span>. macOS and Linux: run from source with
+            the command above.{" "}
+            <a
+              href={RELEASES_URL}
+              rel="noopener"
+              className="text-slate-300 underline underline-offset-2 hover:text-white"
+            >
+              All releases
+            </a>
+          </p>
+
+          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 pt-2 text-xs font-mono text-slate-500">
             <span className="flex items-center gap-1.5">
-              <Laptop className="h-3.5 w-3.5" /> Node 22.12+
+              <Laptop className="h-3.5 w-3.5" /> Windows 10 / 11
             </span>
             <span className="flex items-center gap-1.5">
-              <Monitor className="h-3.5 w-3.5" /> Docker / FalkorDB
+              <Monitor className="h-3.5 w-3.5" /> Docker Desktop (runs FalkorDB)
             </span>
-            <span>Git 2.40+ Worktrees</span>
+            <span>Git</span>
+            <span>Claude Code, Codex or OpenCode</span>
           </div>
         </div>
       </TechnicalGridContainer>
