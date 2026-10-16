@@ -168,7 +168,10 @@ export async function computeRisk(graph: Graph): Promise<{ symbols: number }> {
   if (!pr.length) return { symbols: 0 };
   const bt = await read<{ id: string; score: number }>(
     graph,
-    `CALL algo.betweenness({nodeLabels: ['Symbol'], relationshipTypes: ['CALLS']}) YIELD node, score
+    // FalkorDB samples start nodes at random unless told otherwise: a fixed seed and a sample as big as the
+    // project (at most 2000) make the scores, and so risk and choke points, the same every time
+    `CALL algo.betweenness({nodeLabels: ['Symbol'], relationshipTypes: ['CALLS'],
+                            samplingSize: ${Math.max(1, Math.min(pr.length, 2000))}, samplingSeed: 7}) YIELD node, score
      WITH node, score WHERE coalesce(node.removed, false) = false
      RETURN node.id AS id, score`,
   );

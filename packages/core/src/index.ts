@@ -13,6 +13,7 @@ export * from './queries/graph';
 export * from './queries/explain';
 export * from './queries/insights';
 export * from './queries/preview';
+export * from './queries/modules';
 export * from './memory/tasks';
 export * from './memory/sessions';
 export * from './memory/memory';

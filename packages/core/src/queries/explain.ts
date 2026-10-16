@@ -16,6 +16,7 @@ import type {
 import type { PuffConfig } from '../config';
 import { getContextPack } from '../context/compiler';
 import { read } from '../db/client';
+import { agentExpertise } from './modules';
 import { uiId, uiLabel } from './graph';
 
 /** Q5 plus the routing path: why this agent, and why each item of context. */
@@ -295,6 +296,7 @@ export async function agentProfiles(graph: Graph, config: PuffConfig): Promise<A
     graph,
     `MATCH (a:Agent)-[:RAN]->(s:Session {outcome: 'running'}) RETURN a.name AS name, count(s) AS busy`,
   );
+  const expertise = await agentExpertise(graph).catch(() => new Map());
   return Object.entries(config.harnesses).map(([name, h]) => {
     const s = stats.find((x) => x.name === name);
     const runs = Number(s?.runs ?? 0);
@@ -310,6 +312,7 @@ export async function agentProfiles(graph: Graph, config: PuffConfig): Promise<A
         successRate: runs ? wins / runs : 0,
         avgTokens: s?.tokens ? Math.round(Number(s.tokens)) : undefined,
       },
+      modules: expertise.get(name) ?? [],
     };
   });
 }

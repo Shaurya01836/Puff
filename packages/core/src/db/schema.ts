@@ -20,6 +20,7 @@ export const RANGE_INDEXES: readonly [label: string, property: string][] = [
   ['Trace', 'id'],
   ['Trace', 'kind'],
   ['Commit', 'sha'],
+  ['Module', 'id'],
   ['Handoff', 'id'],
 ];
 

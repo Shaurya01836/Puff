@@ -7,6 +7,13 @@ import type { AgentName } from '@puff/shared';
 import { graphOff, type PuffConfig } from '../config';
 import { read } from '../db/client';
 import { taskRisk, type TaskRisk } from '../queries/insights';
+import {
+  agentExpertise,
+  EXPERTISE_MARGIN,
+  EXPERTISE_MIN_RUNS,
+  smoothedRate,
+  taskModules,
+} from '../queries/modules';
 
 export interface AgentRank {
   agent: AgentName;
@@ -59,6 +66,9 @@ export interface Route {
   reason: string;
   /** Set when the task touches code at or above the risk threshold */
   risk?: TaskRisk;
+  /** The modules the task is in, and the agent whose record there changed the order (Q28) */
+  modules?: string[];
+  expertise?: { agent: AgentName; module: string; runs: number; wins: number };
   graphOff?: boolean;
 }
 
@@ -88,6 +98,43 @@ export async function routeTask(graph: Graph, config: PuffConfig, taskId: string
       (best.runs ? ` and won ${best.wins} of ${best.runs} earlier runs` : ' (no earlier runs)')
     : `no agent declares the task's capabilities: strongest first (${strongestFirst[0] ?? 'none'})`;
 
+  // Q28: an agent with a real record in this task's module can lead, even if another declares the strength
+  const modules = await taskModules(graph, taskId);
+  let expertise: Route['expertise'];
+  if (modules.length) {
+    const record = await agentExpertise(graph, modules);
+    const total = (agent: string) =>
+      (record.get(agent) ?? []).reduce(
+        (t, e) => ({ runs: t.runs + e.runs, wins: t.wins + e.wins }),
+        { runs: 0, wins: 0 },
+      );
+    const lead = agents[0];
+    if (lead) {
+      const leadRec = total(lead);
+      const leadRate = smoothedRate(leadRec.wins, leadRec.runs);
+      const challenger = agents
+        .filter((a) => a !== lead && total(a).runs >= EXPERTISE_MIN_RUNS)
+        .map((a) => ({ a, rec: total(a), rate: smoothedRate(total(a).wins, total(a).runs) }))
+        .sort((x, y) => y.rate - x.rate)[0];
+      if (challenger && challenger.rate - leadRate >= EXPERTISE_MARGIN) {
+        const name = modules.length === 1 ? modules[0]! : modules.join(', ');
+        expertise = {
+          agent: challenger.a,
+          module: name,
+          runs: challenger.rec.runs,
+          wins: challenger.rec.wins,
+        };
+        agents = [challenger.a, ...agents.filter((a) => a !== challenger.a)];
+        reason =
+          `${challenger.a} has won ${challenger.rec.wins} of ${challenger.rec.runs} runs in the ${name} module` +
+          (leadRec.runs
+            ? ` (${lead} ${leadRec.wins} of ${leadRec.runs})`
+            : ` (${lead} has not worked there)`) +
+          `, so it goes first even though ${reason}`;
+      }
+    }
+  }
+
   const risk = await taskRisk(graph, taskId);
   if (risk && risk.risk >= config.graph.riskThreshold) {
     const reasoning = Object.entries(config.harnesses)
@@ -103,9 +150,9 @@ export async function routeTask(graph: Graph, config: PuffConfig, taskId: string
       `(PageRank ${risk.pagerank.toFixed(3)}, betweenness ${Math.round(risk.betweenness)}` +
       (risk.openFailures ? `, ${risk.openFailures} open failure(s)` : '') +
       `): load-bearing code goes to an agent that declares reasoning`;
-    return { agents, reason, risk };
+    return { agents, reason, risk, modules, expertise };
   }
-  return { agents, reason, ...(risk ? { risk } : {}) };
+  return { agents, reason, modules, expertise, ...(risk ? { risk } : {}) };
 }
 
 export async function candidateAgents(

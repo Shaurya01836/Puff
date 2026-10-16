@@ -99,7 +99,7 @@ describe.skipIf(!db)('previews on a copy of the graph (real FalkorDB)', () => {
       slug,
       taskId: task.id,
       branchPath: branch,
-      riskThreshold: Number(auditRisk), // treat audit() as load-bearing for this test
+      riskThreshold: Number(auditRisk) - 1e-9, // treat audit() as load-bearing for this test
     });
 
     expect(p.symbolsAdded).toEqual(['src/auth/login.ts::logAttempt']);
@@ -113,7 +113,11 @@ describe.skipIf(!db)('previews on a copy of the graph (real FalkorDB)', () => {
     );
     expect(p.wouldGoStale.map((m) => m.id)).toContain(lesson.id);
     expect(p.newCallersOfRisky).toEqual([
-      { from: 'src/auth/login.ts::logAttempt', to: AUDIT, risk: Number(auditRisk) },
+      {
+        from: 'src/auth/login.ts::logAttempt',
+        to: AUDIT,
+        risk: expect.closeTo(Number(auditRisk), 6),
+      },
     ]);
     expect(p.summary).toMatch(/1 function\(s\) added; 1 changed; 2 call\(s\) added/);
     expect(p.summary).toMatch(/1 lesson\(s\) would become possibly outdated/);

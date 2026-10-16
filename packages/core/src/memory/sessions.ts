@@ -2,7 +2,9 @@
 // context pack can hang off it, then finished with the outcome Puff observed.
 import type { Graph } from 'falkordb';
 import type { Actor, ActivityStep, Role, SessionInfo, SessionOutcome } from '@puff/shared';
+import { graphOff } from '../config';
 import { read, run } from '../db/client';
+import { refreshExpertise } from '../queries/modules';
 import { newId } from '../ids';
 
 export async function startSession(
@@ -76,6 +78,9 @@ export async function finishSession(
     },
   );
   if (!rows.length) throw new Error(`Unknown session ${sessionId}`);
+  // Q28: what this agent has now done in the modules the task is in
+  if ((result.outcome === 'success' || result.outcome === 'failure') && !graphOff())
+    await refreshExpertise(graph).catch(() => {});
   if (result.changedFiles?.length) {
     await run(
       graph,

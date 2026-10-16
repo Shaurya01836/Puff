@@ -122,6 +122,35 @@ function AgentCard({ agent: a }: { agent: AgentProfile }) {
         </div>
       </dl>
 
+      {/* What this agent has done in each module (Q28): the record that can outrank a declared strength */}
+      {a.modules && a.modules.length > 0 && (
+        <div className="mt-4">
+          <div className="mb-1.5 font-mono text-[10px] tracking-wider text-slate-500 uppercase">
+            Knows
+          </div>
+          <ul className="flex flex-col gap-1">
+            {a.modules.slice(0, 4).map((m) => (
+              <li
+                key={m.module}
+                className="flex items-center gap-2 font-mono text-[11px]"
+                title={`${m.wins} of ${m.runs} runs in the ${m.module} module succeeded`}
+              >
+                <span className="w-24 truncate text-slate-300">{m.module}</span>
+                <span className="h-1 flex-1 overflow-hidden bg-surface-3">
+                  <span
+                    className="block h-full bg-emerald-400"
+                    style={{ width: `${Math.round((m.wins / Math.max(m.runs, 1)) * 100)}%` }}
+                  />
+                </span>
+                <span className="tabular-nums text-slate-400">
+                  {m.wins}/{m.runs}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Strengths tags */}
       {a.strengths && a.strengths.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-1.5 pt-1">

@@ -18,7 +18,7 @@ import { startSession } from '../src/memory/sessions';
 import { createTask, updateTask } from '../src/memory/tasks';
 import { routeTask } from '../src/orchestrator/routing';
 import { overlappingTasks } from '../src/orchestrator/schedule';
-import { taskRisk } from '../src/queries/insights';
+import { computeRisk, taskRisk } from '../src/queries/insights';
 
 const rel = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 const DEMO = rel('../../../demo/shop-api');
@@ -97,6 +97,19 @@ describe.skipIf(!db)('what the graph decides (real FalkorDB)', () => {
       { id: top.id },
     );
     expect(Number(row!.pr) + Number(row!.bt)).toBeGreaterThan(0);
+  });
+
+  it('Q20: the scores are the same every time (FalkorDB samples betweenness at random unless seeded)', async () => {
+    const read1 = () =>
+      read<{ id: string; b: number; r: number }>(
+        graph,
+        `MATCH (s:Symbol) WHERE s.risk IS NOT NULL RETURN s.id AS id, s.betweenness AS b, s.risk AS r ORDER BY id`,
+      );
+    const first = await read1();
+    for (let i = 0; i < 3; i++) {
+      await computeRisk(graph);
+      expect(await read1()).toEqual(first);
+    }
   });
 
   it('Q20: a task on load-bearing code goes to an agent that declares reasoning, with a bigger context budget', async () => {

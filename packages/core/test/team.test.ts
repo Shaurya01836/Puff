@@ -463,6 +463,7 @@ describe.skipIf(!ready)('coordination (fake agents, real git, real FalkorDB)', (
 
   it('independent tasks run in parallel, overlapping ones wait (and say what for), and an agent never exceeds its slots', async () => {
     const spans: Record<string, { start: number; end: number }> = {};
+    const together = new Set<string>();
     let active = 0;
     let peak = 0;
     const codex = fakeAgent('codex', async (o) => {
@@ -470,7 +471,22 @@ describe.skipIf(!ready)('coordination (fake agents, real git, real FalkorDB)', (
       active++;
       peak = Math.max(peak, active);
       spans[title] = { start: Date.now(), end: 0 };
-      await sleep(4000); // long enough that two slow worktree creations still overlap
+      // The two tasks that must run side by side each wait until the other has started (or 30 s pass), so
+      // the test checks real overlap instead of hoping a fixed sleep is long enough on a busy machine
+      if (title === 'login one' || title === 'cart work') {
+        together.add(title);
+        await Promise.race([
+          new Promise<void>((resolve) => {
+            const check = setInterval(() => {
+              if (together.size === 2) {
+                clearInterval(check);
+                resolve();
+              }
+            }, 25);
+          }),
+          sleep(30_000),
+        ]);
+      } else await sleep(800);
       const file = title.includes('login')
         ? 'src/auth/login.ts'
         : title.includes('cart')

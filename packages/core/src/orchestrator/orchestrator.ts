@@ -18,7 +18,7 @@ import {
   updateTask,
 } from '../memory/tasks';
 import { flushMemoryEvents, runTask, type RunDeps, type TaskRunResult } from './run';
-import { SlotPool, overlappingTasks } from './schedule';
+import { SlotPool, overlapDetails } from './schedule';
 import { runVerification } from './verify';
 
 export type OrchestratorDeps = Omit<RunDeps, 'signal' | 'unavailable' | 'slots'>;
@@ -186,8 +186,9 @@ export class Orchestrator {
         }
         // Tasks claimed a moment ago are already 'running' in the graph, so they count as in flight.
         const off = graphOff(config);
-        const check = await traced(() => overlappingTasks(graph, task, { graphOff: off }));
-        const blockers = check.value;
+        const check = await traced(() => overlapDetails(graph, task, { graphOff: off }));
+        const details = check.value;
+        const blockers = details.map((d) => d.id);
         const was = (task.blockedBy ?? []).join();
         // One trace per change of answer (and one when it is free to start), not one per loop
         if (blockers.join() !== was || blockers.length === 0) {
@@ -197,7 +198,7 @@ export class Orchestrator {
             {
               kind: 'schedule',
               reason: blockers.length
-                ? `waits for ${blockers.join(', ')}: ${off ? 'graph off, they target the same file' : 'they target the same functions, or functions one CALLS hop away'}`
+                ? `waits for ${blockers.join(', ')}: ${[...new Set(details.map((d) => d.why))].join('; ')}${off ? ' (graph off)' : ''}`
                 : `free to start: no running task touches ${off ? 'the same file (graph off)' : 'the same functions or their direct callers and callees'}`,
               steps: check.steps,
               graphOff: off,

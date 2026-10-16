@@ -128,6 +128,7 @@ FalkorDB is **not a log sink**. It is where Puff thinks. Take it away and Puff c
 | **Is this code load-bearing?** | `algo.pageRank` and `algo.betweenness` over `CALLS`, plus open failures, stored as a percentile on every function. A task in the top 10% goes to an agent that declares reasoning and gets 1.5× the context budget | [Q20](docs/GRAPH_SCHEMA.md#q20-risk-from-pagerank-and-betweenness) |
 | **Which lessons are two calls away?** | `target → CALLS → m → CALLS → n`: a mistake in `log()` reaches a task on `login()` through `audit()` | [Q21](docs/GRAPH_SCHEMA.md#q21-lessons-two-calls-away) |
 | **Which past failures sound like this task?** | Full-text search over `Failure.message` (`db.idx.fulltext.queryNodes`), for lessons the call graph does not reach | [Q22](docs/GRAPH_SCHEMA.md#q22-failures-worded-like-the-task) |
+| **Who is best at this part of the code?** | Functions are grouped into modules (folders), `CALLS` across folders become `DEPENDS_ON`, and every finished session updates `(Agent)-[:KNOWS {runs, wins}]->(Module)`. An agent with a real record in the task's module can take the lead over the declared best ("opencode has won 5 of 6 runs in the cart module"). Tasks in the same module as a choke point (top betweenness) do not run side by side | [Q27](docs/GRAPH_SCHEMA.md#q27-modules), [Q28](docs/GRAPH_SCHEMA.md#q28-expertise), [Q29](docs/GRAPH_SCHEMA.md#q29-choke-points) |
 | **What will this merge change?** | Before a task is merged, `GRAPH.COPY` makes a copy of the graph, the branch is indexed into it, and the two are compared: functions added, changed, removed, calls added, lessons that would become outdated, new callers of load-bearing code. For a plan, a dry run of the scheduler on a copy shows which tasks start together and which wait | [Q25](docs/GRAPH_SCHEMA.md#q25-merge-preview), [Q26](docs/GRAPH_SCHEMA.md#q26-plan-preview) |
 | **Can this lesson still be trusted?** | Each lesson links to the session and commit it came from. A revert of that merge (by Puff's re-test or by you in git) marks its fix reverted and follows `DERIVED_FROM` up to 3 steps to downgrade what was built on it. Trust (confirmations, sessions it helped, repeats despite it, staleness, reverts, the learning agent's record) sinks or drops a lesson from context | [Q23](docs/GRAPH_SCHEMA.md#q23-repair-on-revert), [Q24](docs/GRAPH_SCHEMA.md#q24-trust) |
 | **Separate memory per project** | One graph per project: `puff_<project>` | [Tenancy](docs/GRAPH_SCHEMA.md#database) |
@@ -240,6 +241,7 @@ WHEN DONE: final block <puff-report>{"decisions":[...],"notes":"..."}</puff-repo
 | 📊 | Benchmark: tokens, files read, first-try pass rate, with vs without Puff | ✅ |
 | 🎯 | Risk from PageRank + betweenness drives routing and the context budget; lessons two calls away; failures found by wording | ✅ |
 | 🔎 | **Graph trace**: the Cypher, timing and rows behind every decision; `PUFF_GRAPH=off` ablation switch | ✅ |
+| 🧩 | **Team intelligence**: modules, what each agent knows per module (routing uses it), choke points that do not run in parallel | ✅ |
 | 🔮 | **Previews on a `GRAPH.COPY`**: what a merge will change in the graph before it happens; a dry run of the plan | ✅ |
 | 🛡️ | **Trustworthy memory**: provenance for every lesson, repair on revert, a trust score that decides what the next agent is told | ✅ |
 | ✨ | Stretch: vector search over failures, generic CLI adapter | 🔭 |
@@ -266,6 +268,7 @@ Puff is built in **phases**. Each phase ends with a checkpoint: a working build 
 | **P14 Proof** | Lesson-transfer benchmark: four arms (no memory, Puff, a flat AGENTS.md, Puff with the graph off), two agents | Repeated-mistake rate per arm, with limits |
 | **P15 The graph decides** ✅ | Risk from PageRank and betweenness in routing and the budget, lessons two calls away, failures found by wording, Graph trace tab, risk badge | Each decision shows its query in the app |
 | **P16 Trustworthy memory** ✅ | Provenance edges, repair on revert (Puff's or a person's), trust in context ranking and the Context tab | A revert downgrades the right lessons, end to end |
+| **P17 Team intelligence** ✅ | Modules from folders and `CALLS`, per-agent expertise in routing, choke points in scheduling, "Knows" on agent cards | The agent with the record in a module gets its tasks |
 | **P18 Previews** ✅ | Merge preview and plan dry run on a `GRAPH.COPY` | A branch's effect on the graph is known before it is merged |
 | **P12 Ship** | One-command demo story, clean-clone test, screenshots | Fresh clone to running demo in minutes |
 | **Stretch** | PageRank (hotspots, done), similar failures (done), vector search, Python support | Each one ships independently |

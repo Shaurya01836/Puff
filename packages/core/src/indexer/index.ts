@@ -8,6 +8,7 @@ import { graphOff as graphIsOff } from '../config';
 import { read, run } from '../db/client';
 import { saveTrace, traced, type TraceOwner } from '../db/trace';
 import { computeRisk } from '../queries/insights';
+import { computeModules, refreshExpertise } from '../queries/modules';
 import { langForPath, parseSource } from './parser';
 import { resolveRepo, type SourceFile } from './resolve';
 import { isTestFile, listSourceFiles } from './walk';
@@ -284,7 +285,12 @@ export async function indexRepo(
   );
 
   // Q20: how load-bearing each function is, for routing and the context budget
-  if (!off) await computeRisk(graph);
+  if (!off) {
+    // Q27: which module each function is in, and how modules depend on each other (and so who knows what)
+    await computeModules(graph);
+    await refreshExpertise(graph);
+    await computeRisk(graph);
+  }
 
   return {
     files: sources.length,

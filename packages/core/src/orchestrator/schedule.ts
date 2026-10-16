@@ -25,19 +25,22 @@ function unknownFootprint(a: Task, b: Task): boolean {
   return aOpen && bOpen; // two untargeted chores
 }
 
+/** How many of the most load-bearing functions (by betweenness) count as choke points */
+export const CHOKE_POINTS = 3;
+
 /** The file part of a symbol id (`src/a.ts::f` → `src/a.ts`) */
 const fileOf = (symbolId: string) => symbolId.split('::')[0]!;
 
 /**
- * Q8: in-flight tasks that overlap this one. Overlap means a shared target, or targets one CALLS hop
- * apart. See `unknownFootprint` for tasks that name no targets. Read-only tasks (plans, reviews)
+ * Q8: in-flight tasks that overlap this one, and why. Overlap means a shared target, or targets one
+ * CALLS hop apart, or (Q29) any code in the same module as a choke point. See `unknownFootprint` for tasks that name no targets. Read-only tasks (plans, reviews)
  * never conflict. With the graph off (the ablation) overlap is only "targets in the same file".
  */
-export async function overlappingTasks(
+export async function overlapDetails(
   graph: Graph,
   task: Task,
   opts: { graphOff?: boolean } = {},
-): Promise<string[]> {
+): Promise<{ id: string; why: string }[]> {
   if (!WRITES.has(task.type)) return [];
   const all = await listTasks(graph);
   const inFlight = all.filter(
@@ -47,10 +50,15 @@ export async function overlappingTasks(
   if (inFlight.length === 0) return [];
 
   const blockers = new Set<string>();
+  const why = new Map<string, string>();
+  const block = (id: string, reason: string) => {
+    blockers.add(id);
+    if (!why.has(id)) why.set(id, reason);
+  };
   if (opts.graphOff) {
     const mine = new Set(task.targets.map(fileOf));
     for (const other of inFlight)
-      if (other.targets.some((t) => mine.has(fileOf(t)))) blockers.add(other.id);
+      if (other.targets.some((t) => mine.has(fileOf(t)))) block(other.id, 'same file');
   } else if (task.targets.length > 0) {
     const rows = await read<{ id: string }>(
       graph,
@@ -60,13 +68,38 @@ export async function overlappingTasks(
        RETURN DISTINCT other.id AS id`,
       { id: task.id, statuses: [...IN_FLIGHT] },
     );
-    for (const r of rows) blockers.add(r.id);
+    for (const r of rows) block(r.id, 'same function, or one call apart');
+    // Q29: a choke point (the code most paths run through) does not share its module with anyone else
+    const choke = await read<{ other: string; symbol: string; module: string }>(
+      graph,
+      `MATCH (s:Symbol) WHERE s.betweenness > 0 AND coalesce(s.removed, false) = false
+       WITH s ORDER BY s.betweenness DESC, s.id LIMIT $k
+       WITH collect(s.id) AS choke
+       MATCH (:Task {id: $id})-[:TARGETS]->(mine:Symbol)-[:IN_MODULE]->(m:Module)
+       MATCH (other:Task)-[:TARGETS]->(theirs:Symbol)-[:IN_MODULE]->(m)
+       WHERE other.id <> $id AND other.status IN $statuses AND (mine.id IN choke OR theirs.id IN choke)
+       RETURN DISTINCT other.id AS other,
+              CASE WHEN mine.id IN choke THEN mine.name ELSE theirs.name END AS symbol, m.name AS module`,
+      { id: task.id, statuses: [...IN_FLIGHT], k: CHOKE_POINTS },
+    );
+    for (const r of choke)
+      block(r.other, `${r.symbol}() is a choke point in the ${r.module} module`);
   }
   for (const other of inFlight) {
-    if (unknownFootprint(task, other)) blockers.add(other.id);
+    if (unknownFootprint(task, other)) block(other.id, 'a task with no named targets');
   }
   // only count tasks that really are in flight and write code
-  return [...blockers].filter((id) => inFlight.some((t) => t.id === id)).sort();
+  const ids = [...blockers].filter((id) => inFlight.some((t) => t.id === id)).sort();
+  return ids.map((id) => ({ id, why: why.get(id) ?? 'overlapping code' }));
+}
+
+/** In-flight tasks that overlap this one (ids only). */
+export async function overlappingTasks(
+  graph: Graph,
+  task: Task,
+  opts: { graphOff?: boolean } = {},
+): Promise<string[]> {
+  return (await overlapDetails(graph, task, opts)).map((d) => d.id);
 }
 
 /**

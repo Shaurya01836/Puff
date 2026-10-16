@@ -348,6 +348,10 @@ export const mockAgents: AgentProfile[] = [
     busy: 1,
     strengths: ['reasoning', 'planning', 'verification', 'review'],
     stats: { runs: 14, wins: 12, successRate: 12 / 14, avgTokens: 8_900 },
+    modules: [
+      { module: 'auth', runs: 7, wins: 7 },
+      { module: 'middleware', runs: 3, wins: 2 },
+    ],
   },
   {
     name: 'codex',
@@ -355,6 +359,11 @@ export const mockAgents: AgentProfile[] = [
     busy: 1,
     strengths: ['implementation', 'refactor'],
     stats: { runs: 21, wins: 16, successRate: 16 / 21, avgTokens: 9_400 },
+    modules: [
+      { module: 'cart', runs: 8, wins: 7 },
+      { module: 'products', runs: 5, wins: 4 },
+      { module: 'auth', runs: 4, wins: 2 },
+    ],
   },
   {
     name: 'opencode',
@@ -362,6 +371,7 @@ export const mockAgents: AgentProfile[] = [
     busy: 1,
     strengths: ['simple-edit', 'docs', 'formatting', 'boilerplate'],
     stats: { runs: 9, wins: 7, successRate: 7 / 9, avgTokens: 3_800 },
+    modules: [{ module: 'routes', runs: 5, wins: 5 }],
   },
 ];
 

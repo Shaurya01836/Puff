@@ -287,6 +287,8 @@ export interface AgentProfile {
   busy: number;
   strengths: string[];
   stats: { runs: number; wins: number; successRate: number; avgTokens?: number };
+  /** What this agent has done in each module of the project, most runs first (Q28) */
+  modules?: { module: string; runs: number; wins: number }[];
 }
 
 export interface SavingsArm {

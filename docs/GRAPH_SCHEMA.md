@@ -193,6 +193,7 @@ CREATE INDEX FOR (so:Solution) ON (so.id)
 CREATE INDEX FOR (t:Trace) ON (t.id)
 CREATE INDEX FOR (t:Trace) ON (t.kind)
 CREATE INDEX FOR (c:Commit) ON (c.sha)
+CREATE INDEX FOR (m:Module) ON (m.id)
 ```
 
 Full-text search over failure messages:
@@ -242,6 +243,9 @@ All queries use parameters (`$name`). Nothing is built by string concatenation.
 | Q24 | Trust: how far to believe a lesson | context compiler, Context tab |
 | Q25 | Merge preview: what a branch changes in the graph, on a `GRAPH.COPY` | run loop before each merge, Merge preview tab |
 | Q26 | Plan preview: a dry run of the scheduler on a `GRAPH.COPY` | planner, Dry run tab |
+| Q27 | Modules: which folder each function is in, and how modules depend on each other | indexer → expertise, choke points |
+| Q28 | Expertise: what each agent has done in each module | router, Agents screen |
+| Q29 | Choke points: tasks in a choke point's module do not run side by side | scheduler |
 
 ### Q1: Index a file (idempotent)
 
@@ -849,6 +853,65 @@ RETURN DISTINCT other.id AS id
 ```
 
 The plan's tasks are found through `(Session)-[:SPAWNED]->(Task)`. Tasks started in a wave are marked running **in the copy**, so the next check sees them; nothing real is claimed or run. Shown in the plan task's **Dry run** tab; the planner's log says "dry run: N wave(s), M task(s) can start at once". Test: `preview.test.ts` (Q26, two tests).
+
+### Modules and expertise (P17)
+
+```
+(Symbol)-[:IN_MODULE]->(Module {id, name, size})
+(Module)-[:DEPENDS_ON {calls}]->(Module)
+(Agent)-[:KNOWS {runs, wins, lastAt}]->(Module)
+```
+
+### Q27: Modules
+
+A module is a folder: the first directory below the source root (`auth` for `src/auth/login.ts`), the folder a whole app lives in is skipped (Kite's `my-app/`), and in a monorepo it is the package and the folder inside it (`core/orchestrator`). Recomputed after every index (`computeModules`): symbols are put in their module and counted, then the `CALLS` that cross a module boundary become `DEPENDS_ON {calls}`.
+
+```cypher
+UNWIND $rows AS r
+MATCH (s:Symbol {id: r.id})
+MERGE (m:Module {id: r.module}) SET m.name = r.module
+MERGE (s)-[:IN_MODULE]->(m)
+
+MATCH (a:Symbol)-[:CALLS]->(b:Symbol)
+WHERE coalesce(a.removed, false) = false AND coalesce(b.removed, false) = false
+RETURN a.id AS a, b.id AS b          // grouped by module pair in code, written as DEPENDS_ON
+```
+
+**Why not community detection.** `algo.labelPropagation` over `CALLS` was tried on the demo first (the procedure is `labelPropagation`; `algo.CDLP` is not registered here). Its clusters follow shared utilities instead of features: `users`, `products`, `orders` and `middleware` code landed in two big clusters. Folders are what people mean by a module, so they name the modules, and `CALLS` is used for what it is good at: how modules depend on each other. Test: `modules.test.ts` (naming, Q27).
+
+### Q28: Expertise
+
+What an agent has done in a module is read from history, so it is right for sessions recorded before modules existed, and written as `KNOWS` so the graph and the Agents screen can show it. Refreshed when a session ends as a success or a failure and after every index. A run that ended as an error (the agent could not start) says nothing about the code and does not count.
+
+```cypher
+MATCH (a:Agent)-[:RAN]->(s:Session)-[:WORKED_ON]->(:Task)-[:TARGETS]->(:Symbol)-[:IN_MODULE]->(m:Module)
+WHERE s.outcome IN ['success', 'failure']
+WITH a, m, collect(DISTINCT s) AS ss
+RETURN a.name AS agent, m.id AS module, size(ss) AS runs,
+       size([x IN ss WHERE x.outcome = 'success']) AS wins
+
+UNWIND $rows AS r
+MATCH (a:Agent {name: r.agent}), (m:Module {id: r.module})
+MERGE (a)-[k:KNOWS]->(m) SET k.runs = r.runs, k.wins = r.wins, k.lastAt = r.last
+```
+
+**Decisions it changes (routing).** Declared strengths still pick the first candidate. But an agent that has at least 3 runs in the task's module and a win rate there (smoothed toward 0.5 with two imaginary runs) at least 0.25 higher than the declared best's takes the lead. Two lucky runs do not: the smoothing and the minimum keep thin evidence from moving anything. The reason says so: "opencode has won 5 of 6 runs in the cart module (codex has not worked there), so it goes first even though codex declares 1 of the task's capabilities". The load-bearing-code rule (Q20) still comes first. Shown on each agent's card as "Knows". Test: `modules.test.ts` (Q28, three tests).
+
+### Q29: Choke points
+
+The three functions with the highest betweenness (stored by Q20) are choke points: the code most call paths run through. A task whose targets include one waits for any running task in the same module, and a task in that module waits for a running task that targets one, even when no two functions call each other:
+
+```cypher
+MATCH (s:Symbol) WHERE s.betweenness > 0 AND coalesce(s.removed, false) = false
+WITH s ORDER BY s.betweenness DESC, s.id LIMIT $k
+WITH collect(s.id) AS choke
+MATCH (:Task {id: $id})-[:TARGETS]->(mine:Symbol)-[:IN_MODULE]->(m:Module)
+MATCH (other:Task)-[:TARGETS]->(theirs:Symbol)-[:IN_MODULE]->(m)
+WHERE other.id <> $id AND other.status IN $statuses AND (mine.id IN choke OR theirs.id IN choke)
+RETURN DISTINCT other.id AS other, CASE WHEN mine.id IN choke THEN mine.name ELSE theirs.name END AS symbol, m.name AS module
+```
+
+The wait says why in the schedule trace: "createUser() is a choke point in the users module". Other modules and modules without a choke point still run in parallel. Off with the graph (`PUFF_GRAPH=off`). Test: `modules.test.ts` (Q29).
 
 ---
 
