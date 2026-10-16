@@ -47,6 +47,7 @@ import {
   SignInManager,
   startDatabase,
   updateProject as updateInRegistry,
+  withDetectedSettings,
   userEnvPath,
   type ProjectEntry,
   type ProjectHooks,
@@ -385,6 +386,7 @@ async function buildLive(
         repoPath,
         name: name?.trim() || undefined,
         testCommand: testCommand?.trim() || info.testCommand,
+        linkDirs: info.linkDirs,
       });
       await activate(entry);
       return summary(entry, entry.slug);
@@ -399,7 +401,7 @@ async function buildLive(
       const entry = await updateInRegistry(projectId, patch);
       if (current?.entry.slug === projectId && !current.controller.running) {
         current.entry = entry;
-        current.config = applyProject(userConfig, entry);
+        current.config = applyProject(userConfig, await withDetectedSettings(entry));
         current.controller = await makeController(current.project, current.graph, current.config);
         await current.chat.close();
         current.chat = makeChat(current.controller);
