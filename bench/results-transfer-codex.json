@@ -1,0 +1,1241 @@
+{
+  "kind": "transfer",
+  "generatedAt": "2026-10-16T15:31:30.569Z",
+  "agent": "codex",
+  "model": "CLI default",
+  "runsPerArm": 3,
+  "arms": [
+    "none",
+    "puff",
+    "flat",
+    "graph-off"
+  ],
+  "tasks": [
+    "login-request-log",
+    "token-in-body",
+    "cart-quote",
+    "cart-reorder",
+    "login-lockout"
+  ],
+  "learned": [
+    {
+      "trap": 1,
+      "task": "failed-login-reason",
+      "mode": "replayed",
+      "tokens": 169477,
+      "failures": [
+        {
+          "message": "login > never writes a password to the logs: AssertionError: expected '[{\"level\":\"info\",\"message\":\"audit:log…' not to contain 'wrong-password-123'",
+          "anchoredTo": [
+            "src/auth/login.ts::checkUser"
+          ],
+          "via": "diff"
+        },
+        {
+          "message": "failed login reason > never writes the password to the logs: AssertionError: expected '[{\"level\":\"info\",\"message\":\"audit:log…' not to contain 'wrong-password-123'",
+          "anchoredTo": [
+            "src/auth/login.ts::checkUser"
+          ],
+          "via": "diff"
+        }
+      ]
+    },
+    {
+      "trap": 2,
+      "task": "session-info",
+      "mode": "replayed",
+      "tokens": 226796,
+      "failures": [
+        {
+          "message": "GET /auth/session > never returns the session token in the body: AssertionError: expected '{\"user\":{\"id\":\"usr_a4600f65\",\"email\":…' not to contain 'eyJzdWIiOiJ1c3JfYTQ2MDBmNjUiLCJleHAiO…'",
+          "anchoredTo": [
+            "src/routes/auth.ts::authRouter"
+          ],
+          "via": "diff"
+        }
+      ]
+    },
+    {
+      "trap": 3,
+      "task": "cart-summary",
+      "mode": "replayed",
+      "tokens": 155626,
+      "failures": [
+        {
+          "message": "GET /cart/summary > summarises the cart with the discount applied before tax: AssertionError: expected { itemCount: 2, …(4) } to deeply equal { itemCount: 2, …(4) }",
+          "anchoredTo": [
+            "src/routes/cart.ts::cartRouter"
+          ],
+          "via": "diff"
+        }
+      ]
+    },
+    {
+      "trap": 4,
+      "task": "cart-bulk-add",
+      "mode": "replayed",
+      "tokens": 165066,
+      "failures": [
+        {
+          "message": "POST /cart/bulk > adds every item and reserves stock for each: AssertionError: expected 25 to be 23 // Object.is equality",
+          "anchoredTo": [
+            "src/routes/cart.ts::cartRouter"
+          ],
+          "via": "diff"
+        },
+        {
+          "message": "POST /cart/bulk > refuses an item that is out of stock: Error: expected 409 \"Conflict\", got 201 \"Created\"",
+          "anchoredTo": [
+            "src/routes/cart.ts::cartRouter"
+          ],
+          "via": "diff"
+        }
+      ]
+    },
+    {
+      "trap": 5,
+      "task": "signup-rate-limit",
+      "mode": "replayed",
+      "tokens": 210725,
+      "failures": [
+        {
+          "message": "sign-up rate limit > limits each client IP separately: Error: expected 201 \"Created\", got 429 \"Too Many Requests\"",
+          "anchoredTo": [
+            "src/routes/users.ts::usersRouter"
+          ],
+          "via": "diff"
+        },
+        {
+          "message": "sign-up rate limit > lets the client sign up again after a minute: Error: expected 201 \"Created\", got 429 \"Too Many Requests\"",
+          "anchoredTo": [
+            "src/routes/users.ts::usersRouter"
+          ],
+          "via": "diff"
+        }
+      ]
+    }
+  ],
+  "runs": [
+    {
+      "task": "login-request-log",
+      "trap": 1,
+      "arm": "flat",
+      "run": 1,
+      "changedFiles": 2,
+      "tokens": 123500,
+      "durationMs": 39715,
+      "promptTokens": 152,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 28,
+        "total": 28
+      }
+    },
+    {
+      "task": "login-request-log",
+      "trap": 1,
+      "arm": "graph-off",
+      "run": 1,
+      "changedFiles": 2,
+      "tokens": 151959,
+      "durationMs": 47285,
+      "promptTokens": 153,
+      "passed": false,
+      "repeated": true,
+      "failure": "tests",
+      "failingTests": [
+        "login request log > never writes the password to the logs"
+      ],
+      "tests": {
+        "passed": 27,
+        "total": 28
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "login-request-log",
+      "trap": 1,
+      "arm": "none",
+      "run": 1,
+      "changedFiles": 2,
+      "tokens": 135431,
+      "durationMs": 40481,
+      "promptTokens": 129,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 28,
+        "total": 28
+      }
+    },
+    {
+      "task": "login-request-log",
+      "trap": 1,
+      "arm": "puff",
+      "run": 1,
+      "changedFiles": 2,
+      "tokens": 133267,
+      "durationMs": 41694,
+      "promptTokens": 460,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 28,
+        "total": 28
+      }
+    },
+    {
+      "task": "login-request-log",
+      "trap": 1,
+      "arm": "graph-off",
+      "run": 2,
+      "changedFiles": 2,
+      "tokens": 174174,
+      "durationMs": 48975,
+      "promptTokens": 153,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 28,
+        "total": 28
+      }
+    },
+    {
+      "task": "login-request-log",
+      "trap": 1,
+      "arm": "none",
+      "run": 2,
+      "changedFiles": 2,
+      "tokens": 152830,
+      "durationMs": 42485,
+      "promptTokens": 129,
+      "passed": false,
+      "repeated": true,
+      "failure": "tests",
+      "failingTests": [
+        "login request log > never writes the password to the logs"
+      ],
+      "tests": {
+        "passed": 27,
+        "total": 28
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "login-request-log",
+      "trap": 1,
+      "arm": "puff",
+      "run": 2,
+      "changedFiles": 2,
+      "tokens": 155030,
+      "durationMs": 40868,
+      "promptTokens": 460,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 28,
+        "total": 28
+      }
+    },
+    {
+      "task": "login-request-log",
+      "trap": 1,
+      "arm": "flat",
+      "run": 2,
+      "changedFiles": 2,
+      "tokens": 164343,
+      "durationMs": 46624,
+      "promptTokens": 152,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 29,
+        "total": 29
+      }
+    },
+    {
+      "task": "login-request-log",
+      "trap": 1,
+      "arm": "none",
+      "run": 3,
+      "changedFiles": 2,
+      "tokens": 154718,
+      "durationMs": 51392,
+      "promptTokens": 129,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 28,
+        "total": 28
+      }
+    },
+    {
+      "task": "login-request-log",
+      "trap": 1,
+      "arm": "puff",
+      "run": 3,
+      "changedFiles": 2,
+      "tokens": 135400,
+      "durationMs": 41866,
+      "promptTokens": 460,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 28,
+        "total": 28
+      }
+    },
+    {
+      "task": "login-request-log",
+      "trap": 1,
+      "arm": "flat",
+      "run": 3,
+      "changedFiles": 2,
+      "tokens": 193619,
+      "durationMs": 60097,
+      "promptTokens": 152,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 29,
+        "total": 29
+      }
+    },
+    {
+      "task": "login-request-log",
+      "trap": 1,
+      "arm": "graph-off",
+      "run": 3,
+      "changedFiles": 2,
+      "tokens": 166507,
+      "durationMs": 53046,
+      "promptTokens": 153,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 28,
+        "total": 28
+      }
+    },
+    {
+      "task": "token-in-body",
+      "trap": 2,
+      "arm": "graph-off",
+      "run": 1,
+      "changedFiles": 3,
+      "tokens": 143223,
+      "durationMs": 41120,
+      "promptTokens": 133,
+      "passed": false,
+      "repeated": true,
+      "failure": "tests",
+      "failingTests": [
+        "login response > keeps the session in an httpOnly cookie and never returns the token in the body"
+      ],
+      "tests": {
+        "passed": 25,
+        "total": 26
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "token-in-body",
+      "trap": 2,
+      "arm": "none",
+      "run": 1,
+      "changedFiles": 3,
+      "tokens": 218094,
+      "durationMs": 51244,
+      "promptTokens": 108,
+      "passed": false,
+      "repeated": true,
+      "failure": "tests",
+      "failingTests": [
+        "login response > keeps the session in an httpOnly cookie and never returns the token in the body"
+      ],
+      "tests": {
+        "passed": 25,
+        "total": 26
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "token-in-body",
+      "trap": 2,
+      "arm": "puff",
+      "run": 1,
+      "changedFiles": 2,
+      "tokens": 148808,
+      "durationMs": 42504,
+      "promptTokens": 440,
+      "passed": false,
+      "repeated": true,
+      "failure": "tests",
+      "failingTests": [
+        "login response > keeps the session in an httpOnly cookie and never returns the token in the body"
+      ],
+      "tests": {
+        "passed": 25,
+        "total": 26
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "token-in-body",
+      "trap": 2,
+      "arm": "flat",
+      "run": 1,
+      "changedFiles": 2,
+      "tokens": 166054,
+      "durationMs": 39265,
+      "promptTokens": 131,
+      "passed": false,
+      "repeated": true,
+      "failure": "tests",
+      "failingTests": [
+        "login response > keeps the session in an httpOnly cookie and never returns the token in the body"
+      ],
+      "tests": {
+        "passed": 25,
+        "total": 26
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "token-in-body",
+      "trap": 2,
+      "arm": "none",
+      "run": 2,
+      "changedFiles": 2,
+      "tokens": 150920,
+      "durationMs": 34821,
+      "promptTokens": 108,
+      "passed": false,
+      "repeated": true,
+      "failure": "tests",
+      "failingTests": [
+        "login response > keeps the session in an httpOnly cookie and never returns the token in the body"
+      ],
+      "tests": {
+        "passed": 25,
+        "total": 26
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "token-in-body",
+      "trap": 2,
+      "arm": "puff",
+      "run": 2,
+      "changedFiles": 0,
+      "tokens": 33330,
+      "durationMs": 13282,
+      "promptTokens": 440,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 26,
+        "total": 26
+      }
+    },
+    {
+      "task": "token-in-body",
+      "trap": 2,
+      "arm": "flat",
+      "run": 2,
+      "changedFiles": 2,
+      "tokens": 163002,
+      "durationMs": 35986,
+      "promptTokens": 131,
+      "passed": false,
+      "repeated": true,
+      "failure": "tests",
+      "failingTests": [
+        "login response > keeps the session in an httpOnly cookie and never returns the token in the body"
+      ],
+      "tests": {
+        "passed": 25,
+        "total": 26
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "token-in-body",
+      "trap": 2,
+      "arm": "graph-off",
+      "run": 2,
+      "changedFiles": 1,
+      "tokens": 160254,
+      "durationMs": 36038,
+      "promptTokens": 133,
+      "passed": false,
+      "repeated": true,
+      "failure": "tests",
+      "failingTests": [
+        "POST /auth/login > sets an httpOnly session cookie and never returns the token in the body",
+        "login response > keeps the session in an httpOnly cookie and never returns the token in the body"
+      ],
+      "tests": {
+        "passed": 24,
+        "total": 26
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "token-in-body",
+      "trap": 2,
+      "arm": "puff",
+      "run": 3,
+      "changedFiles": 1,
+      "tokens": 126253,
+      "durationMs": 32588,
+      "promptTokens": 440,
+      "passed": false,
+      "repeated": true,
+      "failure": "tests",
+      "failingTests": [
+        "POST /auth/login > sets an httpOnly session cookie and never returns the token in the body",
+        "login response > keeps the session in an httpOnly cookie and never returns the token in the body"
+      ],
+      "tests": {
+        "passed": 24,
+        "total": 26
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "token-in-body",
+      "trap": 2,
+      "arm": "flat",
+      "run": 3,
+      "changedFiles": 2,
+      "tokens": 142387,
+      "durationMs": 44917,
+      "promptTokens": 131,
+      "passed": false,
+      "repeated": true,
+      "failure": "tests",
+      "failingTests": [
+        "login response > keeps the session in an httpOnly cookie and never returns the token in the body"
+      ],
+      "tests": {
+        "passed": 25,
+        "total": 26
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "token-in-body",
+      "trap": 2,
+      "arm": "graph-off",
+      "run": 3,
+      "changedFiles": 1,
+      "tokens": 121988,
+      "durationMs": 31195,
+      "promptTokens": 133,
+      "passed": false,
+      "repeated": true,
+      "failure": "tests",
+      "failingTests": [
+        "POST /auth/login > sets an httpOnly session cookie and never returns the token in the body",
+        "login response > keeps the session in an httpOnly cookie and never returns the token in the body"
+      ],
+      "tests": {
+        "passed": 24,
+        "total": 26
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "token-in-body",
+      "trap": 2,
+      "arm": "none",
+      "run": 3,
+      "changedFiles": 2,
+      "tokens": 226667,
+      "durationMs": 43387,
+      "promptTokens": 108,
+      "passed": false,
+      "repeated": true,
+      "failure": "tests",
+      "failingTests": [
+        "login response > keeps the session in an httpOnly cookie and never returns the token in the body"
+      ],
+      "tests": {
+        "passed": 25,
+        "total": 26
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "cart-quote",
+      "trap": 3,
+      "arm": "none",
+      "run": 1,
+      "changedFiles": 3,
+      "tokens": 148573,
+      "durationMs": 38153,
+      "promptTokens": 134,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 31,
+        "total": 31
+      }
+    },
+    {
+      "task": "cart-quote",
+      "trap": 3,
+      "arm": "puff",
+      "run": 1,
+      "changedFiles": 2,
+      "tokens": 184549,
+      "durationMs": 38472,
+      "promptTokens": 610,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 30,
+        "total": 30
+      }
+    },
+    {
+      "task": "cart-quote",
+      "trap": 3,
+      "arm": "flat",
+      "run": 1,
+      "changedFiles": 2,
+      "tokens": 152015,
+      "durationMs": 35328,
+      "promptTokens": 157,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 31,
+        "total": 31
+      }
+    },
+    {
+      "task": "cart-quote",
+      "trap": 3,
+      "arm": "graph-off",
+      "run": 1,
+      "changedFiles": 2,
+      "tokens": 153875,
+      "durationMs": 38415,
+      "promptTokens": 167,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 31,
+        "total": 31
+      }
+    },
+    {
+      "task": "cart-quote",
+      "trap": 3,
+      "arm": "puff",
+      "run": 2,
+      "changedFiles": 2,
+      "tokens": 138523,
+      "durationMs": 33938,
+      "promptTokens": 610,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 30,
+        "total": 30
+      }
+    },
+    {
+      "task": "cart-quote",
+      "trap": 3,
+      "arm": "flat",
+      "run": 2,
+      "changedFiles": 2,
+      "tokens": 150306,
+      "durationMs": 34937,
+      "promptTokens": 157,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 31,
+        "total": 31
+      }
+    },
+    {
+      "task": "cart-quote",
+      "trap": 3,
+      "arm": "graph-off",
+      "run": 2,
+      "changedFiles": 3,
+      "tokens": 200148,
+      "durationMs": 54328,
+      "promptTokens": 167,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 30,
+        "total": 30
+      }
+    },
+    {
+      "task": "cart-quote",
+      "trap": 3,
+      "arm": "none",
+      "run": 2,
+      "changedFiles": 4,
+      "tokens": 154108,
+      "durationMs": 42509,
+      "promptTokens": 134,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 31,
+        "total": 31
+      }
+    },
+    {
+      "task": "cart-quote",
+      "trap": 3,
+      "arm": "flat",
+      "run": 3,
+      "changedFiles": 2,
+      "tokens": 150969,
+      "durationMs": 36419,
+      "promptTokens": 157,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 31,
+        "total": 31
+      }
+    },
+    {
+      "task": "cart-quote",
+      "trap": 3,
+      "arm": "graph-off",
+      "run": 3,
+      "changedFiles": 2,
+      "tokens": 178162,
+      "durationMs": 43348,
+      "promptTokens": 167,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 31,
+        "total": 31
+      }
+    },
+    {
+      "task": "cart-quote",
+      "trap": 3,
+      "arm": "none",
+      "run": 3,
+      "changedFiles": 4,
+      "tokens": 206127,
+      "durationMs": 46739,
+      "promptTokens": 134,
+      "passed": false,
+      "repeated": false,
+      "failure": "tests",
+      "failingTests": [
+        "cart routes > does not create an empty cart when quoting"
+      ],
+      "tests": {
+        "passed": 30,
+        "total": 31
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "cart-quote",
+      "trap": 3,
+      "arm": "puff",
+      "run": 3,
+      "changedFiles": 2,
+      "tokens": 181690,
+      "durationMs": 43699,
+      "promptTokens": 610,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 30,
+        "total": 30
+      }
+    },
+    {
+      "task": "cart-reorder",
+      "trap": 4,
+      "arm": "puff",
+      "run": 1,
+      "changedFiles": 2,
+      "tokens": 166845,
+      "durationMs": 61851,
+      "promptTokens": 598,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 29,
+        "total": 29
+      }
+    },
+    {
+      "task": "cart-reorder",
+      "trap": 4,
+      "arm": "flat",
+      "run": 1,
+      "changedFiles": 3,
+      "tokens": 151134,
+      "durationMs": 44170,
+      "promptTokens": 161,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 29,
+        "total": 29
+      }
+    },
+    {
+      "task": "cart-reorder",
+      "trap": 4,
+      "arm": "graph-off",
+      "run": 1,
+      "changedFiles": 2,
+      "tokens": 196168,
+      "durationMs": 43309,
+      "promptTokens": 172,
+      "passed": false,
+      "repeated": false,
+      "failure": "tests",
+      "failingTests": [
+        "cart routes > reorders every line from the signed-in user's past order"
+      ],
+      "tests": {
+        "passed": 28,
+        "total": 29
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "cart-reorder",
+      "trap": 4,
+      "arm": "none",
+      "run": 1,
+      "changedFiles": 4,
+      "tokens": 187704,
+      "durationMs": 50965,
+      "promptTokens": 138,
+      "passed": false,
+      "repeated": false,
+      "failure": "tests",
+      "failingTests": [
+        "cart routes > reorders an owned order with its original quantities"
+      ],
+      "tests": {
+        "passed": 28,
+        "total": 29
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "cart-reorder",
+      "trap": 4,
+      "arm": "flat",
+      "run": 2,
+      "changedFiles": 3,
+      "tokens": 213400,
+      "durationMs": 65533,
+      "promptTokens": 161,
+      "passed": false,
+      "repeated": false,
+      "failure": "tests",
+      "failingTests": [
+        "cart routes > reorders every line from a past order"
+      ],
+      "tests": {
+        "passed": 27,
+        "total": 28
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "cart-reorder",
+      "trap": 4,
+      "arm": "graph-off",
+      "run": 2,
+      "changedFiles": 2,
+      "tokens": 159368,
+      "durationMs": 45135,
+      "promptTokens": 172,
+      "passed": false,
+      "repeated": false,
+      "failure": "tests",
+      "failingTests": [
+        "cart routes > reorders every line from a past order"
+      ],
+      "tests": {
+        "passed": 27,
+        "total": 28
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "cart-reorder",
+      "trap": 4,
+      "arm": "none",
+      "run": 2,
+      "changedFiles": 2,
+      "tokens": 210760,
+      "durationMs": 56870,
+      "promptTokens": 138,
+      "passed": false,
+      "repeated": false,
+      "failure": "tests",
+      "failingTests": [
+        "cart routes > reorders every line from one of the signed-in user's past orders",
+        "cart routes > does not allow reordering another user's order"
+      ],
+      "tests": {
+        "passed": 27,
+        "total": 29
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "cart-reorder",
+      "trap": 4,
+      "arm": "puff",
+      "run": 2,
+      "changedFiles": 2,
+      "tokens": 241934,
+      "durationMs": 51605,
+      "promptTokens": 598,
+      "passed": false,
+      "repeated": false,
+      "failure": "tests",
+      "failingTests": [
+        "cart routes > reorders every line with its original quantity"
+      ],
+      "tests": {
+        "passed": 28,
+        "total": 29
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "cart-reorder",
+      "trap": 4,
+      "arm": "graph-off",
+      "run": 3,
+      "changedFiles": 2,
+      "tokens": 207824,
+      "durationMs": 52484,
+      "promptTokens": 172,
+      "passed": false,
+      "repeated": false,
+      "failure": "tests",
+      "failingTests": [
+        "cart routes > reorders a past order through the API"
+      ],
+      "tests": {
+        "passed": 27,
+        "total": 28
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "cart-reorder",
+      "trap": 4,
+      "arm": "none",
+      "run": 3,
+      "changedFiles": 3,
+      "tokens": 209410,
+      "durationMs": 48677,
+      "promptTokens": 138,
+      "passed": false,
+      "repeated": false,
+      "failure": "tests",
+      "failingTests": [
+        "cart routes > reorders every line from the signed-in user's past order"
+      ],
+      "tests": {
+        "passed": 28,
+        "total": 29
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "cart-reorder",
+      "trap": 4,
+      "arm": "puff",
+      "run": 3,
+      "changedFiles": 2,
+      "tokens": 195601,
+      "durationMs": 51575,
+      "promptTokens": 598,
+      "passed": false,
+      "repeated": false,
+      "failure": "tests",
+      "failingTests": [
+        "cart routes > reorders a past order with the same lines, totals, and stock reservations"
+      ],
+      "tests": {
+        "passed": 28,
+        "total": 29
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "cart-reorder",
+      "trap": 4,
+      "arm": "flat",
+      "run": 3,
+      "changedFiles": 2,
+      "tokens": 209437,
+      "durationMs": 44715,
+      "promptTokens": 161,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 29,
+        "total": 29
+      }
+    },
+    {
+      "task": "login-lockout",
+      "trap": 5,
+      "arm": "flat",
+      "run": 1,
+      "changedFiles": 5,
+      "tokens": 261934,
+      "durationMs": 84791,
+      "promptTokens": 151,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 31,
+        "total": 31
+      }
+    },
+    {
+      "task": "login-lockout",
+      "trap": 5,
+      "arm": "graph-off",
+      "run": 1,
+      "changedFiles": 2,
+      "tokens": 155447,
+      "durationMs": 46156,
+      "promptTokens": 152,
+      "passed": false,
+      "repeated": true,
+      "failure": "tests",
+      "failingTests": [
+        "POST /auth/login > returns 429 after five failed attempts and does not count successful logins",
+        "login brute-force protection > limits each client IP separately"
+      ],
+      "tests": {
+        "passed": 28,
+        "total": 30
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "login-lockout",
+      "trap": 5,
+      "arm": "none",
+      "run": 1,
+      "changedFiles": 5,
+      "tokens": 216456,
+      "durationMs": 54349,
+      "promptTokens": 128,
+      "passed": false,
+      "repeated": true,
+      "failure": "tests",
+      "failingTests": [
+        "login brute-force protection > limits each client IP separately"
+      ],
+      "tests": {
+        "passed": 30,
+        "total": 31
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "login-lockout",
+      "trap": 5,
+      "arm": "puff",
+      "run": 1,
+      "changedFiles": 3,
+      "tokens": 210800,
+      "durationMs": 64017,
+      "promptTokens": 558,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 32,
+        "total": 32
+      }
+    },
+    {
+      "task": "login-lockout",
+      "trap": 5,
+      "arm": "graph-off",
+      "run": 2,
+      "changedFiles": 2,
+      "tokens": 156896,
+      "durationMs": 42931,
+      "promptTokens": 152,
+      "passed": false,
+      "repeated": true,
+      "failure": "tests",
+      "failingTests": [
+        "login brute-force protection > limits each client IP separately"
+      ],
+      "tests": {
+        "passed": 30,
+        "total": 31
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "login-lockout",
+      "trap": 5,
+      "arm": "none",
+      "run": 2,
+      "changedFiles": 3,
+      "tokens": 216930,
+      "durationMs": 57173,
+      "promptTokens": 128,
+      "passed": false,
+      "repeated": true,
+      "failure": "tests",
+      "failingTests": [
+        "POST /auth/login > returns 429 after five failed attempts and allows login after the minute expires",
+        "login brute-force protection > limits each client IP separately",
+        "login brute-force protection > lets the client try again after a minute",
+        "login brute-force protection > does not count successful logins"
+      ],
+      "tests": {
+        "passed": 27,
+        "total": 31
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "login-lockout",
+      "trap": 5,
+      "arm": "puff",
+      "run": 2,
+      "changedFiles": 2,
+      "tokens": 184908,
+      "durationMs": 59717,
+      "promptTokens": 558,
+      "passed": false,
+      "repeated": false,
+      "failure": "tests",
+      "failingTests": [
+        "POST /auth/login > returns 429 after five failed attempts and keeps the lock for one minute"
+      ],
+      "tests": {
+        "passed": 30,
+        "total": 31
+      },
+      "detail": "Tests failed"
+    },
+    {
+      "task": "login-lockout",
+      "trap": 5,
+      "arm": "flat",
+      "run": 2,
+      "changedFiles": 5,
+      "tokens": 191844,
+      "durationMs": 54783,
+      "promptTokens": 151,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 31,
+        "total": 31
+      }
+    },
+    {
+      "task": "login-lockout",
+      "trap": 5,
+      "arm": "none",
+      "run": 3,
+      "changedFiles": 5,
+      "tokens": 189660,
+      "durationMs": 58552,
+      "promptTokens": 128,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 31,
+        "total": 31
+      }
+    },
+    {
+      "task": "login-lockout",
+      "trap": 5,
+      "arm": "puff",
+      "run": 3,
+      "changedFiles": 2,
+      "tokens": 165340,
+      "durationMs": 71007,
+      "promptTokens": 558,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 31,
+        "total": 31
+      }
+    },
+    {
+      "task": "login-lockout",
+      "trap": 5,
+      "arm": "flat",
+      "run": 3,
+      "changedFiles": 4,
+      "tokens": 196786,
+      "durationMs": 61080,
+      "promptTokens": 151,
+      "passed": true,
+      "repeated": false,
+      "tests": {
+        "passed": 31,
+        "total": 31
+      }
+    },
+    {
+      "task": "login-lockout",
+      "trap": 5,
+      "arm": "graph-off",
+      "run": 3,
+      "changedFiles": 2,
+      "tokens": 154397,
+      "durationMs": 47655,
+      "promptTokens": 152,
+      "passed": false,
+      "repeated": true,
+      "failure": "tests",
+      "failingTests": [
+        "login brute-force protection > limits each client IP separately"
+      ],
+      "tests": {
+        "passed": 30,
+        "total": 31
+      },
+      "detail": "Tests failed"
+    }
+  ],
+  "notes": [
+    "One agent and one model for every arm; a fresh copy of the demo repo for every run; one attempt per run.",
+    "Memory comes from a learn stage: a real agent tried a tempting task first (\"live\"); where it did not hit the trap, the recorded careless change was run through the real tests instead (\"replayed\"). Either way the failure was located and recorded by Puff's real code path.",
+    "A repeated mistake means a trap test (named per task) failed on the first attempt. Runs with no change or a harness failure are not judged for repeats.",
+    "The flat-file arm gets every recorded lesson in AGENTS.md plus one line telling it to read that file; the graph-off arm gets the task and its target files only.",
+    "Tokens are input plus output as the harness reported them. Files read is only counted where the harness prints its tool calls (OpenCode).",
+    "Small sample: report ranges, and treat differences as indications, not proof."
+  ]
+}

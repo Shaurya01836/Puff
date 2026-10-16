@@ -62,7 +62,38 @@ npm run puff -- bench-transfer --agent opencode --runs 3
 
 ### Results
 
-_Being measured: see the README for the latest numbers._
+#### Codex (CLI default model), 3 runs per trap and arm
+
+Run 16 Oct 2026. 60 runs, 15 judged per arm, none invalid. Raw runs: [`bench/results-transfer-codex.json`](../bench/results-transfer-codex.json).
+
+| Arm | Repeated the mistake | Passed everything | Average tokens (range) |
+|---|---|---|---|
+| none | 6 of 15 | 5 of 15 | 185,226 (135,431 to 226,667) |
+| **puff** | **2 of 15** | 10 of 15 | 160,152 (33,330 to 241,934) |
+| flat `AGENTS.md` | 3 of 15 | 11 of 15 | 175,382 (123,500 to 261,934) |
+| graph off | 7 of 15 | 5 of 15 | 165,359 (121,988 to 207,824) |
+
+Repeats by trap, of 3 runs per arm:
+
+| Trap | Transfer task | none | puff | flat | graph off |
+|---|---|---|---|---|---|
+| 1 Passwords never logged | `login-request-log` | 1 | 0 | 0 | 1 |
+| 2 Token only in an httpOnly cookie | `token-in-body` | 3 | 2 | 3 | 3 |
+| 3 Tax after the discount | `cart-quote` | 0 | 0 | 0 | 0 |
+| 4 Stock reserved through `addItem()` | `cart-reorder` | 0 | 0 | 0 | 0 |
+| 5 Rate limits reset after the window | `login-lockout` | 2 | 0 | 0 | 3 |
+
+**Reading it.**
+
+- **The graph is what moves the lessons.** With the graph off Codex repeated the mistake 7 times, as often as with no memory at all (6): the lessons are in FalkorDB in both cases, but only the graph's choice puts the right one in front of the agent.
+- **A flat file was nearly as good as Puff** (3 repeats against 2, 11 passes against 10). With five lessons a flat file holds them all; the difference is not large enough to call. Where a flat file cannot follow is a lesson that went stale after an edit or was learned in a merge that was reverted. That behaviour is tested (`trust.test.ts`, `graph-decisions.test.ts`) but **not measured** against a flat file here.
+- **Two traps never caught Codex** (3 and 4: no repeat in any arm), so they say nothing. On the three that did (1, 2 and 5: 9 runs per arm) the repeats were 6, 2, 3 and 7 of 9. Trap 2 is the weak spot: Puff helped once in three; the task asks Codex to do something Puff's lesson says is wrong, and the right answer is to refuse.
+- **All five lessons were replayed.** Codex did not fall into the trap on any learn task, so the recorded careless change was run through the real tests and the real failure locator, and that is what Puff learned from.
+- **Small sample.** One agent, one model, 15 runs per arm. Differences of a few runs are indications, not proof. Token averages vary by about 2x within an arm.
+
+#### OpenCode
+
+The OpenCode run (a free model, much slower: several runs hit the 600 s limit and were retried) was still running when this was written. Its results will be added here and to the README when it finishes.
 
 ## Token use (the first benchmark)
 

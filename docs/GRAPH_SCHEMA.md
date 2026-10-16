@@ -72,6 +72,10 @@ Puff stores **references, not code**: path, line range, signature and hash. The 
 | `Decision` | `id`, `text`, `status` (`active` / `superseded`), `stale`, `staleAt?`, `supersededAt?`, `createdAt` | Why something was chosen (**semantic memory**) |
 | `Procedure` | `id`, `text`, `createdAt` | How things are done here (**procedural memory**) |
 | `ContextPack` | `id`, `role`, `tokenEstimate`, `prompt`, `createdAt` | Exactly what an agent was given, including the prompt text |
+| `Commit` | `sha`, `at?` | A merge Puff made, or the revert of one (P16) |
+| `Module` | `id`, `name`, `size` | A folder of code, with `DEPENDS_ON {calls}` to other modules and `KNOWS {runs, wins}` from agents (P17) |
+| `Trace` | `id`, `kind`, `reason`, `steps`, `queries`, `ms`, `rows`, `graphOff`, `at` | The queries behind one decision (P13) |
+| `MergePreview` | `id`, `data`, `at` | What a merge was predicted to change, made on a `GRAPH.COPY` (P18) |
 
 ### Relationships
 
@@ -496,8 +500,13 @@ Two tasks conflict when they target the **same function**, or functions **one `C
 MATCH (:Task {id: $id})-[:TARGETS]->(s:Symbol)
 MATCH (s)-[:CALLS*0..1]-(near:Symbol)<-[:TARGETS]-(other:Task)
 WHERE other.id <> $id AND other.status IN $statuses
-RETURN DISTINCT other.id AS id
+// exists((s)-[:CALLS]->(near)) ignores the direction when both ends are bound; a match does not
+OPTIONAL MATCH (s)-[c:CALLS]->(near)
+RETURN DISTINCT other.id AS id, s.id AS mine, near.id AS theirs,
+       CASE WHEN s = near THEN 'same' WHEN c IS NOT NULL THEN 'calls' ELSE 'called' END AS how
 ```
+
+The last three columns turn the overlap into a reason (Q31): "both change audit()", "login() calls audit(), which task_03 changes", "task_03 changes login(), which calls audit()".
 
 Two rules are applied on top of the query, in code:
 
@@ -821,7 +830,7 @@ MATCH (f:Failure {id: mid})<-[:INCLUDED]-(:ContextPack)<-[:RECEIVED]-(se:Session
 RETURN f.id AS id, count(DISTINCT se) AS repeated
 ```
 
-plus each agent's record (`(a:Agent)-[:RAN]->(s:Session)` outcomes). The score (`trustScore`, plain TypeScript so every step has a reason): start at 0.6; +0.1 per confirmation (2 at most); +0.08 per session that succeeded with it in context (3 at most); −0.15 per repeat despite being shown (2 at most); −0.2 if stale; −0.4 if learned in a reverted merge, else −0.3 if derived from one; ±0.1 for the learning agent's success rate once it has 3 runs. Clamped to 0..1.
+plus each agent's record (`(a:Agent)-[:RAN]->(s:Session)` outcomes). The score (`trustScore`, plain TypeScript so every step has a reason): start at 0.6 (a repeat despite being shown does not lower it: the mistake was real, and the reasons note that the wording did not land); +0.1 per confirmation (2 at most); +0.08 per session that succeeded with it in context (3 at most); −0.2 if stale; −0.4 if learned in a reverted merge, else −0.3 if derived from one; ±0.1 for the learning agent's success rate once it has 3 runs. Clamped to 0..1.
 
 **Decisions it changes:** context ranking adds `(1 − trust) × 20` to a lesson's rank, so less trusted lessons sink; below 0.35 a lesson is left out, and the context trace lists it with its reasons; below 0.5 it is included but marked "low confidence: …" in the prompt. Confirming a lesson (`confirm_memory`) adds trust and can bring it back. The trust is stored on the `INCLUDED` edge and shown as a bar in the task's Context tab. Tests: `trust.test.ts`.
 
