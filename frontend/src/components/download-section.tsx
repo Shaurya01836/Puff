@@ -3,10 +3,7 @@
 import { useState } from "react";
 import { Download, Terminal, Check, Copy, Laptop, Monitor, ShieldCheck } from "lucide-react";
 import { TechnicalGridContainer } from "./technical-grid";
-
-/** The newest release's installer. The file is always called Puff-Setup.exe, so this link never changes. */
-const INSTALLER_URL = "https://github.com/Shaurya01836/Puff/releases/latest/download/Puff-Setup.exe";
-const RELEASES_URL = "https://github.com/Shaurya01836/Puff/releases/latest";
+import { INSTALLER_URL, LATEST_RELEASE_URL } from "@/lib/site";
 
 export function DownloadSection() {
   const [copiedCmd, setCopiedCmd] = useState(false);
@@ -50,7 +47,6 @@ export function DownloadSection() {
               <Download className="h-4 w-4" />
               Download for Windows (.exe)
             </a>
-
             <button
               onClick={copyInstall}
               className="inline-flex w-full items-center justify-center gap-2.5 whitespace-nowrap border border-slate-700 bg-slate-900 px-6 py-3.5 font-mono text-xs text-slate-100 transition-[transform,background-color,border-color] duration-150 ease-out hover:bg-slate-800 active:scale-[0.97] sm:w-auto"
@@ -73,11 +69,11 @@ export function DownloadSection() {
             <span className="text-slate-300">Run anyway</span>. macOS and Linux: run from source with
             the command above.{" "}
             <a
-              href={RELEASES_URL}
+              href={LATEST_RELEASE_URL}
               rel="noopener"
               className="text-slate-300 underline underline-offset-2 hover:text-white"
             >
-              All releases
+              Release notes
             </a>
           </p>
 

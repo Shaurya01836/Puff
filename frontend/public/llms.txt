@@ -1,0 +1,49 @@
+# Puff
+
+> Puff gives a team of real coding agents one shared graph memory. Every lesson is tied to the code it came from — the file, the symbol, the failure and the fix — so the next agent starts with the answer instead of repeating the mistake.
+
+Puff is a Windows desktop app plus a TypeScript monorepo. Give it a goal and a planner agent splits it into tasks; Puff routes each task to the agent strongest at it (Claude Code, Codex or OpenCode), compiles a small ContextPack and stores the reason behind every item in it, runs independent tasks in parallel in separate git worktrees, re-runs the project's own check after every merge, and writes what happened back into the graph. A task that fails is retried with the lesson, then escalated.
+
+- Website: https://puff-puce-one.vercel.app
+- Source: https://github.com/Shaurya01836/Puff
+- Graph: FalkorDB (Redis-based graph database), one graph per project, queried with Cypher
+- Stack: TypeScript, Node 22, Electron + React + Tailwind, Docker Compose, MCP
+- Status: built for Graph Hacks 2026 (Track 02: Agent Memory & Coordination); phases P0–P11 are in
+
+## Install
+
+- [Download for Windows](https://github.com/Shaurya01836/Puff/releases/latest/download/Puff-Setup.exe): Windows 10/11, 64-bit, about 115 MB. The installer is not code-signed yet, so Windows shows an unknown-publisher prompt: choose *More info*, then *Run anyway*.
+- [Install guide](https://github.com/Shaurya01836/Puff/blob/main/docs/INSTALL.md)
+- [All releases](https://github.com/Shaurya01836/Puff/releases)
+
+## Run from source
+
+```bash
+git clone https://github.com/Shaurya01836/Puff.git
+cd Puff && npm install
+npm run db:up                      # FalkorDB on 6379 (browser UI on http://localhost:3000)
+npm run puff -- index demo/shop-api   # index the demo repo into its graph
+npm run puff -- impact login          # what a change to login() would touch
+npm run puff -- seed --force          # sample tasks, sessions and memory
+npm run puff -- project add C:\work\my-app
+```
+
+Prerequisites: Node 22.12+, git, Docker (or falkordblite), and at least one of the `claude`, `codex` or `opencode` CLIs. macOS and Linux run from source.
+
+## Documentation
+
+- [README](https://github.com/Shaurya01836/Puff/blob/main/README.md)
+- [Architecture, platform and deployment](https://github.com/Shaurya01836/Puff/blob/main/docs/ARCHITECTURE.md)
+- [Graph schema, database and Cypher queries](https://github.com/Shaurya01836/Puff/blob/main/docs/GRAPH_SCHEMA.md)
+- [Benchmark](https://github.com/Shaurya01836/Puff/blob/main/docs/BENCHMARK.md)
+- [Install guide](https://github.com/Shaurya01836/Puff/blob/main/docs/INSTALL.md)
+
+## Facts worth knowing
+
+- Puff does not rely on an agent remembering anything: it writes the facts itself (diffs, test results, outcomes, measured tokens). Agents add their reasoning through the Puff MCP server (`record_decision`, `handoff`) or a `<puff-report>` block in their output.
+- Memory stays correct. Editing a function marks what was learned about *that function* possibly outdated, not the whole file; a replaced decision is kept and linked with `SUPERSEDES`; a memory item carries a `valid` or `stale` flag.
+- Routing uses agent strengths plus a learned success rate (graph query Q10) and scheduling is overlap-aware (Q8): a task touching the same code as one already running waits instead of merging blind.
+- The Puff MCP server is how a Claude Code or OpenCode session reads and writes memory mid-task: `get_context`, `impact_of`, `why`, `record_decision`, `handoff`. See the MCP section of the architecture doc.
+- Nodes and relationships: `File`, `Symbol`, `Task`, `Session`, `Failure`, `Solution`, `Decision`, `Procedure`, `Handoff`, `ContextPack`, `Agent`, `Capability`. The whole schema, its indexes and all 18 Cypher queries are in the graph schema doc.
+- The app and the CLI share one project list (`~/.puff/projects.json`); each project is a folder, its own graph (`puff_<name>`) and its own test command. A project with no tests is type-checked instead, and Puff says so.
+- Puff works on TypeScript and JavaScript repositories; Python, Go and other languages are not understood yet.

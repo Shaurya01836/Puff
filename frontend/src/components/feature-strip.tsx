@@ -161,7 +161,7 @@ export function FeatureStrip() {
   const Icon = feature.icon;
 
   return (
-    <section id="platform" className="scroll-mt-24">
+    <section className="scroll-mt-24">
       <div className="text-center">
         <h2 className="font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">
           What you can do in Puff
