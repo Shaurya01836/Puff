@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Activity } from 'lucide-react';
 import type { BackendInfo, GraphData, ProjectSummary, Task } from '@puff/shared';
 import { MOCK_PROJECT_ID } from '@puff/shared/mocks';
 import type { MascotState } from '@/components/Mascot';
 import { Sidebar, type Screen } from '@/components/Sidebar';
 import { TopBar } from '@/components/TopBar';
 import { Notice } from '@/components/ui';
+import { cn } from '@/lib/cn';
 import { puff } from '@/lib/api';
 import { useChat, useLoad, useTasks } from '@/lib/hooks';
 import { NewTaskDialog, type SymbolOption } from '@/components/NewTaskDialog';
@@ -15,26 +15,19 @@ import { Agents } from '@/screens/Agents';
 import { Board, type BoardAction } from '@/screens/Board';
 import { MemoryGraph } from '@/screens/MemoryGraph';
 import { Team } from '@/screens/Team';
-import { TaskDetail, type Tab } from '@/screens/TaskDetail';
 import { Setup } from '@/screens/Setup';
 import { Welcome } from '@/screens/Welcome';
+import pkg from '../../../package.json';
 
 const TITLES: Record<Screen, { title: string; subtitle: string }> = {
   graph: { title: 'Memory graph', subtitle: 'Code and what the team learned about it' },
-  board: { title: 'Board', subtitle: 'Tasks, owners and what they wait on' },
+  board: { title: 'Tasks', subtitle: 'What each agent is doing, and why the graph chose it' },
   team: { title: 'Team', subtitle: 'Who did what, and who handed what to whom' },
   agents: { title: 'Agents', subtitle: 'Strengths, results and savings' },
 };
 
-const TICKER_MESSAGES = [
-  'CODEX RESOLVED 2 CALLERS OF LOGIN()',
-  'CLAUDE CODE WROTE 1 LESSON TO GRAPH',
-  'OPENCODE PINNED DOCS/API/REFERENCE.MD',
-  'GRAPH +1 SYMBOL · +3 EDGES',
-  'CLAUDE CODE VERIFIED CONTEXTPACK',
-  'CODEX OPENED WORKTREE WT_SESSION',
-  'FALKORDB CHECKPOINT WRITTEN TO DISK',
-];
+/** The app's own version, shown in the status bar */
+const VERSION = pkg.version;
 
 /** What the data badge says: honest about which parts are live and which are mocked. */
 function badgeFor(info?: BackendInfo): string | undefined {
@@ -49,15 +42,18 @@ interface NoticeState {
 }
 
 export function App() {
-  const [screen, setScreen] = useState<Screen>('graph');
-  const [openTask, setOpenTask] = useState<string>();
-  /** The tab a task opens on when a button sent the person straight to it (Take over opens the terminal) */
-  const [openTaskTab, setOpenTaskTab] = useState<Tab>();
+  const [screen, setScreen] = useState<Screen>('board');
+  /** The task shown next to the task list */
+  const [selectedTask, setSelectedTask] = useState<string>();
+  /** A task the person took over: its panel opens on the terminal */
+  const [terminalFor, setTerminalFor] = useState<string>();
   /** "Pause after the current tasks" was pressed: nothing new starts, the running ones finish */
   const [pausing, setPausing] = useState(false);
   const [running, setRunning] = useState(false);
   const [graph, setGraph] = useState<GraphData>();
   const [notice, setNotice] = useState<NoticeState>();
+  /** The last thing that really happened (an agent step, a memory written, a run ending), for the status bar */
+  const [lastEvent, setLastEvent] = useState<string>();
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -110,6 +106,9 @@ export function App() {
   const graphTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => {
     const off = puff.onEvent((e) => {
+      if (e.type === 'activity') setLastEvent(`${e.step.taskId} · ${e.step.text}`);
+      if (e.type === 'memory') setLastEvent(e.event.text);
+      if (e.type === 'run' && e.message) setLastEvent(e.message);
       if (e.type === 'session:update' || (e.type === 'task:update' && e.task.depth)) {
         setAgentsTick((t) => t + 1);
       }
@@ -119,7 +118,8 @@ export function App() {
       }
       if (e.type === 'project') {
         // A different project (or different settings): forget what belonged to the old one.
-        setOpenTask(undefined);
+        setSelectedTask(undefined);
+        setTerminalFor(undefined);
         setRunning(false);
         setGraph(undefined);
         setNotice(undefined);
@@ -180,9 +180,10 @@ export function App() {
     return `${s.files} files · ${s.symbols} symbols · ${s.calls} calls`;
   };
 
-  const closeTask = useCallback(() => {
-    setOpenTask(undefined);
-    setOpenTaskTab(undefined);
+  /** Show a task on the Tasks screen (from the chat, the team timeline or a board action) */
+  const openTask = useCallback((id: string) => {
+    setSelectedTask(id);
+    setScreen('board');
   }, []);
 
   /** Something the person asked of a task from the board */
@@ -205,8 +206,8 @@ export function App() {
           await puff.markTaskDone(a.id);
           return say('good', 'Marked done. Whatever was waiting for it can start.');
         case 'takeover':
-          setOpenTaskTab('terminal');
-          setOpenTask(a.id);
+          setTerminalFor(a.id);
+          openTask(a.id);
           return;
         case 'switch':
           await puff.reassignTask(a.id, a.agent);
@@ -272,34 +273,14 @@ export function App() {
     );
   }
 
-  const [tickerIndex, setTickerIndex] = useState(0);
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTickerIndex((i) => (i + 1) % TICKER_MESSAGES.length);
-    }, 4000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const tickerText = notice?.text ?? TICKER_MESSAGES[tickerIndex];
+  const working = running || tasks.some((t) => t.status === 'running' || t.status === 'verifying');
+  const statusText =
+    notice?.text ??
+    lastEvent ??
+    (working ? 'The team is working' : info?.noProject ? 'No project yet' : 'Idle');
 
   return (
     <div className="flex h-full flex-col bg-abyss text-ink">
-      {/* Top window chrome matching Screenshot 3 & 4 */}
-      <div className="flex h-8 shrink-0 items-center gap-3 border-b border-line bg-surface-2 px-4 select-none">
-        <div className="flex gap-1.5">
-          <span className="size-2 bg-slate-700" />
-          <span className="size-2 bg-slate-700" />
-          <span className="size-2 bg-slate-700" />
-        </div>
-        <span className="font-mono text-[11px] text-slate-500">
-          Puff — {info?.projectName ?? 'puff_demo'}
-        </span>
-        <span className="ml-auto hidden items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-emerald-400 sm:flex">
-          <span className="size-1.5 animate-pulse-dot rounded-full bg-emerald-400" />
-          graph connected
-        </span>
-      </div>
-
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <Sidebar
           screen={screen}
@@ -348,13 +329,19 @@ export function App() {
             {!info?.noProject && screen === 'board' && (
               <Board
                 tasks={tasks}
-                onOpen={setOpenTask}
+                selectedId={selectedTask}
+                onSelect={(id) => {
+                  setSelectedTask(id);
+                  if (id !== terminalFor) setTerminalFor(undefined);
+                }}
+                terminalFor={terminalFor}
+                symbols={symbols}
                 onAction={boardAction}
                 onHint={(text) => setNotice({ tone: 'warn', text })}
               />
             )}
             {!info?.noProject && screen === 'team' && (
-              <Team events={timeline} onOpenTask={setOpenTask} />
+              <Team events={timeline} onOpenTask={openTask} />
             )}
             {!info?.noProject && screen === 'agents' && (
               <Agents agents={agents} savings={savings} mock={savingsMocked} />
@@ -377,23 +364,29 @@ export function App() {
           tab={panelTab}
           onTab={setPanelTab}
           team={timeline}
-          onOpenTask={setOpenTask}
+          onOpenTask={openTask}
           teamBusy={tasks.some((t) => t.status === 'running' || t.status === 'verifying')}
         />
       </div>
 
-      {/* Bottom status bar ticker matching Screenshot 3 & 4 */}
-      <footer className="flex h-7 shrink-0 items-center justify-between gap-4 border-t border-line bg-surface-2 px-4 font-mono text-[10px] uppercase tracking-widest text-slate-500 select-none">
-        <span className="inline-flex shrink-0 items-center gap-1.5 text-slate-400">
-          <Activity className="size-3.5 text-emerald-400" />
-          FALKORDB://{(info?.projectName ?? 'puff_demo').toUpperCase()}
+      {/* Status bar: what the app is connected to and the last thing that really happened */}
+      <footer className="flex h-7 shrink-0 items-center justify-between gap-4 border-t border-line bg-surface-2 px-4 text-[11px] text-slate-500 select-none">
+        <span
+          className="inline-flex shrink-0 items-center gap-1.5 text-slate-400"
+          title={live ? `Connected to FalkorDB, graph ${info?.graphName ?? ''}` : info?.error}
+        >
+          <span className={cn('size-1.5 rounded-full', live ? 'bg-emerald-400' : 'bg-amber-400')} />
+          {live
+            ? `FalkorDB · ${info?.graphName ?? info?.projectName}`
+            : 'Not connected · sample data'}
         </span>
         <span className="hidden min-w-0 flex-1 items-center gap-1.5 sm:flex">
-          <span className="size-1.5 shrink-0 animate-pulse-dot rounded-full bg-emerald-400" />
-          <span className="truncate text-slate-300">{tickerText}</span>
-          <span className="animate-caret shrink-0 text-emerald-400">▌</span>
+          {working && (
+            <span className="size-1.5 shrink-0 animate-pulse-dot rounded-full bg-sky-400" />
+          )}
+          <span className="truncate text-slate-300">{statusText}</span>
         </span>
-        <span className="shrink-0 text-slate-500">V0.1.0</span>
+        <span className="shrink-0 font-mono text-slate-500">v{VERSION}</span>
       </footer>
 
       {newTaskOpen && (
@@ -428,15 +421,6 @@ export function App() {
             await puff.removeProject(settingsFor.id, { deleteMemory });
             reloadProjects();
           }}
-        />
-      )}
-      {openTask && (
-        <TaskDetail
-          key={openTask}
-          taskId={openTask}
-          onClose={closeTask}
-          symbols={symbols}
-          initialTab={openTaskTab}
         />
       )}
       {notice && (

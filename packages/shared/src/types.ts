@@ -63,8 +63,18 @@ export interface Task {
    * score lower by PageRank and betweenness over CALLS. 0.9 and up counts as risky by default.
    */
   risk?: number;
+  /** The graph's latest answers for this task, read from its traces: who should do it, and whether it may start now */
+  why?: TaskWhy;
   createdAt: number;
   updatedAt: number;
+}
+
+/** The newest route and schedule decision recorded for a task (see GraphTrace) */
+export interface TaskWhy {
+  route?: string;
+  schedule?: string;
+  /** The decision was made with the graph turned off (PUFF_GRAPH=off) */
+  graphOff?: boolean;
 }
 
 /** One attempt on a task */

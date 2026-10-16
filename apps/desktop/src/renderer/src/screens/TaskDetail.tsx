@@ -68,8 +68,8 @@ async function loadDetail(taskId: string): Promise<Detail> {
   return { task, sessions, pack, why, traces, mergePreview, planPreview };
 }
 
-export type Tab =
-  'activity' | 'terminal' | 'context' | 'changes' | 'preview' | 'why' | 'graph' | 'sessions';
+/** The four views of a task: what is happening now, what it changed, why the graph decided what it did, and its history */
+export type Tab = 'live' | 'changes' | 'why' | 'history';
 
 const CLIS: { cli: TerminalCli; label: string }[] = [
   { cli: 'claude-code', label: 'Claude Code' },
@@ -82,24 +82,30 @@ const AGENTS: AgentName[] = ['claude-code', 'codex', 'opencode'];
 /** The statuses in which an agent (or Puff's own checks) is working on the task right now */
 const WORKING = new Set<Task['status']>(['running', 'verifying']);
 
-export function TaskDetail({
+/**
+ * One task, shown next to the task list: its live session (the agent's steps, or a terminal the person opened),
+ * what it changed, why the graph routed and scheduled it the way it did, and every earlier attempt.
+ */
+export function TaskPanel({
   taskId,
-  onClose,
   symbols,
-  initialTab,
+  showTerminal: terminalAsked,
+  onRemoved,
 }: {
   taskId: string;
-  onClose: () => void;
   symbols: SymbolOption[];
-  /** Open on this tab (the board's Take over button opens the terminal) */
-  initialTab?: Tab;
+  /** Open on the terminal (the board's Take over button) */
+  showTerminal?: boolean;
+  /** The task was deleted from here */
+  onRemoved?: () => void;
 }) {
   // Bumped after an action, so what is shown is read again
   const [tick, setTick] = useState(0);
   const detail = useLoad(() => loadDetail(taskId), [taskId, tick]);
   const diff = useLoad(() => puff.getTaskDiff(taskId), [taskId, tick, detail?.task.status]);
-  // The tab the person picked; until they pick one, a task being worked on opens on its activity
-  const [picked, setPicked] = useState<Tab | undefined>(initialTab);
+  // The tab the person picked; until they pick one it follows the task (live while an agent works)
+  const [picked, setPicked] = useState<Tab | undefined>(terminalAsked ? 'live' : undefined);
+  const [terminalOpen, setTerminalOpen] = useState(Boolean(terminalAsked));
   const terms = useTerminals(taskId);
   const [noting, setNoting] = useState(false);
   const [noteText, setNoteText] = useState('');
@@ -107,11 +113,11 @@ export function TaskDetail({
   const [editing, setEditing] = useState(false);
   const [problem, setProblem] = useState<string>();
 
-  const act = async (action: () => Promise<unknown>, closeAfter = false) => {
+  const act = async (action: () => Promise<unknown>, removed = false) => {
     setProblem(undefined);
     try {
       await action();
-      if (closeAfter) onClose();
+      if (removed) onRemoved?.();
       else setTick((t) => t + 1);
     } catch (err) {
       setProblem((err as Error).message);
@@ -119,17 +125,20 @@ export function TaskDetail({
   };
   const status = detail?.task.status;
   const working = status !== undefined && WORKING.has(status);
-  const tab: Tab = picked ?? (working ? 'activity' : 'context');
-  const setTab = setPicked;
+  const fallback: Tab =
+    working || terms.length > 0 ? 'live' : status === 'done' ? 'changes' : 'why';
+  const tab: Tab = picked ?? fallback;
   const stepCount = activity.reduce((n, g) => n + g.steps.length, 0);
   const canEdit = status === 'planned' || status === 'ready' || status === 'failed';
   const canRemove = (status === 'planned' || status === 'ready') && detail?.sessions.length === 0;
   const mine = Boolean(detail?.task.worktree?.endsWith('-manual'));
+  const isPlan = detail?.task.type === 'plan';
   const openCli = async (cli: TerminalCli, start = false) => {
     setProblem(undefined);
     try {
       await openTerminal(taskId, cli, start);
-      setPicked('terminal');
+      setTerminalOpen(true);
+      setPicked('live');
       setTick((t) => t + 1);
     } catch (err) {
       setProblem((err as Error).message);
@@ -148,281 +157,279 @@ export function TaskDetail({
     [taskId],
   );
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !editing && onClose();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, editing]);
+  const tabs: [Tab, string, number | undefined][] = [
+    ['live', 'Live', stepCount || undefined],
+    ['changes', isPlan ? 'Dry run' : 'Changes', isPlan ? undefined : diff?.files.length],
+    ['why', 'Why', detail?.traces.length || undefined],
+    ['history', 'History', detail?.sessions.length || undefined],
+  ];
 
   return (
-    <div
-      className="fixed inset-0 z-20 flex justify-end bg-abyss/60 backdrop-blur-[2px]"
-      onClick={onClose}
-    >
-      <aside
-        className={cn(
-          'flex h-full animate-slide-in flex-col border-l border-line-strong bg-surface shadow-[-30px_0_60px_-20px_rgb(0_0_0/0.7)]',
-          tab === 'terminal' ? 'w-[min(1000px,94vw)]' : 'w-[620px]',
-        )}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-label="Task detail"
-      >
-        <header className="border-b border-line p-6 pb-0">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <div className="mb-1.5 flex items-center gap-2">
-                <span className="font-mono text-[11px] text-ink-3">{taskId}</span>
-                {detail && <StatusPill status={detail.task.status} />}
-              </div>
-              <h2 className="font-display text-xl leading-snug font-semibold">
-                {detail?.task.title ?? 'Loading…'}
-              </h2>
-            </div>
-            <button
-              onClick={onClose}
-              className="rounded-lg p-1.5 text-ink-3 hover:bg-surface-3 hover:text-ink"
-              aria-label="Close"
-            >
-              <X className="size-4" />
-            </button>
-          </div>
+    <section className="flex h-full min-h-0 flex-col bg-surface" aria-label="Task">
+      <header className="border-b border-line px-6 pt-5">
+        <div className="mb-1.5 flex items-center gap-2">
+          <span className="font-mono text-[11px] text-ink-3">{taskId}</span>
+          {detail && <StatusPill status={detail.task.status} />}
+        </div>
+        <h2 className="font-display text-lg leading-snug font-semibold">
+          {detail?.task.title ?? 'Loading…'}
+        </h2>
 
-          {detail && (
-            <div className="mt-4 flex flex-wrap items-center gap-4">
-              <AgentChip agent={detail.task.assignedAgent} sub={detail.task.role} />
-              <Meta label="Type" value={detail.task.type} />
-              <Meta label="Complexity" value={detail.task.complexity} />
-              {detail.task.tokens && (
-                <Meta
-                  label="Tokens"
-                  value={formatTokens(detail.task.tokens.in + detail.task.tokens.out)}
-                />
-              )}
-            </div>
-          )}
-
-          {detail && status !== 'done' && (
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              {working && (
-                <ActionButton
-                  icon={Square}
-                  label="Stop"
-                  title="Stop this task's agent. The rest of the team keeps working."
-                  onClick={() => void act(() => puff.stopTask(taskId))}
-                />
-              )}
-              {status === 'failed' && (
-                <ActionButton
-                  icon={RotateCcw}
-                  label="Retry"
-                  title="Put it back in the queue; the earlier attempts stay in its history"
-                  onClick={() => void act(() => puff.retryTask(taskId))}
-                />
-              )}
-              {canEdit && (
-                <ActionButton icon={Pencil} label="Edit" onClick={() => setEditing(true)} />
-              )}
-              <Menu
-                label="Switch agent"
-                title="Give this task to another agent (it is stopped first if it is running)"
-                items={AGENTS.map((a) => ({
-                  label: AGENT_META[a].label,
-                  hint:
-                    a === (detail.task.assignedAgent ?? detail.task.preferredAgent)
-                      ? 'current'
-                      : undefined,
-                  onSelect: () => void act(() => puff.reassignTask(taskId, a)),
-                }))}
-              />
-              <Menu
-                label="Take over"
-                icon={<Terminal className="size-3.5" />}
-                title="Stop the agent and work on it yourself in a real terminal"
-                items={[
-                  ...CLIS.filter((c) => c.cli !== 'shell').map((c) => ({
-                    label: `Start ${c.label} on this task`,
-                    hint: 'Watch it work in its own screen. Uses tokens.',
-                    onSelect: () => void openCli(c.cli, true),
-                  })),
-                  ...CLIS.map((c) => ({
-                    label: c.cli === 'shell' ? c.label : `Open ${c.label} and wait`,
-                    hint:
-                      c.cli === 'shell'
-                        ? "A shell in the task's folder"
-                        : "Its own screen, idle, in the task's folder",
-                    onSelect: () => void openCli(c.cli),
-                  })),
-                ]}
-              />
-              <ActionButton
-                icon={StickyNote}
-                label={detail.task.note ? 'Edit note' : 'Add note'}
-                title="A note the next attempt on this task must follow"
-                onClick={() => {
-                  setNoteText(detail.task.note ?? '');
-                  setNoting((n) => !n);
-                }}
-              />
-              <ActionButton
-                icon={Check}
-                label="Mark done"
-                title="You finished it yourself"
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      'Mark this task as done? Use this when you finished it yourself.',
-                    )
-                  )
-                    void act(() => puff.markTaskDone(taskId));
-                }}
-              />
-              {canRemove && (
-                <ActionButton
-                  icon={Trash2}
-                  label="Remove"
-                  title="Delete this task. It has never run, so nothing is lost."
-                  danger
-                  onClick={() => void act(() => puff.removeTask(taskId), true)}
-                />
-              )}
-            </div>
-          )}
-          {noting && (
-            <form
-              className="mt-3 flex flex-col gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                setNoting(false);
-                void act(() => puff.addTaskNote(taskId, noteText));
-              }}
-            >
-              <textarea
-                autoFocus
-                value={noteText}
-                onChange={(e) => setNoteText(e.target.value)}
-                rows={3}
-                aria-label="Note for the next attempt"
-                placeholder="Tell the next attempt something it must know or do, e.g. “reuse the existing rounding helper”"
-                className="resize-none rounded-xl border border-line bg-surface-2 p-3 text-sm outline-none focus:border-brand/60"
-              />
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white"
-                >
-                  Save note
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setNoting(false)}
-                  className="rounded-lg border border-line-strong px-3 py-1.5 text-xs text-ink-2"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          )}
-          {!noting && detail?.task.note && (
-            <p className="mt-3 rounded-xl border border-line bg-surface-2/60 p-3 text-[13px] leading-snug text-ink-2">
-              <b className="font-medium text-ink">Your note: </b>
-              {detail.task.note}
-            </p>
-          )}
-          {mine && working && (
-            <p
-              role="alert"
-              className="mt-3 rounded-xl border border-warn/40 bg-warn/10 p-3 text-[13px] leading-snug text-ink-2"
-            >
-              <b className="font-medium text-warn">
-                An agent is also running this task in the background.
-              </b>{' '}
-              What you see under Activity is that background run, not your terminal. If it succeeds
-              it merges its own result. Press <b className="font-medium">Stop</b> above if you want
-              to work on it yourself.
-            </p>
-          )}
-          {mine && !working && status !== 'done' && (
-            <p className="mt-3 rounded-xl border border-brand/30 bg-brand/10 p-3 text-[13px] leading-snug text-ink-2">
-              <b className="font-medium text-ink">You took this task over.</b> Puff will not run it.
-              Work in its terminal, then press{' '}
-              <b className="font-medium">Verify and merge my changes</b> in the Terminal tab.
-            </p>
-          )}
-          {problem && <p className="mt-3 text-sm text-bad">{problem}</p>}
-
-          <div className="mt-5 flex gap-1">
-            {(
-              [
-                ['activity', `Activity${stepCount ? ` · ${stepCount}` : ''}`],
-                ['terminal', `Terminal${terms.length ? ` · ${terms.length}` : ''}`],
-                ['context', 'Context received'],
-                ['changes', `Changes${diff ? ` · ${diff.files.length}` : ''}`],
-                ['preview', detail?.task.type === 'plan' ? 'Dry run' : 'Merge preview'],
-                ['why', 'Why?'],
-                [
-                  'graph',
-                  `Graph trace${detail?.traces.length ? ` · ${detail.traces.length}` : ''}`,
-                ],
-                ['sessions', `Sessions${detail ? ` · ${detail.sessions.length}` : ''}`],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                onClick={() => setTab(id)}
-                className={cn(
-                  '-mb-px border-b-2 px-3 py-2 text-sm transition-colors',
-                  tab === id
-                    ? 'border-brand text-ink'
-                    : 'border-transparent text-ink-3 hover:text-ink-2',
-                )}
-              >
-                {label}
-                {id === 'activity' && working && (
-                  <span className="ml-1.5 inline-block size-1.5 animate-pulse rounded-full bg-info align-middle" />
-                )}
-              </button>
-            ))}
-          </div>
-        </header>
-
-        <div className="min-h-0 flex-1 overflow-y-auto p-6">
-          {detail && tab === 'activity' && <ActivityFeed groups={activity} active={working} />}
-          {detail && tab === 'terminal' && (
-            <TerminalTab
-              taskId={taskId}
-              terms={terms}
-              onOpen={openCli}
-              onLanded={() => setTick((t) => t + 1)}
+        {detail && (
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <AgentChip
+              agent={mine ? 'you' : (detail.task.assignedAgent ?? detail.task.preferredAgent)}
+              sub={mine ? 'taken over' : detail.task.role}
             />
-          )}
-          {detail && tab === 'context' && <ContextTab task={detail.task} pack={detail.pack} />}
-          {detail && tab === 'changes' && <ChangesTab diff={diff} status={detail.task.status} />}
-          {detail && tab === 'preview' && (
-            <PreviewTab merge={detail.mergePreview} plan={detail.planPreview} />
-          )}
-          {detail && tab === 'why' && <WhyTab why={detail.why} />}
-          {detail && tab === 'graph' && <TraceTab traces={detail.traces} />}
-          {detail && tab === 'sessions' && <SessionsTab sessions={detail.sessions} />}
-        </div>
-      </aside>
-      {editing && detail && (
-        <div onClick={(e) => e.stopPropagation()}>
-          <NewTaskDialog
-            symbols={symbols}
-            onClose={() => setEditing(false)}
-            onCreate={async () => {}}
-            edit={{
-              task: detail.task,
-              onSave: async (changes) => {
-                await puff.editTask(taskId, changes);
-                setTick((t) => t + 1);
-              },
+            <Meta label="Type" value={detail.task.type} />
+            <Meta label="Complexity" value={detail.task.complexity} />
+            {detail.task.tokens && (
+              <Meta
+                label="Tokens"
+                value={formatTokens(detail.task.tokens.in + detail.task.tokens.out)}
+              />
+            )}
+          </div>
+        )}
+
+        {detail && status !== 'done' && (
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {working && (
+              <ActionButton
+                icon={Square}
+                label="Stop"
+                title="Stop this task's agent. The rest of the team keeps working."
+                onClick={() => void act(() => puff.stopTask(taskId))}
+              />
+            )}
+            {status === 'failed' && (
+              <ActionButton
+                icon={RotateCcw}
+                label="Retry"
+                title="Put it back in the queue; the earlier attempts stay in its history"
+                onClick={() => void act(() => puff.retryTask(taskId))}
+              />
+            )}
+            {canEdit && (
+              <ActionButton icon={Pencil} label="Edit" onClick={() => setEditing(true)} />
+            )}
+            <Menu
+              label="Switch agent"
+              title="Give this task to another agent (it is stopped first if it is running)"
+              items={AGENTS.map((a) => ({
+                label: AGENT_META[a].label,
+                hint:
+                  a === (detail.task.assignedAgent ?? detail.task.preferredAgent)
+                    ? 'current'
+                    : undefined,
+                onSelect: () => void act(() => puff.reassignTask(taskId, a)),
+              }))}
+            />
+            <Menu
+              label="Take over"
+              icon={<Terminal className="size-3.5" />}
+              title="Stop the agent and work on it yourself in a real terminal"
+              items={[
+                ...CLIS.filter((c) => c.cli !== 'shell').map((c) => ({
+                  label: `Start ${c.label} on this task`,
+                  hint: 'Watch it work in its own screen. Uses tokens.',
+                  onSelect: () => void openCli(c.cli, true),
+                })),
+                ...CLIS.map((c) => ({
+                  label: c.cli === 'shell' ? c.label : `Open ${c.label} and wait`,
+                  hint:
+                    c.cli === 'shell'
+                      ? "A shell in the task's folder"
+                      : "Its own screen, idle, in the task's folder",
+                  onSelect: () => void openCli(c.cli),
+                })),
+              ]}
+            />
+            <ActionButton
+              icon={StickyNote}
+              label={detail.task.note ? 'Edit note' : 'Add note'}
+              title="A note the next attempt on this task must follow"
+              onClick={() => {
+                setNoteText(detail.task.note ?? '');
+                setNoting((n) => !n);
+              }}
+            />
+            <ActionButton
+              icon={Check}
+              label="Mark done"
+              title="You finished it yourself"
+              onClick={() => {
+                if (
+                  window.confirm('Mark this task as done? Use this when you finished it yourself.')
+                )
+                  void act(() => puff.markTaskDone(taskId));
+              }}
+            />
+            {canRemove && (
+              <ActionButton
+                icon={Trash2}
+                label="Remove"
+                title="Delete this task. It has never run, so nothing is lost."
+                danger
+                onClick={() => void act(() => puff.removeTask(taskId), true)}
+              />
+            )}
+          </div>
+        )}
+        {noting && (
+          <form
+            className="mt-3 flex flex-col gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setNoting(false);
+              void act(() => puff.addTaskNote(taskId, noteText));
             }}
-          />
+          >
+            <textarea
+              autoFocus
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              rows={3}
+              aria-label="Note for the next attempt"
+              placeholder="Tell the next attempt something it must know or do, e.g. “reuse the existing rounding helper”"
+              className="resize-none rounded-xl border border-line bg-surface-2 p-3 text-sm outline-none focus:border-brand/60"
+            />
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white"
+              >
+                Save note
+              </button>
+              <button
+                type="button"
+                onClick={() => setNoting(false)}
+                className="rounded-lg border border-line-strong px-3 py-1.5 text-xs text-ink-2"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+        {!noting && detail?.task.note && (
+          <p className="mt-3 rounded-xl border border-line bg-surface-2/60 p-3 text-[13px] leading-snug text-ink-2">
+            <b className="font-medium text-ink">Your note: </b>
+            {detail.task.note}
+          </p>
+        )}
+        {mine && working && (
+          <p
+            role="alert"
+            className="mt-3 rounded-xl border border-warn/40 bg-warn/10 p-3 text-[13px] leading-snug text-ink-2"
+          >
+            <b className="font-medium text-warn">
+              An agent is also running this task in the background.
+            </b>{' '}
+            What you see under Live is that background run, not your terminal. If it succeeds it
+            merges its own result. Press <b className="font-medium">Stop</b> above if you want to
+            work on it yourself.
+          </p>
+        )}
+        {mine && !working && status !== 'done' && (
+          <p className="mt-3 rounded-xl border border-brand/30 bg-brand/10 p-3 text-[13px] leading-snug text-ink-2">
+            <b className="font-medium text-ink">You took this task over.</b> Puff will not run it.
+            Work in its terminal under Live, then press{' '}
+            <b className="font-medium">Verify and merge my changes</b>.
+          </p>
+        )}
+        {problem && <p className="mt-3 text-sm text-bad">{problem}</p>}
+
+        <div className="mt-4 flex gap-1" role="tablist">
+          {tabs.map(([id, label, count]) => (
+            <button
+              key={id}
+              role="tab"
+              aria-selected={tab === id}
+              onClick={() => setPicked(id)}
+              className={cn(
+                '-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors',
+                tab === id
+                  ? 'border-brand text-ink'
+                  : 'border-transparent text-ink-3 hover:text-ink-2',
+              )}
+            >
+              {label}
+              {count !== undefined && (
+                <span className="rounded bg-surface-3 px-1.5 font-mono text-[10px] text-ink-3">
+                  {count}
+                </span>
+              )}
+              {id === 'live' && working && (
+                <span className="inline-block size-1.5 animate-pulse rounded-full bg-info" />
+              )}
+            </button>
+          ))}
         </div>
+      </header>
+
+      <div className="min-h-0 flex-1 overflow-y-auto p-6">
+        {!detail && <p className="text-sm text-ink-3">Loading…</p>}
+        {detail && tab === 'live' && (
+          <div className="flex flex-col gap-6">
+            {terminalOpen || terms.length > 0 ? (
+              <TerminalTab
+                taskId={taskId}
+                terms={terms}
+                onOpen={openCli}
+                onLanded={() => setTick((t) => t + 1)}
+              />
+            ) : (
+              status !== 'done' && (
+                <button
+                  onClick={() => setTerminalOpen(true)}
+                  className="inline-flex w-fit items-center gap-2 rounded-lg border border-line-strong bg-surface-2 px-3 py-1.5 text-xs text-ink-2 hover:bg-surface-3 hover:text-ink"
+                >
+                  <Terminal className="size-3.5" /> Open a terminal in this task&apos;s folder
+                </button>
+              )
+            )}
+            <section>
+              <SectionTitle>What the agent is doing</SectionTitle>
+              <ActivityFeed groups={activity} active={working} />
+            </section>
+          </div>
+        )}
+        {detail && tab === 'changes' && (
+          <div className="flex flex-col gap-8">
+            {!isPlan && <ChangesTab diff={diff} status={detail.task.status} />}
+            <section>
+              {!isPlan && <SectionTitle>What the merge changes in the graph</SectionTitle>}
+              <PreviewTab merge={detail.mergePreview} plan={detail.planPreview} />
+            </section>
+          </div>
+        )}
+        {detail && tab === 'why' && (
+          <div className="flex flex-col gap-8">
+            <WhyTab why={detail.why} />
+            <section>
+              <SectionTitle>Decisions the graph made, with their queries</SectionTitle>
+              <TraceTab traces={detail.traces} />
+            </section>
+            <ContextTab task={detail.task} pack={detail.pack} />
+          </div>
+        )}
+        {detail && tab === 'history' && <SessionsTab sessions={detail.sessions} />}
+      </div>
+      {editing && detail && (
+        <NewTaskDialog
+          symbols={symbols}
+          onClose={() => setEditing(false)}
+          onCreate={async () => {}}
+          edit={{
+            task: detail.task,
+            onSave: async (changes) => {
+              await puff.editTask(taskId, changes);
+              setTick((t) => t + 1);
+            },
+          }}
+        />
       )}
-    </div>
+    </section>
   );
 }
 
@@ -589,12 +596,14 @@ function ContextTab({ task, pack }: { task: Task; pack?: ContextPack }) {
       )}
 
       {pack && (
-        <section>
-          <SectionTitle>Prompt sent</SectionTitle>
-          <pre className="overflow-x-auto rounded-xl border border-line bg-abyss p-4 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-ink-2">
+        <details className="group">
+          <summary className="cursor-pointer text-xs font-medium text-ink-2 hover:text-ink">
+            The full prompt sent to the agent
+          </summary>
+          <pre className="mt-3 overflow-x-auto rounded-xl border border-line bg-abyss p-4 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-ink-2">
             {pack.prompt}
           </pre>
-        </section>
+        </details>
       )}
     </div>
   );

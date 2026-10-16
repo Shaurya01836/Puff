@@ -57,6 +57,11 @@ export const mockTasks: Task[] = [
   }),
   task({
     id: 'task_03',
+    why: {
+      route: 'codex: declares implementation (12 of 14 earlier runs succeeded)',
+      schedule:
+        'free to start: no running task touches the same functions or their direct callers and callees',
+    },
     title: 'Wire rate limiter into POST /login',
     type: 'implement',
     complexity: 'medium',
@@ -84,6 +89,7 @@ export const mockTasks: Task[] = [
   }),
   task({
     id: 'task_05',
+    why: { route: 'opencode: declares docs, and the task changes no load-bearing code' },
     title: 'Document rate limiting in the API docs',
     type: 'chore',
     complexity: 'low',
@@ -100,6 +106,10 @@ export const mockTasks: Task[] = [
   }),
   task({
     id: 'task_06',
+    why: {
+      route: 'codex: declares implementation',
+      schedule: 'waits for task_03: both change login() or a function it calls',
+    },
     title: 'Lock account after 5 failed logins',
     type: 'implement',
     complexity: 'high',
@@ -113,6 +123,10 @@ export const mockTasks: Task[] = [
   }),
   task({
     id: 'task_07',
+    why: {
+      route:
+        'claude-code because login() is in the top 4% of this code by risk (PageRank 0.018, betweenness 20): load-bearing code goes to an agent that declares reasoning',
+    },
     title: 'Log failed login attempts',
     type: 'implement',
     complexity: 'medium',
@@ -130,6 +144,10 @@ export const mockTasks: Task[] = [
   }),
   task({
     id: 'task_08',
+    why: {
+      route:
+        'codex has won 5 of 6 runs in the auth module (claude-code has 2 of 4), so it goes first',
+    },
     title: 'Redact credentials before audit()',
     type: 'implement',
     complexity: 'medium',
@@ -146,6 +164,11 @@ export const mockTasks: Task[] = [
   }),
   task({
     id: 'task_09',
+    why: {
+      route: 'claude-code after opencode could not finish it: next in the escalation order',
+      schedule:
+        'free to start: no running task touches the same functions or their direct callers and callees',
+    },
     title: 'Refactor cartTotal to support discounts',
     type: 'implement',
     complexity: 'high',

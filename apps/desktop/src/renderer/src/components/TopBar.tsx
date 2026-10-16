@@ -49,15 +49,17 @@ export function TopBar({
   };
 
   return (
-    <header className="flex items-center gap-4 border-b border-line bg-surface-2 px-5 py-2.5">
-      <div className="min-w-0">
-        <h1 className="font-display text-base font-bold tracking-tight text-white">{title}</h1>
-        <p className="truncate font-mono text-[10px] uppercase tracking-widest text-slate-400">{subtitle}</p>
+    <header className="flex items-center gap-3 border-b border-line bg-surface-2 px-5 py-2.5">
+      <div className="w-36 shrink-0 xl:w-56">
+        <h1 className="truncate font-display text-base font-bold tracking-tight text-white">
+          {title}
+        </h1>
+        <p className="hidden truncate text-[11px] text-slate-400 xl:block">{subtitle}</p>
       </div>
 
       <form
         onSubmit={submit}
-        className="group mx-auto flex h-9 w-full max-w-lg items-center gap-2 border border-line bg-surface px-3 transition-colors focus-within:border-emerald-500/60"
+        className="group mx-auto flex h-9 min-w-40 flex-1 items-center gap-2 border border-line bg-surface px-3 transition-colors focus-within:border-emerald-500/60 lg:max-w-lg"
       >
         <Sparkles className="size-3.5 shrink-0 text-emerald-400" />
         <input
@@ -73,11 +75,16 @@ export function TopBar({
       </form>
 
       <div className="flex shrink-0 items-center gap-2.5">
-        {badge && <MockBadge label={badge} />}
+        {badge && (
+          <span className="hidden lg:inline-flex">
+            <MockBadge label={badge} />
+          </span>
+        )}
         <button
           onClick={onToggleChat}
           aria-pressed={chatOpen}
           title="Talk to Puff (Ctrl+K)"
+          aria-label="Ask Puff"
           className={cn(
             'inline-flex h-8 items-center gap-1.5 border px-3 text-xs font-medium transition-colors',
             chatOpen
@@ -86,7 +93,7 @@ export function TopBar({
           )}
         >
           <MessageSquare className="size-3.5" />
-          Ask Puff
+          <span className="hidden lg:inline">Ask Puff</span>
         </button>
         <button
           onClick={onNewTask}
@@ -103,7 +110,7 @@ export function TopBar({
             className="inline-flex h-8 items-center gap-1.5 border border-line-strong bg-surface px-3 text-xs font-medium text-slate-300 transition-colors hover:bg-surface-3 hover:text-white disabled:cursor-default disabled:opacity-60"
           >
             <Pause className="size-3.5" />
-            {pausing ? 'Pausing…' : 'Pause after current'}
+            <span className="hidden lg:inline">{pausing ? 'Pausing…' : 'Pause after current'}</span>
           </button>
         )}
         <button

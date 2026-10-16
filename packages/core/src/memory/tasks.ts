@@ -7,6 +7,7 @@ import type {
   Task,
   TaskStatus,
   TaskType,
+  TaskWhy,
   TrailEntry,
 } from '@puff/shared';
 import type { PuffConfig } from '../config';
@@ -43,6 +44,8 @@ interface TaskRow {
   targets: string[];
   dependsOn: string[];
   risk?: number | null;
+  /** [kind, reason, graphOff] of the task's route and schedule traces, newest first */
+  decisions?: [string | null, string | null, boolean | null][];
 }
 
 const TASK_QUERY = `
@@ -51,8 +54,25 @@ const TASK_QUERY = `
   OPTIONAL MATCH (t)-[:TARGETS]->(s:Symbol)
   WITH t, collect(DISTINCT s.id) AS targets, max(s.risk) AS risk
   OPTIONAL MATCH (t)-[:DEPENDS_ON]->(d:Task)
-  RETURN properties(t) AS p, targets, collect(DISTINCT d.id) AS dependsOn, risk, t.createdAt AS createdAt
+  WITH t, targets, risk, collect(DISTINCT d.id) AS dependsOn
+  OPTIONAL MATCH (tr:Trace)-[:FOR]->(t) WHERE tr.kind IN ['route', 'schedule']
+  WITH t, targets, risk, dependsOn, tr ORDER BY tr.at DESC
+  WITH t, targets, risk, dependsOn, collect([tr.kind, tr.reason, tr.graphOff]) AS decisions
+  RETURN properties(t) AS p, targets, dependsOn, risk, decisions, t.createdAt AS createdAt
   ORDER BY createdAt`;
+
+/** The newest route and schedule reasons from a task's traces (Q13): what the card says about the graph's choice */
+function toWhy(decisions: TaskRow['decisions']): TaskWhy | undefined {
+  const newest = (kind: string) => (decisions ?? []).find((d) => d[0] === kind);
+  const route = newest('route');
+  const schedule = newest('schedule');
+  if (!route && !schedule) return undefined;
+  return {
+    route: route?.[1] ?? undefined,
+    schedule: schedule?.[1] ?? undefined,
+    graphOff: route?.[2] === true || schedule?.[2] === true ? true : undefined,
+  };
+}
 
 /** The stored trail; a missing or unreadable value is an empty trail, never an error. */
 function parseTrail(raw: unknown): TrailEntry[] | undefined {
@@ -65,7 +85,7 @@ function parseTrail(raw: unknown): TrailEntry[] | undefined {
   }
 }
 
-function toTask({ p, targets, dependsOn, risk }: TaskRow): Task {
+function toTask({ p, targets, dependsOn, risk, decisions }: TaskRow): Task {
   const num = (v: unknown) => (v === undefined || v === null ? undefined : Number(v));
   const tokensIn = num(p.tokensIn);
   const testsTotal = num(p.testsTotal);
@@ -91,6 +111,7 @@ function toTask({ p, targets, dependsOn, risk }: TaskRow): Task {
     note: (p.note as string | undefined) ?? undefined,
     doneByHand: p.doneByHand === true ? true : undefined,
     risk: risk === undefined || risk === null ? undefined : Number(risk),
+    why: toWhy(decisions),
     tokens: tokensIn === undefined ? undefined : { in: tokensIn, out: num(p.tokensOut) ?? 0 },
     testSummary:
       testsTotal === undefined ? undefined : { passed: num(p.testsPassed) ?? 0, total: testsTotal },

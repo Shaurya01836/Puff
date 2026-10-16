@@ -10,12 +10,12 @@ import { graphOff, parseConfig } from '../src/config';
 import { compileContext, DEFAULT_BUDGET_TOKENS, RISK_BUDGET_FACTOR } from '../src/context/compiler';
 import { connect, loadDotEnv, read } from '../src/db/client';
 import { initProjectGraph } from '../src/db/init';
-import { listTraces, traced } from '../src/db/trace';
+import { listTraces, saveTrace, traced } from '../src/db/trace';
 import { graphName } from '../src/ids';
 import { indexRepo } from '../src/indexer/index';
 import { recordFailure, recordSolution } from '../src/memory/memory';
 import { startSession } from '../src/memory/sessions';
-import { createTask, updateTask } from '../src/memory/tasks';
+import { createTask, getTask, listTasks, updateTask } from '../src/memory/tasks';
 import { routeTask } from '../src/orchestrator/routing';
 import { overlappingTasks } from '../src/orchestrator/schedule';
 import { computeRisk, taskRisk } from '../src/queries/insights';
@@ -283,5 +283,35 @@ describe.skipIf(!db)('what the graph decides (real FalkorDB)', () => {
     // a re-index that changes code leaves a stale trace on the task it is for
     await indexRepo(graph, project, { traceFor: { taskId: task.id } });
     expect((await listTraces(graph, task.id)).some((t) => t.kind === 'stale')).toBe(true);
+  });
+
+  it('a task carries the newest route and schedule reasons from its traces, for its card', async () => {
+    const task = await createTask(graph, slug, config, {
+      title: 'Explain me',
+      type: 'implement',
+      targets: [LOGIN],
+    });
+    expect((await getTask(graph, task.id))!.why).toBeUndefined();
+    await saveTrace(graph, { taskId: task.id }, { kind: 'route', reason: 'first pick', steps: [] });
+    await saveTrace(
+      graph,
+      { taskId: task.id },
+      { kind: 'schedule', reason: 'waits for task_x', steps: [] },
+    );
+    await new Promise((r) => setTimeout(r, 5));
+    await saveTrace(
+      graph,
+      { taskId: task.id },
+      { kind: 'route', reason: 'newer pick', steps: [], graphOff: true },
+    );
+    expect((await getTask(graph, task.id))!.why).toEqual({
+      route: 'newer pick',
+      schedule: 'waits for task_x',
+      graphOff: true,
+    });
+    // the list gives every task its own reasons, not another task's
+    const listed = await listTasks(graph);
+    expect(listed.find((t) => t.id === task.id)!.why?.route).toBe('newer pick');
+    expect(listed.filter((t) => t.why?.route === 'newer pick')).toHaveLength(1);
   });
 });
