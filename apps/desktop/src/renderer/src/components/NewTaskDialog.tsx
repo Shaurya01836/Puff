@@ -272,7 +272,7 @@ export function NewTaskDialog({
         <footer className="flex items-center justify-end gap-2 border-t border-line px-6 py-4">
           <button
             onClick={onClose}
-            className="rounded-xl px-4 py-2 text-sm text-ink-2 hover:text-ink"
+            className="rounded px-4 py-2 text-sm text-slate-400 hover:text-white"
           >
             Cancel
           </button>
@@ -280,7 +280,7 @@ export function NewTaskDialog({
             <button
               disabled={busy}
               onClick={() => void submit(false)}
-              className="rounded-xl bg-gradient-to-br from-brand to-brand-deep px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_20px_-6px_rgb(139_124_246/0.7)] hover:brightness-110 disabled:opacity-50"
+              className="rounded bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
             >
               Save changes
             </button>
@@ -289,14 +289,14 @@ export function NewTaskDialog({
               <button
                 disabled={busy}
                 onClick={() => void submit(false)}
-                className="rounded-xl border border-line-strong bg-surface-2 px-4 py-2 text-sm font-medium hover:bg-surface-3 disabled:opacity-50"
+                className="rounded border border-line bg-surface-2 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-surface-3 hover:text-white disabled:opacity-50"
               >
                 Add to board
               </button>
               <button
                 disabled={busy}
                 onClick={() => void submit(true)}
-                className="rounded-xl bg-gradient-to-br from-brand to-brand-deep px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_20px_-6px_rgb(139_124_246/0.7)] hover:brightness-110 disabled:opacity-50"
+                className="rounded bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
               >
                 Add and run
               </button>

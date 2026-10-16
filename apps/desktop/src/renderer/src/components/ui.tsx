@@ -13,6 +13,7 @@ import {
   Zap,
 } from 'lucide-react';
 import type { Actor, MemoryEventType, TaskStatus } from '@puff/shared';
+import { ClaudeMark, OpenAIMark, OpenCodeMark } from '@/components/landing/agent-logos';
 import { cn } from '@/lib/cn';
 import { AGENT_META, MEMORY_EVENT_META, STATUS_META, TONE_COLOR } from '@/lib/theme';
 
@@ -31,23 +32,34 @@ export function SectionTitle({ children, right }: { children: ReactNode; right?:
   );
 }
 
-/** Rounded-square avatar in the agent's colour; the initials keep identity readable without colour. */
-export function AgentAvatar({ agent, size = 28 }: { agent: Actor; size?: number }) {
+/** Avatar using official direct agent SVG mark, no background box, crisp and normal. */
+export function AgentAvatar({ agent, size = 22, className }: { agent: Actor; size?: number; className?: string }) {
   const meta = AGENT_META[agent];
+  if (agent === 'you') {
+    return (
+      <span
+        className={cn('inline-flex shrink-0 items-center justify-center font-mono font-bold text-slate-300', className)}
+        style={{ width: size, height: size, fontSize: size * 0.45 }}
+        aria-hidden
+      >
+        ME
+      </span>
+    );
+  }
+  const Mark =
+    agent === 'claude-code'
+      ? ClaudeMark
+      : agent === 'codex'
+        ? OpenAIMark
+        : OpenCodeMark;
+
   return (
     <span
-      className="inline-grid shrink-0 place-items-center rounded-lg font-display font-bold"
-      style={{
-        width: size,
-        height: size,
-        fontSize: size * 0.38,
-        color: meta.color,
-        background: `color-mix(in oklab, ${meta.color} 16%, transparent)`,
-        boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${meta.color} 35%, transparent)`,
-      }}
+      className={cn('inline-flex shrink-0 items-center justify-center', className)}
+      style={{ width: size, height: size }}
       aria-hidden
     >
-      {meta.short}
+      <Mark className="shrink-0" color={meta.color} style={{ width: size, height: size }} />
     </span>
   );
 }
@@ -56,9 +68,7 @@ export function AgentChip({ agent, sub }: { agent?: Actor; sub?: string }) {
   if (!agent)
     return (
       <span className="inline-flex items-center gap-2 text-xs text-ink-3">
-        <span className="inline-grid size-7 place-items-center rounded-lg border border-dashed border-line-strong">
-          ?
-        </span>
+        <span className="font-mono text-xs text-slate-500">?</span>
         Auto-routing
       </span>
     );
@@ -69,7 +79,7 @@ export function AgentChip({ agent, sub }: { agent?: Actor; sub?: string }) {
         <span className="block truncate text-xs font-medium text-ink">
           {AGENT_META[agent].label}
         </span>
-        {sub && <span className="block truncate text-[11px] text-ink-3">{sub}</span>}
+        {sub && <span className="block truncate font-mono text-[10px] text-ink-3">{sub}</span>}
       </span>
     </span>
   );
@@ -86,17 +96,20 @@ const STATUS_ICON: Record<TaskStatus, typeof CircleDot> = {
   done: CircleCheck,
 };
 
-/** Status always shows icon + label, never colour alone. */
+/** Status always shows icon + label, styled in landing page monospace badge style. */
 export function StatusPill({ status }: { status: TaskStatus }) {
   const meta = STATUS_META[status];
   const color = TONE_COLOR[meta.tone];
   const Icon = STATUS_ICON[status];
   return (
     <span
-      className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium"
-      style={{ color, background: `color-mix(in oklab, ${color} 13%, transparent)` }}
+      className="inline-flex shrink-0 items-center gap-1.5 border border-line-strong bg-surface-2/60 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest"
+      style={{ color }}
     >
-      <Icon className={cn('size-3', meta.live && 'animate-spin-slow')} />
+      <span
+        className={cn('size-1.5 rounded-full', meta.live && 'animate-live-ring')}
+        style={{ background: color }}
+      />
       {meta.label}
     </span>
   );
@@ -117,10 +130,10 @@ export function EventIcon({ type }: { type: MemoryEventType }) {
   const Icon = EVENT_ICON[type];
   return (
     <span
-      className="grid size-7 shrink-0 place-items-center rounded-lg"
-      style={{ color, background: `color-mix(in oklab, ${color} 13%, transparent)` }}
+      className="flex size-5 shrink-0 items-center justify-center pt-0.5"
+      style={{ color, filter: `drop-shadow(0 0 6px ${color}80)` }}
     >
-      <Icon className="size-3.5" />
+      <Icon className="size-4" />
     </span>
   );
 }
