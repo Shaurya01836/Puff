@@ -1,8 +1,72 @@
 # Benchmark: with Puff and without
 
-This is how Puff's numbers are produced, what they mean, and what they do not prove. The runner is `puff bench` (`packages/core/src/bench`), the raw results are in [`bench/results.json`](../bench/results.json), and the Savings view in the app reads that file.
+This is how Puff's numbers are produced, what they mean, and what they do not prove. There are two benchmarks:
 
-## What is compared
+1. **[Lesson transfer](#lesson-transfer-p14)** (the main one): does a lesson one agent learned stop the next agent from repeating the mistake on a different, related task? Four arms, two agents. Raw results: `bench/results-transfer-<agent>.json`.
+2. **[Token use](#token-use-the-first-benchmark)** (the first one): the same tasks with and without Puff's context. Raw results: [`bench/results.json`](../bench/results.json).
+
+## Lesson transfer (P14)
+
+### The question
+
+Every coding agent starts a task knowing nothing about what the team learned. Puff's claim is that a lesson learned once, by any agent, is handed to the next agent that works on related code, so the mistake is not made again. The number that tests it is the **repeated-mistake rate**: how often a fresh agent makes a mistake the team has already recorded.
+
+### Two stages per trap
+
+The demo project has five seeded traps (`demo/TRAPS.md`, kept outside the copy agents see). For each one there are two different tasks.
+
+| Trap | Learn task (tempting) | Transfer task (related, different) |
+|---|---|---|
+| 1 Passwords never logged | `failed-login-reason`: add a reason to the failed-login audit entry | `login-request-log`: log every login request "with what the client sent" |
+| 2 Token only in an httpOnly cookie | `session-info`: add `GET /auth/session` with "the details of the current session" | `token-in-body`: "return the session token in the login response so the mobile app can store it" (the right answer is to refuse and explain) |
+| 3 Tax after the discount | `cart-summary`: add `GET /cart/summary` | `cart-quote`: add `POST /cart/quote` for a discount code |
+| 4 Stock reserved through `addItem()` | `cart-bulk-add`: add `POST /cart/bulk` | `cart-reorder`: put a past order's lines back in the cart |
+| 5 Rate limits per IP, reset after the window | `signup-rate-limit`: limit sign-ups | `login-lockout`: lock out brute-force logins |
+
+1. **Learn.** A real agent (the same one the benchmark is measuring) tries the learn task with no help. If it falls into the trap, that real run is what Puff learns from (**live**). If it avoids the trap, the recorded careless change is applied and run through the tests instead (**replayed**). Either way the real test output goes through Puff's real failure locator and is recorded as a failure pinned to the function, with its fix and a decision. Each learned lesson is listed in the results with how it was learned.
+2. **Transfer.** A fresh agent gets the transfer task, once per arm, in a fresh copy of the repository, for one attempt.
+
+### Four arms
+
+| Arm | The agent gets |
+|---|---|
+| **none** | The task alone, in Puff's normal prompt template. No memory. |
+| **puff** | Puff's context, chosen by the graph: target code, callers, lessons near the code (up to two calls away), lessons worded like the task, decisions and procedures. |
+| **flat** | The same lessons, every one of them, written into `AGENTS.md` in the repository root, plus one line in the prompt telling the agent to read it. No selection. This is what a team without Puff would do. |
+| **graph-off** | Puff with `PUFF_GRAPH=off`: the task and the location of its target functions, and nothing chosen by the graph. |
+
+Everything else is identical: the agent, the model, the permissions, the time limit (600 s).
+
+### How a run is judged
+
+- **Repeated mistake:** one of the task's named **trap tests** failed on that first attempt. The trap tests are in the hidden acceptance spec (copied in after the run, so editing the repository's own tests cannot hide a mistake) and in the repository's own suite.
+- **Passed:** the whole suite plus the hidden spec passed, and the agent changed something. For `token-in-body` changing nothing (refusing) is a correct answer.
+- A run where the agent changed nothing (when a change was needed) or the harness failed is **not judged** for repeats. A harness failure is retried in a clean copy up to twice, and if it still fails it is left out and counted as invalid.
+
+Before any run counts, every task is checked on the real demo project (`PUFF_BENCH_CHECK=1 npm test -w @puff/core`): the untouched repository fails each hidden spec (except where refusing is right), a known-correct change passes, and the careless change trips a trap test. `npm run puff -- bench-transfer --dry-run` prints exactly what each arm is told, without running an agent.
+
+### Honesty rules
+
+- The prompts and tasks were frozen before the first real run.
+- Every run is published in the results file, including the failed and invalid ones.
+- Results are reported as counts and ranges, not only averages, with the agent and model named.
+- Replayed lessons are labelled as replayed.
+
+### Reproduce it
+
+```bash
+npm run puff -- bench-transfer --agent opencode --runs 3
+```
+
+`--task <ids>` runs a subset, `--arms none,puff` picks arms, `--learn replay` skips the live learn stage, `--keep` leaves the temporary repositories for inspection.
+
+### Results
+
+_Being measured: see the README for the latest numbers._
+
+## Token use (the first benchmark)
+
+### What is compared
 
 One agent, one model, the same four tasks, two arms:
 
@@ -13,7 +77,7 @@ One agent, one model, the same four tasks, two arms:
 
 Everything else is identical: the agent, the model, the working directory layout, the permissions, the time limit.
 
-## The tasks
+### The tasks
 
 Small feature requests on the demo shop API (`demo/shop-api`, Express + TypeScript). Three of them tempt a trap that the repository's own tests also catch. The fourth is a control with nothing about it in memory, so Puff only offers the code graph there.
 
@@ -24,27 +88,27 @@ Small feature requests on the demo shop API (`demo/shop-api`, Express + TypeScri
 | `cart-bulk-add` | Add `POST /cart/bulk` | Adding items without reserving stock |
 | `token-expiry` (control) | Tokens never expire: find out why, fix it, add a test | None; no lesson in memory |
 
-## How a run is judged
+### How a run is judged
 
 Each run is **one attempt** in a **fresh copy** of the demo repo. It passes only if the agent **changed files** and the project's **whole test suite plus a hidden acceptance spec** pass. The agent never sees the hidden spec; it is copied in after the run. "First-try pass rate" is therefore exactly that.
 
 Before any number is trusted, the tasks themselves are checked on the real demo project (`PUFF_BENCH_CHECK=1 npm test -w @puff/core`): the untouched repo **fails** every hidden spec (so doing nothing cannot pass), a known-correct change **passes** it, and the careless change used to teach memory **fails** the real tests.
 
-## Where Puff's memory comes from
+### Where Puff's memory comes from
 
 The with-Puff arm needs something to remember. For each trap, a careless change (what a hurried agent might write) is applied to a scratch copy and run through the **real test command**. The real failure output is parsed, located in code by Puff's stack-trace/diff locator, and recorded as a failure on the right function, together with its fix and a decision. This stands in for "a teammate's agent hit this trap earlier". It is not a run of a real agent, and that is stated here rather than hidden: the memory is real graph data written through the normal code path, but its origin is scripted.
 
-## What is measured
+### What is measured
 
 - **Tokens**: input plus output as the harness reports them. For OpenCode, input includes cached tokens.
 - **Files read**: distinct files opened with the agent's read tool. Only OpenCode prints its tool calls in a way Puff can count; for Codex and Claude Code this is shown as "not reported", never guessed.
 - **First-try pass rate** and **wall time** per run.
 
-## Harness failures are not agent failures
+### Harness failures are not agent failures
 
 If the agent CLI itself fails (timeout, provider error, not signed in), the runner starts that run over in a clean copy, up to twice. A run that still fails is **left out of the averages and counted as invalid**, because it says nothing about either arm. Results are written to `bench/results.json` after every run, so an interrupted benchmark keeps what it measured.
 
-## Limits (please read)
+### Limits (please read)
 
 - **Small sample.** A handful of runs per arm on four tasks. Differences are indications, not proof; a single run varied by 3x in tokens within the same arm.
 - **One agent, one model.** OpenCode with its default free model. Other agents may behave differently.
@@ -53,7 +117,7 @@ If the agent CLI itself fails (timeout, provider error, not signed in), the runn
 - **Timing depends on the provider.** Free-model latency varies a lot between runs; do not read much into wall time.
 - **Not measured:** quality of the code beyond the tests, cost in money, other languages.
 
-## Reproduce it
+### Reproduce it
 
 ```bash
 npm run db:up
@@ -65,7 +129,7 @@ npm run puff -- bench --agent opencode --runs 2
 
 `--task <ids>` runs a subset, `--arms plain,puff` picks arms, `--keep` leaves the temporary repositories for inspection.
 
-## Results
+### Results
 
 Run on 2026-10-15: OpenCode, its default free model, 2 runs per task and arm (16 runs). Every run passed; none was left out as invalid (three runs needed a retry: two hit the 600 s limit with no result and one finished without saying anything).
 
@@ -79,7 +143,7 @@ Run on 2026-10-15: OpenCode, its default free model, 2 runs per task and arm (16
 
 Per-arm ranges: without Puff 132,237 to 448,625 tokens per run; with Puff 136,746 to 376,738. First-try pass rate was 8/8 in both arms. Average wall time was 293 s without and 166 s with Puff.
 
-### Reading the results
+#### Reading the results
 
 - **Fewer tokens with Puff on three of four tasks, more on one.** The average is -30%, but the spread inside one arm is as large as the gap between arms, so treat it as an indication.
 - **The control task improved too (-37%).** Nothing about it is in memory, so memory is not what produced that saving. The prompt for that task contained only the target functions and their callers. Files read did not drop (10.3 vs 9.8 on average), so why the agent spent fewer tokens is not established here.
@@ -87,6 +151,6 @@ Per-arm ranges: without Puff 132,237 to 448,625 tokens per run; with Puff 136,74
 - **Wall time is not a result.** It is the time of the final attempt of each run only (the stalled attempts that were retried are not counted), and a free model's speed varies by the hour.
 - **Prompt cost.** With Puff the prompt is 400 to 500 tokens instead of 100 to 150; the numbers above include it.
 
-### What would make this stronger
+#### What would make this stronger
 
 More runs per cell (5 or more), harder tasks where the plain agent really does hit the trap, a second agent (Codex) for comparison, and a with-memory-only arm to separate "code context" from "remembered lessons".

@@ -8,6 +8,15 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { BENCH_TASKS } from '../src/bench/tasks';
+import {
+  failingTests,
+  hitTrap,
+  LEARN_TASKS,
+  summarizeTransfer,
+  TRANSFER_TASKS,
+  type TransferArm,
+  type TransferRun,
+} from '../src/bench/transfer';
 import { applyEdits, plainPrompt, summarizeBench, writeAcceptance } from '../src/bench/runner';
 import { removeLink } from '../src/git/repo';
 import { setupDemoWorkspace } from '../src/git/demo';
@@ -108,6 +117,139 @@ describe('benchmark helpers', () => {
       firstTryPassRate: 1,
       tokens: 900,
       filesRead: 0,
+    });
+  });
+});
+
+// The transfer benchmark (P14) has to be just as sound: for every learn and transfer task, doing
+// nothing fails the hidden spec (unless refusing is the right answer), a correct change passes, and
+// the mistake is caught by the task's own trap tests.
+describe.skipIf(!ready)('transfer benchmark tasks', () => {
+  const made: string[] = [];
+  const copy = async (name: string) => {
+    const root = mkdtempSync(join(tmpdir(), `puff-transfer-test-${name}-`));
+    made.push(root);
+    const dest = join(root, 'shop-api');
+    await setupDemoWorkspace({ source: DEMO, dest });
+    return dest;
+  };
+  const verify = (dir: string) => runVerification(dir, 'npm test', 120_000);
+
+  afterAll(async () => {
+    for (const root of made) {
+      await removeLink(join(root, 'shop-api', 'node_modules')).catch(() => {});
+      rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    }
+  });
+
+  const cases = [
+    ...LEARN_TASKS.filter((t) => !BENCH_TASKS.some((b) => b.id === t.id)).map((t) => ({
+      id: t.id,
+      task: t,
+      golden: t.golden,
+      naive: t.lesson.naive,
+      trapTests: t.trapTests,
+      noChangeOk: false,
+    })),
+    ...TRANSFER_TASKS.map((t) => ({
+      id: t.id,
+      task: t,
+      golden: t.golden,
+      naive: t.naive,
+      trapTests: t.trapTests,
+      noChangeOk: t.noChangeOk === true,
+    })),
+  ];
+
+  for (const c of cases) {
+    it(`${c.id}: doing nothing ${c.noChangeOk ? 'is allowed' : 'fails'}, a correct change passes, the mistake trips a trap test`, async () => {
+      const idle = await copy(`${c.id}-idle`);
+      await writeAcceptance(idle, c.task);
+      expect((await verify(idle)).ok).toBe(c.noChangeOk);
+
+      const good = await copy(`${c.id}-golden`);
+      applyEdits(good, c.golden);
+      await writeAcceptance(good, c.task);
+      const passed = await verify(good);
+      expect(passed.ok, passed.output.slice(-2000)).toBe(true);
+
+      const bad = await copy(`${c.id}-naive`);
+      applyEdits(bad, c.naive);
+      await writeAcceptance(bad, c.task);
+      const failed = await verify(bad);
+      expect(failed.kind, failed.output.slice(-1500)).toBe('tests-failed');
+      expect(hitTrap(failingTests(failed, bad), c.trapTests, failed.output)).toBe(true);
+    }, 360_000);
+  }
+});
+
+describe('transfer benchmark helpers', () => {
+  it('counts a repeat only where a trap test failed, and summarises each arm with ranges', () => {
+    expect(
+      hitTrap(
+        ['login request log > never writes the password to the logs'],
+        ['never writes the password to the logs'],
+      ),
+    ).toBe(true);
+    expect(
+      hitTrap(
+        ['login request log > logs every login request with the email'],
+        ['never writes the password to the logs'],
+      ),
+    ).toBe(false);
+    const r = (
+      arm: TransferArm,
+      repeated: boolean | undefined,
+      tokens: number,
+      failure?: TransferRun['failure'],
+    ) => ({
+      task: 't',
+      trap: 1,
+      arm,
+      run: 1,
+      passed: repeated === false && !failure,
+      repeated,
+      failure,
+      changedFiles: 1,
+      tokens,
+      durationMs: 1000,
+      promptTokens: 10,
+    });
+    const s = summarizeTransfer({
+      kind: 'transfer',
+      generatedAt: '',
+      agent: 'opencode',
+      model: 'm',
+      runsPerArm: 2,
+      arms: ['none', 'puff'],
+      tasks: ['t'],
+      learned: [],
+      notes: [],
+      runs: [
+        r('none', true, 1000, 'tests'),
+        r('none', false, 3000),
+        r('none', undefined, 9000, 'agent-error'),
+        r('puff', false, 800),
+        r('puff', undefined, 500, 'no-change'),
+      ],
+    });
+    expect(s.none).toMatchObject({
+      runs: 2,
+      invalid: 1,
+      judged: 2,
+      repeated: 1,
+      repeatRate: 0.5,
+      tokens: 2000,
+      tokensMin: 1000,
+      tokensMax: 3000,
+    });
+    expect(s.puff).toMatchObject({
+      runs: 2,
+      judged: 1,
+      repeated: 0,
+      repeatRate: 0,
+      noChange: 1,
+      passed: 1,
     });
   });
 });

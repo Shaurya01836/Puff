@@ -58,6 +58,7 @@ import {
 } from './projects/registry';
 import { Orchestrator, createRunDeps } from './orchestrator/orchestrator';
 import { runTask, type TaskRunResult } from './orchestrator/run';
+import type { TransferArm } from './bench/transfer';
 
 loadDotEnv();
 
@@ -1044,6 +1045,91 @@ program
           );
         }
         console.log(`\n✔ wrote ${resolve(o.out)}`);
+      } finally {
+        await db.close();
+      }
+    },
+  );
+
+program
+  .command('bench-transfer')
+  .description(
+    'lesson-transfer benchmark: does a lesson learned on one task stop the next agent repeating it on a related one? Four arms (none, puff, flat, graph-off); spends real tokens',
+  )
+  .option('--agent <agent>', 'claude-code | codex | opencode', 'opencode')
+  .option('--runs <n>', 'runs per task and arm', '1')
+  .option('--task <ids>', 'comma-separated transfer task ids (default: all five)')
+  .option('--arms <arms>', 'none, puff, flat, graph-off', 'none,puff,flat,graph-off')
+  .option('--learn <mode>', 'live (a real agent tries the learn task first) or replay', 'live')
+  .option('--source <dir>', 'demo project to copy', 'demo/shop-api')
+  .option(
+    '--out <file>',
+    'where to write the results (default bench/results-transfer-<agent>.json)',
+  )
+  .option('--keep', 'keep the temporary repositories for inspection')
+  .option(
+    '--dry-run',
+    'learn by replay and print what each arm would be told, without running agents',
+  )
+  .action(
+    async (o: {
+      agent: string;
+      runs: string;
+      task?: string;
+      arms: string;
+      dryRun?: boolean;
+      learn: string;
+      source: string;
+      out?: string;
+      keep?: boolean;
+    }) => {
+      const { mkdir, writeFile } = await import('node:fs/promises');
+      const { dirname } = await import('node:path');
+      const { runTransferBenchmark, summarizeTransfer } = await import('./bench/transfer');
+      const agent = agentOf(o.agent);
+      const out = resolve(o.out ?? `bench/results-transfer-${agent}.json`);
+      const config = await userConfig();
+      const db = await connect(program.opts<{ db?: string }>().db);
+      const controller = new AbortController();
+      process.once('SIGINT', () => controller.abort());
+      const save = async (data: unknown) => {
+        await mkdir(dirname(out), { recursive: true });
+        await writeFile(out, `${JSON.stringify(data, null, 2)}\n`);
+      };
+      try {
+        const results = await runTransferBenchmark({
+          db,
+          config,
+          adapters: createAdapters(config),
+          agent,
+          source: resolve(o.source),
+          runs: Number(o.runs),
+          only: o.task?.split(',').map((s) => s.trim()),
+          arms: o.arms.split(',').map((s) => s.trim()) as TransferArm[],
+          learn: o.learn === 'replay' ? 'replay' : 'live',
+          dryRun: o.dryRun,
+          keep: o.keep,
+          signal: controller.signal,
+          onProgress: o.dryRun ? undefined : save,
+          log: (l) => console.log(l),
+        });
+        if (o.dryRun) {
+          for (const l of results.learned)
+            console.log(
+              `learned trap ${l.trap} (${l.mode}): ${l.failures.map((f) => `${f.message} → ${f.anchoredTo.join(', ')} by ${f.via}`).join('; ')}`,
+            );
+          return;
+        }
+        await save(results);
+        const s = summarizeTransfer(results);
+        console.log(`\n${'arm'.padEnd(11)}judged  repeated  passed  avg tokens (range)`);
+        for (const arm of results.arms) {
+          const a = s[arm];
+          console.log(
+            `${arm.padEnd(11)}${String(a.judged).padEnd(8)}${`${a.repeated}/${a.judged}`.padEnd(10)}${`${a.passed}/${a.runs}`.padEnd(8)}${a.tokens} (${a.tokensMin}–${a.tokensMax})`,
+          );
+        }
+        console.log(`\n✔ wrote ${out}`);
       } finally {
         await db.close();
       }
