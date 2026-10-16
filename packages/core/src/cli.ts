@@ -40,6 +40,7 @@ import { setupDemoWorkspace } from './git/demo';
 import { inspectRepo, initRepo } from './projects/inspect';
 import {
   applyProject,
+  withDetectedSettings,
   deleteProjectMemory,
   openProject,
   projectCounts,
@@ -130,7 +131,7 @@ async function withProject<T>(
   { init = false }: { init?: boolean } = {},
 ): Promise<T> {
   const { project, entry } = await resolveProject(repoArg);
-  const config = applyProject(await userConfig(), entry);
+  const config = applyProject(await userConfig(), entry && (await withDetectedSettings(entry)));
   const db = await connect(program.opts<{ db?: string }>().db);
   try {
     if (!init && !(await db.list()).includes(graphName(project.slug))) {
@@ -770,7 +771,10 @@ function describeInspection(info: RepoInspection): void {
   console.log(
     `  code:   ${info.files.supported} TypeScript/JavaScript files${other ? ` (not read: ${other})` : ''}`,
   );
+  if (info.appDir) console.log(`  app:    in ${info.appDir}/ (not at the top of the repository)`);
   console.log(`  tests:  ${info.testCommand ?? 'no test command detected'}`);
+  if (info.linkDirs)
+    console.log(`  linked: ${info.linkDirs.join(', ')} (into each agent worktree)`);
   for (const p of info.problems) console.log(`  ✖ ${p}`);
   for (const b of info.runBlockers) console.log(`  ⛔ agents cannot run: ${b}`);
   for (const w of info.warnings) console.log(`  ⚠ ${w}`);
@@ -806,6 +810,7 @@ projects
         repoPath: path,
         name: program.opts<{ name?: string }>().name,
         testCommand: o.testCommand ?? info.testCommand,
+        linkDirs: info.linkDirs,
       });
       if (o.use) await setActiveProject(entry.slug);
       console.log(`✔ ${created ? 'added' : 'updated'} ${entry.name} (${graphName(entry.slug)})`);
@@ -889,6 +894,7 @@ projects
   .option('--rename <name>', 'new name')
   .option('--test-command <cmd>', 'how to run its tests')
   .option('--clear-test-command', 'go back to the shared default')
+  .option('--clear-link-dirs', 'go back to the shared default (or what Puff detects)')
   .option(
     '--link-dirs <dirs>',
     'comma-separated folders linked into task worktrees (e.g. node_modules)',
@@ -896,17 +902,25 @@ projects
   .action(
     async (
       ref: string,
-      o: { rename?: string; testCommand?: string; clearTestCommand?: boolean; linkDirs?: string },
+      o: {
+        rename?: string;
+        testCommand?: string;
+        clearTestCommand?: boolean;
+        linkDirs?: string;
+        clearLinkDirs?: boolean;
+      },
     ) => {
       const entry = findProject(await loadRegistry(), ref);
       if (!entry) throw new Error(`No project "${ref}"`);
       const updated = await updateProject(entry.slug, {
         name: o.rename,
         testCommand: o.clearTestCommand ? null : o.testCommand,
-        linkDirs: o.linkDirs
-          ?.split(',')
-          .map((d) => d.trim())
-          .filter(Boolean),
+        linkDirs: o.clearLinkDirs
+          ? null
+          : o.linkDirs
+              ?.split(',')
+              .map((d) => d.trim())
+              .filter(Boolean),
       });
       console.log(
         `✔ ${updated.name}: tests ${updated.testCommand ?? '(default)'}, linked folders ${updated.linkDirs?.join(', ') ?? '(default)'}`,

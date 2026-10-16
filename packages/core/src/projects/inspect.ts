@@ -6,41 +6,13 @@
 //                so the folder must be the top of its own repository with at least one commit)
 //   warnings     worth knowing (uncommitted changes would make Puff refuse a merge, no test command)
 import { existsSync } from 'node:fs';
-import { readFile, stat, writeFile } from 'node:fs/promises';
+import { stat, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import type { RepoInspection } from '@puff/shared';
 import { git } from '../git/repo';
 import { scanRepoFiles } from '../indexer/walk';
+import { detectSetup } from './detect';
 import { samePath } from './registry';
-
-type PackageManager = NonNullable<RepoInspection['packageManager']>;
-
-function detectPackageManager(root: string): PackageManager {
-  if (existsSync(join(root, 'pnpm-lock.yaml'))) return 'pnpm';
-  if (existsSync(join(root, 'yarn.lock'))) return 'yarn';
-  if (existsSync(join(root, 'bun.lock')) || existsSync(join(root, 'bun.lockb'))) return 'bun';
-  return 'npm';
-}
-
-/** `npm init` writes a test script that always fails; it is not a real test command. */
-const PLACEHOLDER_TEST = /no test specified/i;
-
-async function detectTestCommand(
-  root: string,
-  pm: PackageManager,
-): Promise<{ command?: string; placeholder: boolean }> {
-  try {
-    const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')) as {
-      scripts?: Record<string, string>;
-    };
-    const script = pkg.scripts?.test;
-    if (!script) return { placeholder: false };
-    if (PLACEHOLDER_TEST.test(script)) return { placeholder: true };
-    return { command: `${pm} test`, placeholder: false };
-  } catch {
-    return { placeholder: false };
-  }
-}
 
 export async function inspectRepo(path: string): Promise<RepoInspection> {
   const abs = resolve(path);
@@ -126,24 +98,38 @@ export async function inspectRepo(path: string): Promise<RepoInspection> {
   }
 
   // how to test
-  out.hasNodeModules = existsSync(join(abs, 'node_modules'));
-  out.packageManager = existsSync(join(abs, 'package.json'))
-    ? detectPackageManager(abs)
-    : undefined;
-  if (out.packageManager) {
-    const test = await detectTestCommand(abs, out.packageManager);
-    out.testCommand = test.command;
-    if (test.placeholder)
+  // The app may live in a folder (my-app/, packages/web): find it, its check command and its dependencies
+  const setup = await detectSetup(abs);
+  out.hasNodeModules = setup ? setup.hasNodeModules : existsSync(join(abs, 'node_modules'));
+  if (setup) {
+    out.appDir = setup.appDir;
+    out.packageManager = setup.packageManager;
+    out.testCommand = setup.testCommand;
+    out.linkDirs = setup.linkDirs;
+    const where = setup.appDir ? `${setup.appDir}/` : 'the top folder';
+    if (setup.appDir)
+      out.warnings.push(
+        `The app is in ${where}, not at the top of the repository. Puff will check changes and link dependencies there.`,
+      );
+    if (setup.others.length)
+      out.warnings.push(
+        `Other folders also have a package.json (${setup.others.join(', ')}). Puff chose ${where}; if that is wrong, set the test command and linked folders in the project's settings.`,
+      );
+    if (setup.checkKind === 'type-check')
+      out.warnings.push(
+        'This project has no tests, so Puff will type-check the code instead. A pass means it compiles, not that it works.',
+      );
+    else if (setup.placeholderTest)
       out.warnings.push(
         'package.json has the placeholder test script. Set a test command, or agents cannot be verified.',
       );
-    else if (!test.command)
+    else if (!setup.testCommand)
       out.warnings.push(
-        'package.json has no test script. Set a test command so agents can be verified.',
+        'No test script (and no TypeScript setup to type-check). Set a test command so agents can be verified.',
       );
-    if (!out.hasNodeModules)
+    if (!setup.hasNodeModules)
       out.warnings.push(
-        'Dependencies are not installed (no node_modules). Run your package manager install, or tests will fail.',
+        `Dependencies are not installed (no node_modules${setup.appDir ? ` in ${where}` : ''}). Run your package manager install, or the checks will fail.`,
       );
   } else {
     out.warnings.push('No package.json: set a test command so agents can be verified.');

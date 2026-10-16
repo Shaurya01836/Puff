@@ -18,9 +18,13 @@ npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
 
 ## Install
 
-1. Run `Puff-Setup-0.1.0.exe`. It is a normal guided installer: pick the folder (the default is per user, so it needs no administrator rights) and finish.
+1. Run `Puff-Setup-<version>.exe`. It is a normal guided installer: pick the folder (the default is per user, so it needs no administrator rights) and finish.
 2. Windows may show a SmartScreen "unknown publisher" warning, because the installer is not code-signed yet. Choose **More info**, then **Run anyway**.
 3. Start **Puff** from the Start menu or the desktop shortcut.
+
+## Updating
+
+Run a newer installer. If Puff is already installed, Setup says so (which version, which folder), updates it **in the same folder**, and asks you to close Puff if it is open. It finds the folder in the registry, so it works wherever you first installed it. Your projects, settings and memory are kept, because they live in `~/.puff` and the database, not in the app folder. There is no automatic update yet.
 
 ## First run
 

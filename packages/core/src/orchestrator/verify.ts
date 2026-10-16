@@ -33,6 +33,15 @@ export function parseTestSummary(output: string): TestSummary | undefined {
   return undefined;
 }
 
+/**
+ * Output of a check that ran and found problems in the code: failing tests, or compiler errors when the
+ * "test command" is a type check (`tsc`), which is all some projects have. A command that crashed without
+ * saying either is a harness problem instead.
+ */
+export function looksLikeCodeFailure(output: string): boolean {
+  return /FAIL|failed|error TS\d+/i.test(output);
+}
+
 export interface Verdict {
   ok: boolean;
   /** `tests-failed`: the tests ran and some failed. `error`: the command crashed, timed out or never ran. */
@@ -77,7 +86,7 @@ export async function runVerification(
   if (r.spawnError) return { ...base, ok: false, kind: 'error', message: r.spawnError };
   if (r.exitCode === 0) return { ...base, ok: true, kind: 'passed' };
   // A non-zero exit with failing tests in the output is a code problem; anything else is the harness.
-  if (summary ? summary.failed > 0 : /FAIL|failed/i.test(output)) {
+  if (summary ? summary.failed > 0 : looksLikeCodeFailure(output)) {
     return { ...base, ok: false, kind: 'tests-failed', message: 'Tests failed' };
   }
   return {

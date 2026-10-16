@@ -5,6 +5,7 @@ import type { PuffConfig } from '../config';
 import { projectGraph, read } from '../db/client';
 import { initProjectGraph, type ProjectInfo } from '../db/init';
 import { indexRepo, type IndexStats } from '../indexer/index';
+import { detectSetup } from './detect';
 import type { ProjectEntry } from './registry';
 
 /** The user's configuration with this project's own settings on top. */
@@ -14,6 +15,22 @@ export function applyProject(config: PuffConfig, entry?: ProjectEntry): PuffConf
     ...config,
     verify: { ...config.verify, testCommand: entry.testCommand ?? config.verify.testCommand },
     worktrees: { ...config.worktrees, linkDirs: entry.linkDirs ?? config.worktrees.linkDirs },
+  };
+}
+
+/**
+ * The project with what Puff found out about its folder filled in for anything the person has not set:
+ * an app in a subfolder gets its check command and its dependency folder without anyone typing them.
+ * What the person set always wins; nothing is written to the registry.
+ */
+export async function withDetectedSettings(entry: ProjectEntry): Promise<ProjectEntry> {
+  if (entry.testCommand !== undefined && entry.linkDirs !== undefined) return entry;
+  const found = await detectSetup(entry.repoPath).catch(() => undefined);
+  if (!found) return entry;
+  return {
+    ...entry,
+    testCommand: entry.testCommand ?? found.testCommand,
+    linkDirs: entry.linkDirs ?? found.linkDirs,
   };
 }
 
@@ -36,7 +53,7 @@ export async function openProject(
   entry: ProjectEntry,
   userConfig: PuffConfig,
 ): Promise<OpenedProject> {
-  const config = applyProject(userConfig, entry);
+  const config = applyProject(userConfig, await withDetectedSettings(entry));
   const project = toProjectInfo(entry);
   const graph = await initProjectGraph(db, project, config);
   const rows = await read<{ files: number }>(graph, 'MATCH (f:File) RETURN count(f) AS files');

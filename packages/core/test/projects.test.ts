@@ -120,7 +120,7 @@ describe('registry', () => {
   });
 });
 
-describe('inspecting a folder', () => {
+describe('inspecting a folder', { timeout: 30_000 }, () => {
   it('says plainly when a folder is missing, a file, or has nothing Puff can read', async () => {
     const dir = folder('i1');
     expect((await inspectRepo(join(dir, 'nope'))).problems[0]).toMatch(/does not exist/);

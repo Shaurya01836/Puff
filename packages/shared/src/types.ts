@@ -400,6 +400,10 @@ export interface RepoInspection {
   /** From package.json: what verification would run */
   testCommand?: string;
   packageManager?: 'npm' | 'pnpm' | 'yarn' | 'bun';
+  /** The folder holding the app's package.json, relative to the project ('' when it is the project itself) */
+  appDir?: string;
+  /** Dependency folders to link into agents' worktrees when the app is in a subfolder */
+  linkDirs?: string[];
   hasNodeModules: boolean;
   files: {
     /** Source files Puff can read (TypeScript and JavaScript) */

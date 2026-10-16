@@ -294,6 +294,8 @@ npm run puff -- context <taskId>
 
 ### Your own projects
 
+Puff finds the app inside your repository by itself. If the code is in a folder (a Next.js app in `my-app/`, a package in `packages/web`) and there is no package.json at the top, it picks the folder with the most source code and a real test script or TypeScript setup, runs the project's check from the top of the repository, and links that folder's `node_modules` into each agent's worktree. A project with no tests is type-checked (`tsc --noEmit`) instead; Puff says so, because a pass then means "it compiles", not "it works". Anything you set in the project's settings wins.
+
 The app and the CLI share one list of projects (`~/.puff/projects.json`). Each project is a folder, its own graph (`puff_<name>`), and its own test command. Add one:
 
 ```bash
