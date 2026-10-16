@@ -1,37 +1,80 @@
-import { Code2, AtSign, Rss } from "lucide-react";
+import { Code2, Rss } from "lucide-react";
 import { PuffLogo } from "./puff-logo";
+import { DOCS_URL, REPO_URL, RELEASES_FEED_URL, RELEASES_URL } from "@/lib/site";
 
+/**
+ * Every entry goes somewhere real: a section of this page, a rendered Markdown
+ * document in the repository, an issue list, or the newest installer.
+ */
 const columns = [
   {
     title: "Product",
-    links: ["Platform", "Playground", "ContextPack", "Routing", "Parallelism"],
+    links: [
+      { label: "Platform", href: "#platform" },
+      { label: "Features", href: "#features" },
+      { label: "Playground", href: "#playground" },
+      { label: "Integrations", href: "#integrations" },
+      { label: "Download", href: "#download" },
+    ],
   },
   {
     title: "Graph",
-    links: ["Symbols", "Failures", "Decisions", "Procedures", "Handoffs"],
+    links: [
+      { label: "Symbols", href: `${DOCS_URL.graphSchema}#nodes` },
+      { label: "Failures", href: `${DOCS_URL.graphSchema}#q12-record-a-failure-tied-to-code` },
+      { label: "Decisions", href: `${DOCS_URL.graphSchema}#q14-record-or-supersede-a-decision` },
+      { label: "Procedures", href: `${DOCS_URL.graphSchema}#q13-record-a-solution` },
+      { label: "Handoffs", href: `${DOCS_URL.graphSchema}#q15-handoff-between-sessions` },
+    ],
   },
   {
     title: "Agents",
-    links: ["Claude Code", "Codex", "OpenCode", "Routing rules", "Strengths"],
+    links: [
+      { label: "Claude Code", href: "https://claude.com/claude-code" },
+      { label: "Codex", href: "https://github.com/openai/codex" },
+      { label: "OpenCode", href: "https://opencode.ai" },
+      {
+        label: "Routing rules",
+        href: `${DOCS_URL.graphSchema}#q10-route-best-agent-for-this-task`,
+      },
+      { label: "Strengths", href: `${DOCS_URL.architecture}#agent-adapters` },
+    ],
   },
   {
     title: "Docs",
-    links: ["Architecture", "Graph schema", "Quickstart", "CLI", "MCP server"],
+    links: [
+      { label: "Architecture", href: DOCS_URL.architecture },
+      { label: "Graph schema", href: DOCS_URL.graphSchema },
+      { label: "Quickstart", href: `${DOCS_URL.readme}#quick-start` },
+      { label: "Install guide", href: DOCS_URL.install },
+      { label: "MCP server", href: `${DOCS_URL.architecture}#puff-mcp-server` },
+    ],
   },
   {
     title: "Community",
-    links: ["Contributors", "Discussions", "Roadmap", "Changelog", "Brand"],
+    links: [
+      { label: "Roadmap", href: `${DOCS_URL.readme}#roadmap` },
+      { label: "Issues", href: `${REPO_URL}/issues` },
+      { label: "Pull requests", href: `${REPO_URL}/pulls` },
+      { label: "Releases", href: RELEASES_URL },
+      { label: "Contributors", href: `${REPO_URL}/graphs/contributors` },
+    ],
   },
   {
     title: "Developers",
-    links: ["llms.txt", "llms-full.txt", "sitemap.xml", "OpenAPI", "MCP"],
+    links: [
+      { label: "llms.txt", href: "/llms.txt" },
+      { label: "sitemap.xml", href: "/sitemap.xml" },
+      { label: "Benchmark", href: DOCS_URL.benchmark },
+      { label: "Configuration", href: `${DOCS_URL.architecture}#configuration` },
+      { label: "Team", href: `${DOCS_URL.readme}#team` },
+    ],
   },
 ];
 
 const socials = [
-  { icon: AtSign, label: "Twitter", href: "https://twitter.com" },
-  { icon: Code2, label: "GitHub", href: "https://github.com/Shaurya01836/Puff" },
-  { icon: Rss, label: "Blog", href: "#" },
+  { icon: Code2, label: "GitHub", href: REPO_URL },
+  { icon: Rss, label: "Releases feed", href: RELEASES_FEED_URL },
 ];
 
 export function SiteFooter() {
@@ -58,7 +101,9 @@ export function SiteFooter() {
             to the code it came from.
           </p>
           <a
-            href="https://github.com/Shaurya01836/Puff"
+            href={REPO_URL}
+            target="_blank"
+            rel="noreferrer"
             className="mt-3 inline-flex items-center gap-1 text-xs font-mono uppercase tracking-widest text-slate-500 transition-colors duration-150 ease-out hover:text-slate-300"
           >
             Source on GitHub ↗
@@ -79,16 +124,21 @@ export function SiteFooter() {
           >
             <p className="text-sm font-semibold text-white">{column.title}</p>
             <ul className="mt-4 space-y-2">
-              {column.links.map((link) => (
-                <li key={link}>
-                  <a
-                    href="#"
-                    className="text-sm text-slate-400 transition-colors duration-150 ease-out hover:text-white"
-                  >
-                    {link}
-                  </a>
-                </li>
-              ))}
+              {column.links.map((link) => {
+                const isExternal = link.href.startsWith("http");
+                return (
+                  <li key={link.label}>
+                    <a
+                      href={link.href}
+                      target={isExternal ? "_blank" : undefined}
+                      rel={isExternal ? "noreferrer" : undefined}
+                      className="text-sm text-slate-400 transition-colors duration-150 ease-out hover:text-white"
+                    >
+                      {link.label}
+                    </a>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         ))}
@@ -103,6 +153,8 @@ export function SiteFooter() {
             <a
               key={label}
               href={href}
+              target="_blank"
+              rel="noreferrer"
               aria-label={label}
               className="flex items-center gap-1.5 transition-colors duration-150 ease-out hover:text-white"
             >

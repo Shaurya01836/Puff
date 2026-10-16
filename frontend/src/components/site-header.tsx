@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { Download } from "lucide-react";
 import { PuffLogo } from "./puff-logo";
+import { INSTALLER_URL, REPO_URL } from "@/lib/site";
 
 const nav = [
-  { href: '#platform', label: 'Platform' },
-  { href: '#architecture', label: 'Architecture' },
-  { href: '#playground', label: 'Playground' },
-  { href: '#download', label: 'Download' },
-  { href: 'https://github.com/Shaurya01836/Puff', label: 'GitHub' },
+  { href: "#platform", label: "Platform" },
+  { href: "#playground", label: "Playground" },
+  { href: "#integrations", label: "Integrations" },
+  { href: REPO_URL, label: "GitHub" },
 ];
 
 export function SiteHeader() {
@@ -35,8 +35,10 @@ export function SiteHeader() {
           })}
         </nav>
 
+        {/* The one download button in the bar: it saves the newest installer. */}
         <a
-          href="#download"
+          href={INSTALLER_URL}
+          rel="noreferrer"
           className="inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-none bg-white px-5 text-sm font-semibold text-slate-950 transition-[transform,opacity] duration-150 ease-out hover:opacity-90 active:scale-[0.97]"
         >
           <Download className="h-4 w-4" strokeWidth={2} aria-hidden="true" />

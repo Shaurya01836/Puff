@@ -140,6 +140,9 @@ p, li, figcaption, blockquote {
 
 /* themed scrollbar: thin, sharp and slate everywhere on the page */
 html {
+  /* every in-page anchor (nav, footer, hero buttons) glides instead of jumping;
+     the reduced-motion block below turns this back to `auto` */
+  scroll-behavior: smooth;
   scrollbar-width: thin;
   scrollbar-color: #334155 transparent;
 }

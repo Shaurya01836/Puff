@@ -77,7 +77,7 @@ export default function Home() {
         </section>
 
         {/* Desktop app demo */}
-        <div className="mt-20">
+        <div id="platform" className="mt-20 scroll-mt-24">
           <SectionDivider label="Product demo" />
           <section className="relative mt-8 border-[1.5px] border-dashed border-slate-500 p-3 sm:p-4">
             <span className="absolute -left-2.5 -top-2.5 select-none font-mono text-xs text-slate-500">
@@ -97,7 +97,7 @@ export default function Home() {
           </section>
         </div>
 
-        <div className="mt-20">
+        <div id="features" className="mt-20 scroll-mt-24">
           <SectionDivider label="Features" />
           <div className="mt-8">
             <FeatureStrip />
@@ -131,15 +131,15 @@ export default function Home() {
           </div>
         </div>
 
-        <div id="architecture" className="mt-20 scroll-mt-24">
+        <div id="integrations" className="mt-20 scroll-mt-24">
           <SectionDivider label="Integrations" />
           <div className="mt-8 flex flex-wrap items-center gap-3 border-[1.5px] border-dashed border-slate-500 p-6">
             <span className="font-mono text-[10px] uppercase tracking-widest text-slate-500">
               works with
             </span>
-            <AgentBadge kind="claude" />
-            <AgentBadge kind="codex" />
-            <AgentBadge kind="opencode" />
+            <AgentBadge kind="claude" brand />
+            <AgentBadge kind="codex" brand />
+            <AgentBadge kind="opencode" brand />
             <AgentBadge kind="falkordb" />
           </div>
         </div>
