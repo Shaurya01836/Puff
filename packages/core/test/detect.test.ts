@@ -54,13 +54,14 @@ describe('detecting the app and how to check it', () => {
       'my-app/package.json': pkg({ dev: 'next dev', build: 'next build', lint: 'next lint' }),
       'my-app/tsconfig.json': {},
       'my-app/node_modules/typescript/package.json': {},
+      'my-app/node_modules/typescript/bin/tsc': '',
       'my-app/app/page.tsx': 'export default 1;',
     });
     const found = await detectSetup(root);
     expect(found).toMatchObject({
       appDir: 'my-app',
       checkKind: 'type-check',
-      testCommand: 'npm --prefix my-app exec -- tsc --noEmit -p my-app',
+      testCommand: 'node my-app/node_modules/typescript/bin/tsc --noEmit -p my-app',
       linkDirs: ['my-app/node_modules'],
       hasNodeModules: true,
     });
@@ -132,8 +133,11 @@ describe('detecting the app and how to check it', () => {
       'package.json': pkg(),
       'tsconfig.json': {},
       'node_modules/typescript/package.json': {},
+      'node_modules/typescript/bin/tsc': '',
     });
-    expect((await detectSetup(root))?.testCommand).toBe('npm exec -- tsc --noEmit');
+    expect((await detectSetup(root))?.testCommand).toBe(
+      'node node_modules/typescript/bin/tsc --noEmit',
+    );
   });
 });
 
@@ -143,6 +147,7 @@ describe('what the person set wins; the rest is filled in', () => {
       'my-app/package.json': pkg(),
       'my-app/tsconfig.json': {},
       'my-app/node_modules/typescript/package.json': {},
+      'my-app/node_modules/typescript/bin/tsc': '',
     });
   const entry = (repoPath: string, extra: Partial<ProjectEntry> = {}): ProjectEntry => ({
     slug: 'kite',
@@ -154,7 +159,7 @@ describe('what the person set wins; the rest is filled in', () => {
 
   it('fills in a project that has no settings of its own', async () => {
     const e = await withDetectedSettings(entry(root()));
-    expect(e.testCommand).toBe('npm --prefix my-app exec -- tsc --noEmit -p my-app');
+    expect(e.testCommand).toBe('node my-app/node_modules/typescript/bin/tsc --noEmit -p my-app');
     expect(e.linkDirs).toEqual(['my-app/node_modules']);
   });
 
@@ -164,6 +169,24 @@ describe('what the person set wins; the rest is filled in', () => {
     const partly = await withDetectedSettings(entry(root(), { testCommand: 'make check' }));
     expect(partly.testCommand).toBe('make check');
     expect(partly.linkDirs).toEqual(['my-app/node_modules']);
+  });
+
+  it('a type-check an earlier Puff stored is upgraded to the portable form (PowerShell drops the --)', async () => {
+    const old = entry(root(), {
+      testCommand: 'npm --prefix my-app exec -- tsc --noEmit -p my-app',
+      linkDirs: ['my-app/node_modules'],
+    });
+    expect((await withDetectedSettings(old)).testCommand).toBe(
+      'node my-app/node_modules/typescript/bin/tsc --noEmit -p my-app',
+    );
+    // something the person typed is never touched, even if it looks similar
+    const typed = entry(root(), {
+      testCommand: 'npm --prefix my-app exec -- tsc --noEmit --strict',
+    });
+    expect((await withDetectedSettings(typed)).testCommand).toBe(typed.testCommand);
+    // and with no tsc installed there is nothing better to switch to
+    const bare = entry(project({ 'my-app/package.json': pkg() }), { testCommand: old.testCommand });
+    expect((await withDetectedSettings(bare)).testCommand).toBe(old.testCommand);
   });
 
   it('leaves a project alone when there is nothing to detect', async () => {
@@ -180,6 +203,7 @@ describe('inspecting a repository whose app is in a folder', () => {
       'my-app/package.json': pkg({ dev: 'next dev' }),
       'my-app/tsconfig.json': {},
       'my-app/node_modules/typescript/package.json': {},
+      'my-app/node_modules/typescript/bin/tsc': '',
       'my-app/app/page.tsx': 'export default function Page() { return null; }\n',
     });
     execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: root });
@@ -190,7 +214,7 @@ describe('inspecting a repository whose app is in a folder', () => {
 
     const info = await inspectRepo(root);
     expect(info.appDir).toBe('my-app');
-    expect(info.testCommand).toBe('npm --prefix my-app exec -- tsc --noEmit -p my-app');
+    expect(info.testCommand).toBe('node my-app/node_modules/typescript/bin/tsc --noEmit -p my-app');
     expect(info.linkDirs).toEqual(['my-app/node_modules']);
     expect(info.hasNodeModules).toBe(true);
     expect(info.problems).toEqual([]);

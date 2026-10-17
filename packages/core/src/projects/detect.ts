@@ -132,6 +132,39 @@ function inDir(pm: PackageManager, dir: string, rest: string): string {
   return `npm --prefix ${dir} ${rest}`;
 }
 
+/** A path as one shell argument */
+const arg = (p: string) => (/\s/.test(p) ? `"${p}"` : p);
+
+/** The project's own tsc, relative to the repository top with forward slashes, when it is installed */
+function tscPath(root: string, dir: string): string | undefined {
+  for (const base of dir ? [dir, ''] : ['']) {
+    const rel = [base, 'node_modules/typescript/bin/tsc'].filter(Boolean).join('/');
+    if (existsSync(join(root, rel))) return rel;
+  }
+  return undefined;
+}
+
+/**
+ * The type-check as a command that means the same in every shell. `npm exec -- tsc --noEmit` does not:
+ * Windows PowerShell 5.1 drops the `--`, so npm reads `--noEmit` as its own option and tsc is handed the
+ * folder as a source file (TS6231), which is how every verifier agent failed on a Windows machine. Calling
+ * the project's tsc with node has no `--` to lose. Undefined when its tsc is not installed.
+ */
+export function typeCheckCommand(root: string, dir: string): string | undefined {
+  const tsc = tscPath(root, dir);
+  if (!tsc) return undefined;
+  return `node ${arg(tsc)} --noEmit${dir ? ` -p ${arg(dir)}` : ''}`;
+}
+
+const OLD_TYPE_CHECK = /^npm(?: --prefix (\S+))? exec -- tsc --noEmit(?: -p (\S+))?$/;
+
+/** A type-check command an earlier Puff detected and stored, in its portable form (anything else is untouched) */
+export function portableCheck(command: string | undefined, root: string): string | undefined {
+  const old = command ? OLD_TYPE_CHECK.exec(command.trim()) : null;
+  if (!old) return command;
+  return typeCheckCommand(root, old[1] ?? '') ?? command;
+}
+
 /**
  * Work out the app folder, its check command and its dependency folder. Returns undefined when there is
  * no package.json anywhere near the top (nothing to detect: the person sets a command themselves).
@@ -157,9 +190,11 @@ export async function detectSetup(root: string): Promise<DetectedSetup | undefin
       existsSync(join(root, 'node_modules', 'typescript')))
   ) {
     // No tests, but the code can at least be type-checked. `npm exec` runs the project's own tsc.
-    testCommand = inApp
-      ? `npm --prefix ${chosen.dir} exec -- tsc --noEmit -p ${chosen.dir}`
-      : 'npm exec -- tsc --noEmit';
+    testCommand =
+      typeCheckCommand(root, chosen.dir) ??
+      (inApp
+        ? `npm --prefix ${chosen.dir} exec -- tsc --noEmit -p ${chosen.dir}`
+        : 'npm exec -- tsc --noEmit');
     checkKind = 'type-check';
   }
 

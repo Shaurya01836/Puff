@@ -305,6 +305,17 @@ describe('adapters (a fake CLI stands in for the real one)', () => {
 describe('what an agent may run to check its work', () => {
   it("allows the project's own check command, and for an app in a subfolder its install, run and test", () => {
     expect(checkCommands('npm test')).toEqual(['npm test']);
+    // the portable type-check still lets a verifier run the app's other checks
+    expect(checkCommands('node my-app/node_modules/typescript/bin/tsc --noEmit -p my-app')).toEqual(
+      [
+        'node my-app/node_modules/typescript/bin/tsc --noEmit -p my-app',
+        'npm --prefix my-app install',
+        'npm --prefix my-app ci',
+        'npm --prefix my-app test',
+        'npm --prefix my-app run',
+        'npm --prefix my-app exec -- tsc',
+      ],
+    );
     expect(checkCommands('npm --prefix my-app exec -- tsc --noEmit -p my-app')).toEqual([
       'npm --prefix my-app exec -- tsc --noEmit -p my-app',
       'npm --prefix my-app install',

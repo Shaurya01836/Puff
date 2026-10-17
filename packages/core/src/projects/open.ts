@@ -5,7 +5,7 @@ import type { PuffConfig } from '../config';
 import { projectGraph, read } from '../db/client';
 import { initProjectGraph, type ProjectInfo } from '../db/init';
 import { indexRepo, type IndexStats } from '../indexer/index';
-import { detectSetup } from './detect';
+import { detectSetup, portableCheck } from './detect';
 import type { ProjectEntry } from './registry';
 
 /** The user's configuration with this project's own settings on top. */
@@ -23,7 +23,10 @@ export function applyProject(config: PuffConfig, entry?: ProjectEntry): PuffConf
  * an app in a subfolder gets its check command and its dependency folder without anyone typing them.
  * What the person set always wins; nothing is written to the registry.
  */
-export async function withDetectedSettings(entry: ProjectEntry): Promise<ProjectEntry> {
+export async function withDetectedSettings(stored: ProjectEntry): Promise<ProjectEntry> {
+  // A type-check stored by an earlier version (`npm exec -- tsc …`) fails under Windows PowerShell: use the portable form
+  const fixed = portableCheck(stored.testCommand, stored.repoPath);
+  const entry = fixed === stored.testCommand ? stored : { ...stored, testCommand: fixed };
   if (entry.testCommand !== undefined && entry.linkDirs !== undefined) return entry;
   const found = await detectSetup(entry.repoPath).catch(() => undefined);
   if (!found) return entry;

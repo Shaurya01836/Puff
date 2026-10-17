@@ -41,7 +41,9 @@ const CLAUDE_WRITE = [...CLAUDE_READ, 'Edit', 'Write', 'MultiEdit', ...CLAUDE_CH
 export function checkCommands(testCommand: string | undefined): string[] {
   if (!testCommand?.trim()) return [];
   const out = [testCommand.trim()];
-  const prefix = /^npm\s+--prefix\s+(\S+)/.exec(testCommand.trim());
+  const prefix =
+    /^npm\s+--prefix\s+(\S+)/.exec(testCommand.trim()) ??
+    /^node\s+"?([^"\s]+?)\/node_modules\/typescript\/bin\/tsc/.exec(testCommand.trim());
   if (prefix) {
     const p = `npm --prefix ${prefix[1]}`;
     out.push(`${p} install`, `${p} ci`, `${p} test`, `${p} run`, `${p} exec -- tsc`);
