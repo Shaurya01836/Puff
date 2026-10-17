@@ -240,7 +240,7 @@ export function ChatPanel({
                 </div>
                 <p className="mt-1.5 text-xs leading-relaxed text-slate-300">
                   Tell Puff what you want in plain words. It coordinates Claude Code, Codex, and
-                  OpenCode, writes goals, and reviews graph diffs.
+                  OpenCode, writes goals, and reads the project's memory and code graph.
                 </p>
                 <p className="mt-2 font-mono text-[11px] text-slate-400">
                   Start with <b className="font-semibold text-emerald-400">/</b> for instant

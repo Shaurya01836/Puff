@@ -24,13 +24,9 @@ export function Agents({
 
   return (
     <div className="flex flex-col gap-6 overflow-y-auto p-6">
-      {/* View Title matching Screenshot 3 */}
-      <div className="flex items-center gap-3 border-b border-line pb-4">
-        <h2 className="font-display text-xl font-bold tracking-tight text-white">Agents</h2>
-        <span className="text-xs text-slate-400">
-          {agents?.length ?? 0} in the pool · {busy} working now
-        </span>
-      </div>
+      <p className="text-sm text-slate-400">
+        {agents?.length ?? 0} agents in the pool · {busy} working now
+      </p>
 
       <section>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -87,8 +83,8 @@ function AgentCard({ agent: a }: { agent: AgentProfile }) {
           <h3 className="font-display text-base font-semibold leading-tight text-white">
             {meta.label}
           </h3>
-          <p className="mt-0.5 truncate font-mono text-[10px] uppercase tracking-widest text-slate-400">
-            {meta.roles}
+          <p className="mt-0.5 text-[11px] leading-snug text-slate-400 first-letter:uppercase">
+            {meta.roles?.toLowerCase()}
           </p>
         </div>
       </div>

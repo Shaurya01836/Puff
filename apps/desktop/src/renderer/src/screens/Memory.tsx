@@ -369,7 +369,7 @@ function LessonDetail({
         <p className="mt-2 text-[13px] leading-relaxed text-slate-400">{STATE_META[i.state].why}</p>
       </div>
 
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm lg:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm xl:grid-cols-4">
         <Fact label={i.kind === 'Procedure' ? 'Applies to' : 'About'}>
           {i.about.length ? (
             <span className="flex flex-col gap-0.5 font-mono text-xs text-sky-400">

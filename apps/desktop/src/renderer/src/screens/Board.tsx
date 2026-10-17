@@ -27,7 +27,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AgentAvatar, AgentChip, StatusPill, WaitingChip } from '@/components/ui';
 import { Menu } from '@/components/Menu';
 import { cn } from '@/lib/cn';
-import { TaskPanel } from '@/screens/TaskDetail';
+import { TaskPanel } from '@/screens/TaskPanel';
 import { AGENT_META, STATUS_META, TONE_COLOR, formatTokens } from '@/lib/theme';
 
 /** Risk at or above this counts as load-bearing code (the default of graph.riskThreshold) */

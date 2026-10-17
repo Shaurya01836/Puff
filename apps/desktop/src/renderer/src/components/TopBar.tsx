@@ -59,7 +59,7 @@ export function TopBar({
 
       <form
         onSubmit={submit}
-        className="group mx-auto flex h-9 min-w-40 flex-1 items-center gap-2 border border-line bg-surface px-3 transition-colors focus-within:border-emerald-500/60 lg:max-w-lg"
+        className="group mx-auto flex h-9 min-w-40 flex-1 items-center gap-2 border border-line bg-surface px-3 transition-colors focus-within:border-emerald-500/60 xl:max-w-lg"
       >
         <Sparkles className="size-3.5 shrink-0 text-emerald-400" />
         <input
@@ -76,7 +76,7 @@ export function TopBar({
 
       <div className="flex shrink-0 items-center gap-2.5">
         {badge && (
-          <span className="hidden lg:inline-flex">
+          <span className="hidden xl:inline-flex">
             <MockBadge label={badge} />
           </span>
         )}
@@ -93,7 +93,7 @@ export function TopBar({
           )}
         >
           <MessageSquare className="size-3.5" />
-          <span className="hidden lg:inline">Ask Puff</span>
+          <span className="hidden xl:inline">Ask Puff</span>
         </button>
         <button
           onClick={onNewTask}
@@ -110,7 +110,7 @@ export function TopBar({
             className="inline-flex h-8 items-center gap-1.5 border border-line-strong bg-surface px-3 text-xs font-medium text-slate-300 transition-colors hover:bg-surface-3 hover:text-white disabled:cursor-default disabled:opacity-60"
           >
             <Pause className="size-3.5" />
-            <span className="hidden lg:inline">{pausing ? 'Pausing…' : 'Pause after current'}</span>
+            <span className="hidden xl:inline">{pausing ? 'Pausing…' : 'Pause after current'}</span>
           </button>
         )}
         <button
