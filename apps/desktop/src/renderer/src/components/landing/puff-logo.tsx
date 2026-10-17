@@ -5,8 +5,8 @@ type PuffLogoProps = {
   style?: import('react').CSSProperties;
 };
 
-const GREEN = '#00d492';
-const INK = '#0c121f';
+const GREEN = '#34d399';
+const INK = '#0a0a0c';
 
 const legs = (
   <g fill="none" stroke={GREEN} strokeWidth={13} strokeLinecap="round">
@@ -71,13 +71,12 @@ export function PuffLogo({ className, label }: PuffLogoProps) {
       <text
         x="122"
         y="84"
-        fill="#eef0f8"
+        fill="#f2f2f4"
         fontSize={74}
         fontWeight={700}
         letterSpacing="-1"
         style={{
-          fontFamily:
-            'var(--font-display), var(--font-sans), ui-sans-serif, system-ui, sans-serif',
+          fontFamily: 'var(--font-display), var(--font-sans), ui-sans-serif, system-ui, sans-serif',
         }}
       >
         puff

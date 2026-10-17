@@ -1,22 +1,9 @@
 import type { ReactNode } from 'react';
-import {
-  ArrowRightLeft,
-  CircleCheck,
-  CircleDot,
-  History,
-  Hourglass,
-  Loader,
-  Package,
-  RefreshCw,
-  Scale,
-  TriangleAlert,
-  Undo2,
-  Zap,
-} from 'lucide-react';
-import type { Actor, MemoryEventType, TaskStatus } from '@puff/shared';
+import { CircleCheck, TriangleAlert } from 'lucide-react';
+import type { Actor, TaskStatus } from '@puff/shared';
 import { ClaudeMark, OpenAIMark, OpenCodeMark } from '@/components/landing/agent-logos';
 import { cn } from '@/lib/cn';
-import { AGENT_META, MEMORY_EVENT_META, STATUS_META, TONE_COLOR } from '@/lib/theme';
+import { AGENT_META, STATUS_META, TONE_COLOR } from '@/lib/theme';
 
 export function Panel({ className, children }: { className?: string; children: ReactNode }) {
   return <div className={cn('panel', className)}>{children}</div>;
@@ -25,21 +12,30 @@ export function Panel({ className, children }: { className?: string; children: R
 export function SectionTitle({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
-      <h2 className="text-[11px] font-semibold tracking-[0.12em] text-ink-3 uppercase">
-        {children}
-      </h2>
+      <h2 className="text-[11px] font-semibold tracking-wide text-ink-3 uppercase">{children}</h2>
       {right}
     </div>
   );
 }
 
 /** Avatar using official direct agent SVG mark, no background box, crisp and normal. */
-export function AgentAvatar({ agent, size = 22, className }: { agent: Actor; size?: number; className?: string }) {
+export function AgentAvatar({
+  agent,
+  size = 22,
+  className,
+}: {
+  agent: Actor;
+  size?: number;
+  className?: string;
+}) {
   const meta = AGENT_META[agent];
   if (agent === 'you') {
     return (
       <span
-        className={cn('inline-flex shrink-0 items-center justify-center font-mono font-bold text-slate-300', className)}
+        className={cn(
+          'inline-flex shrink-0 items-center justify-center font-mono font-bold text-ink',
+          className,
+        )}
         style={{ width: size, height: size, fontSize: size * 0.45 }}
         aria-hidden
       >
@@ -47,12 +43,7 @@ export function AgentAvatar({ agent, size = 22, className }: { agent: Actor; siz
       </span>
     );
   }
-  const Mark =
-    agent === 'claude-code'
-      ? ClaudeMark
-      : agent === 'codex'
-        ? OpenAIMark
-        : OpenCodeMark;
+  const Mark = agent === 'claude-code' ? ClaudeMark : agent === 'codex' ? OpenAIMark : OpenCodeMark;
 
   return (
     <span
@@ -69,7 +60,7 @@ export function AgentChip({ agent, sub }: { agent?: Actor; sub?: string }) {
   if (!agent)
     return (
       <span className="inline-flex items-center gap-2 text-xs text-ink-3">
-        <span className="font-mono text-xs text-slate-500">?</span>
+        <span className="font-mono text-xs text-ink-3">?</span>
         Auto-routing
       </span>
     );
@@ -86,64 +77,27 @@ export function AgentChip({ agent, sub }: { agent?: Actor; sub?: string }) {
   );
 }
 
-const STATUS_ICON: Record<TaskStatus, typeof CircleDot> = {
-  planned: CircleDot,
-  ready: Zap,
-  running: Loader,
-  verifying: Loader,
-  failed: TriangleAlert,
-  retrying: RefreshCw,
-  escalated: TriangleAlert,
-  done: CircleCheck,
-};
-
-/** Status always shows icon + label, styled in landing page monospace badge style. */
+/** Status is its word, in the tone's colour; the one dot is reserved for work happening now. */
 export function StatusPill({ status }: { status: TaskStatus }) {
   const meta = STATUS_META[status];
   const color = TONE_COLOR[meta.tone];
-  const Icon = STATUS_ICON[status];
   return (
-    <span
-      className="inline-flex shrink-0 items-center gap-1.5 border border-line-strong bg-surface-2/60 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest"
-      style={{ color }}
-    >
-      <span
-        className={cn('size-1.5 rounded-full', meta.live && 'animate-live-ring')}
-        style={{ background: color }}
-      />
-      {meta.label}
-    </span>
-  );
-}
-
-const EVENT_ICON: Record<MemoryEventType, typeof CircleDot> = {
-  failure_recorded: TriangleAlert,
-  solution_recorded: CircleCheck,
-  decision_recorded: Scale,
-  decision_superseded: RefreshCw,
-  memory_stale: History,
-  memory_downgraded: Undo2,
-  handoff: ArrowRightLeft,
-  context_compiled: Package,
-};
-
-export function EventIcon({ type }: { type: MemoryEventType }) {
-  const { color } = MEMORY_EVENT_META[type];
-  const Icon = EVENT_ICON[type];
-  return (
-    <span
-      className="flex size-5 shrink-0 items-center justify-center pt-0.5"
-      style={{ color, filter: `drop-shadow(0 0 6px ${color}80)` }}
-    >
-      <Icon className="size-4" />
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-sm border border-line bg-surface-2/70 px-1.5 py-0.5 text-[11px] font-medium">
+      <span style={{ color }}>{meta.label}</span>
+      {meta.live && (
+        <span
+          className="animate-pulse-dot size-1.5 shrink-0 rounded-full"
+          style={{ background: color }}
+          aria-hidden
+        />
+      )}
     </span>
   );
 }
 
 export function WaitingChip({ on }: { on: string[] }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-md bg-warn/10 px-2 py-1 text-[11px] text-warn">
-      <Hourglass className="size-3" />
+    <span className="rounded-sm border border-warn/20 bg-warn/10 px-1.5 py-0.5 text-[11px] text-warn">
       Waiting on {on.join(', ')} · overlapping code
     </span>
   );
@@ -151,7 +105,7 @@ export function WaitingChip({ on }: { on: string[] }) {
 
 export function Kbd({ children }: { children: ReactNode }) {
   return (
-    <kbd className="rounded border border-line-strong bg-surface-3 px-1.5 py-0.5 font-mono text-[10px] text-ink-3">
+    <kbd className="rounded-sm border border-line bg-surface-3 px-1.5 py-0.5 font-mono text-[10px] text-ink-3">
       {children}
     </kbd>
   );
@@ -160,7 +114,7 @@ export function Kbd({ children }: { children: ReactNode }) {
 export function MockBadge({ label = 'Mock data' }: { label?: string }) {
   return (
     <span
-      className="rounded-full border border-warn/25 bg-warn/10 px-2.5 py-1 text-[11px] font-medium text-warn"
+      className="rounded-sm border border-warn/25 bg-warn/10 px-1.5 py-0.5 text-[11px] font-medium text-warn"
       title="Data comes from packages/shared/src/mocks until the backend lands"
     >
       {label}
@@ -188,7 +142,7 @@ export function Notice({
   return (
     <div
       role="status"
-      className="fixed right-6 bottom-6 z-30 flex max-w-md animate-fade-in items-start gap-3 rounded-xl border border-line-strong bg-surface-2 px-4 py-3 text-sm shadow-[0_20px_40px_-12px_rgb(0_0_0/0.8)]"
+      className="animate-fade-in fixed right-6 bottom-6 z-30 flex max-w-md items-start gap-3 rounded-sm border border-line-strong bg-surface-2 px-3.5 py-2.5 text-sm shadow-[0_16px_40px_-16px_rgb(0_0_0/0.8)]"
     >
       <Icon className="mt-0.5 size-4 shrink-0" style={{ color }} />
       <div className="text-ink-2">{children}</div>

@@ -33,28 +33,28 @@ export const AGENT_META: Record<
   you: {
     label: 'You',
     short: 'ME',
-    color: '#a3b0c8',
+    color: '#a4a4ad',
     text: 'text-ink-2',
     tagline: 'Changes you made yourself',
   },
 };
 
-export type StatusTone = 'neutral' | 'brand' | 'info' | 'good' | 'warn' | 'bad';
+/** Four tones, no more: idle, live, needs a person, failed. */
+export type StatusTone = 'neutral' | 'brand' | 'good' | 'warn' | 'bad';
 
 export const TONE_COLOR: Record<StatusTone, string> = {
-  neutral: '#64748b',
-  brand: '#00d492',
-  info: '#38bdf8',
+  neutral: '#77777f',
+  brand: '#34d399',
   good: '#34d399',
-  warn: '#fbbf24',
-  bad: '#f43f5e',
+  warn: '#d29922',
+  bad: '#f85149',
 };
 
 export const STATUS_META: Record<TaskStatus, { label: string; tone: StatusTone; live?: boolean }> =
   {
     planned: { label: 'Planned', tone: 'neutral' },
-    ready: { label: 'Ready', tone: 'brand' },
-    running: { label: 'Running', tone: 'info', live: true },
+    ready: { label: 'Ready', tone: 'neutral' },
+    running: { label: 'Running', tone: 'brand', live: true },
     verifying: { label: 'Verifying', tone: 'brand', live: true },
     failed: { label: 'Failed', tone: 'bad' },
     retrying: { label: 'Retrying', tone: 'warn', live: true },
@@ -79,32 +79,32 @@ export const NODE_GROUPS: Record<string, 'code' | 'work' | 'memory'> = {
   Handoff: 'memory',
 };
 
-/** Graph node colours by label. Memory kinds reuse the meaning of the status colours. */
+/** Graph node colours: neutral structure, colour only where it carries meaning. */
 export const NODE_COLORS: Record<string, string> = {
-  File: '#3a4766',
-  Symbol: '#8b7cf6',
-  Technology: '#6b7894',
-  Task: '#e7ecf6',
-  Session: '#4b5878',
-  Agent: '#b4a5ff',
-  Capability: '#7c6fd0',
-  Failure: '#f45d6d',
-  Solution: '#4ade80',
-  Decision: '#f5b83d',
-  Procedure: '#2dd4e0',
-  ContextPack: '#2dd4e0',
-  Handoff: '#2dd4e0',
+  File: '#4a4a55',
+  Symbol: '#8a8a96',
+  Technology: '#3d3d46',
+  Task: '#e6e6ea',
+  Session: '#6e6e78',
+  Agent: '#a4a4ad',
+  Capability: '#6e6e78',
+  Failure: '#f85149',
+  Solution: '#34d399',
+  Decision: '#d29922',
+  Procedure: '#8a8a96',
+  ContextPack: '#8a8a96',
+  Handoff: '#8a8a96',
 };
 
 export const MEMORY_EVENT_META: Record<MemoryEventType, { label: string; color: string }> = {
-  failure_recorded: { label: 'Failure recorded', color: '#f45d6d' },
-  solution_recorded: { label: 'Fix recorded', color: '#4ade80' },
-  decision_recorded: { label: 'Decision', color: '#f5b83d' },
-  decision_superseded: { label: 'Decision superseded', color: '#f5b83d' },
-  memory_stale: { label: 'Memory marked stale', color: '#a9b4cc' },
-  memory_downgraded: { label: 'Lessons downgraded', color: '#fb923c' },
-  handoff: { label: 'Handoff', color: '#b4a5ff' },
-  context_compiled: { label: 'Context compiled', color: '#2dd4e0' },
+  failure_recorded: { label: 'Failure recorded', color: '#f85149' },
+  solution_recorded: { label: 'Fix recorded', color: '#34d399' },
+  decision_recorded: { label: 'Decision', color: '#d29922' },
+  decision_superseded: { label: 'Decision superseded', color: '#d29922' },
+  memory_stale: { label: 'Memory marked stale', color: '#77777f' },
+  memory_downgraded: { label: 'Lessons downgraded', color: '#d29922' },
+  handoff: { label: 'Handoff', color: '#a4a4ad' },
+  context_compiled: { label: 'Context compiled', color: '#a4a4ad' },
 };
 
 export const formatTokens = (n: number): string =>

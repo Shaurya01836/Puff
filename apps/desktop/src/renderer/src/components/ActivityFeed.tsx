@@ -1,27 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  Flag,
-  FileText,
-  LoaderCircle,
-  MessageSquare,
-  Pencil,
-  Search,
-  Terminal,
-  Wrench,
-} from 'lucide-react';
+import { LoaderCircle } from 'lucide-react';
 import type { ActivityKind, ActivityStep } from '@puff/shared';
 import { AgentChip } from '@/components/ui';
 import type { ActivityGroup } from '@/lib/hooks';
 import { cn } from '@/lib/cn';
 
-const ICONS: Record<ActivityKind, typeof FileText> = {
-  read: FileText,
-  edit: Pencil,
-  command: Terminal,
-  search: Search,
-  message: MessageSquare,
-  tool: Wrench,
-  phase: Flag,
+/** What kind of thing the agent did, as a word: clearer than a glyph at this size. */
+const KIND_WORD: Record<ActivityKind, string> = {
+  read: 'read',
+  edit: 'edit',
+  command: 'cmd',
+  search: 'search',
+  message: 'say',
+  tool: 'tool',
+  phase: 'phase',
 };
 
 /** Time since the first step of the session: 0:07, 1:32 */
@@ -31,30 +23,18 @@ function elapsed(ms: number): string {
 }
 
 function Step({ step, start }: { step: ActivityStep; start: number }) {
-  const Icon = ICONS[step.kind];
   const failed = step.ok === false;
   return (
     <li
       className={cn(
-        'flex items-start gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] leading-snug',
+        'flex items-start gap-2.5 rounded-sm px-2.5 py-1.5 text-[13px] leading-snug',
         step.kind === 'phase' && 'bg-brand/8',
         failed && 'bg-bad/8',
       )}
     >
-      <Icon
-        className={cn(
-          'mt-0.5 size-3.5 shrink-0',
-          failed
-            ? 'text-bad'
-            : step.ok === true
-              ? 'text-good'
-              : step.kind === 'phase'
-                ? 'text-brand-soft'
-                : step.kind === 'edit'
-                  ? 'text-warn'
-                  : 'text-ink-3',
-        )}
-      />
+      <span className="mt-0.5 w-12 shrink-0 font-mono text-[9px] tracking-wide text-ink-3 uppercase">
+        {KIND_WORD[step.kind]}
+      </span>
       <span
         className={cn(
           'min-w-0 flex-1 break-words',
@@ -99,7 +79,7 @@ export function ActivityFeed({ groups, active }: { groups: ActivityGroup[]; acti
     <div
       role="group"
       aria-label="How to show the steps"
-      className="flex self-end rounded-lg border border-line bg-surface-2 p-0.5 text-[11px]"
+      className="flex self-end rounded-sm border border-line bg-surface-2 p-0.5 text-[11px]"
     >
       {(
         [
@@ -112,7 +92,7 @@ export function ActivityFeed({ groups, active }: { groups: ActivityGroup[]; acti
           onClick={() => setView(id)}
           aria-pressed={view === id}
           className={cn(
-            'rounded-md px-2.5 py-1 transition-colors',
+            'rounded-sm px-2.5 py-1 transition-colors',
             view === id ? 'bg-surface-3 text-ink' : 'text-ink-3 hover:text-ink-2',
           )}
         >
@@ -147,7 +127,7 @@ export function ActivityFeed({ groups, active }: { groups: ActivityGroup[]; acti
                 <span className="text-xs text-ink-3">Attempt {i + 1}</span>
               )}
               {running ? (
-                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-info">
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-brand">
                   <LoaderCircle className="size-3.5 animate-spin" />
                   Working
                 </span>
@@ -192,7 +172,7 @@ function ConsoleView({ groups }: { groups: ActivityGroup[] }) {
   return (
     <pre
       aria-label="Console"
-      className="max-h-[62vh] overflow-auto rounded-xl border border-line bg-[#0a0a0a] p-3.5 font-mono text-[12px] leading-relaxed text-[#d4d4d4]"
+      className="max-h-[62vh] overflow-auto rounded-md border border-line bg-abyss p-3.5 font-mono text-[12px] leading-relaxed text-ink-2"
     >
       {groups.map((g, i) => (
         <div key={g.id} className="mb-3 last:mb-0">
@@ -208,15 +188,15 @@ function ConsoleView({ groups }: { groups: ActivityGroup[] }) {
               <span
                 className={cn(
                   s.ok === false
-                    ? 'text-[#f45d6d]'
+                    ? 'text-bad'
                     : s.ok === true
-                      ? 'text-[#4ade80]'
+                      ? 'text-brand'
                       : s.kind === 'phase'
-                        ? 'text-[#a99bff]'
+                        ? 'text-ink'
                         : s.kind === 'edit'
-                          ? 'text-[#f5b83d]'
+                          ? 'text-warn'
                           : s.kind === 'message'
-                            ? 'text-[#9ca3af] italic'
+                            ? 'text-ink-3 italic'
                             : '',
                 )}
               >

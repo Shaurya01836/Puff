@@ -227,7 +227,6 @@ export function TaskPanel({
             />
             <Menu
               label="Take over"
-              icon={<Terminal className="size-3.5" />}
               title="Stop the agent and work on it yourself in a real terminal"
               items={[
                 ...CLIS.filter((c) => c.cli !== 'shell').map((c) => ({
@@ -292,19 +291,19 @@ export function TaskPanel({
               rows={3}
               aria-label="Note for the next attempt"
               placeholder="Tell the next attempt something it must know or do, e.g. “reuse the existing rounding helper”"
-              className="resize-none rounded-xl border border-line bg-surface-2 p-3 text-sm outline-none focus:border-brand/60"
+              className="resize-none rounded-md border border-line bg-surface-2 p-3 text-sm outline-none focus:border-brand/60"
             />
             <div className="flex gap-2">
               <button
                 type="submit"
-                className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white"
+                className="rounded-sm bg-brand px-3 py-1.5 text-xs font-semibold text-abyss"
               >
                 Save note
               </button>
               <button
                 type="button"
                 onClick={() => setNoting(false)}
-                className="rounded-lg border border-line-strong px-3 py-1.5 text-xs text-ink-2"
+                className="rounded-sm border border-line-strong px-3 py-1.5 text-xs text-ink-2"
               >
                 Cancel
               </button>
@@ -312,7 +311,7 @@ export function TaskPanel({
           </form>
         )}
         {!noting && detail?.task.note && (
-          <p className="mt-3 rounded-xl border border-line bg-surface-2/60 p-3 text-[13px] leading-snug text-ink-2">
+          <p className="mt-3 rounded-md border border-line bg-surface-2/60 p-3 text-[13px] leading-snug text-ink-2">
             <b className="font-medium text-ink">Your note: </b>
             {detail.task.note}
           </p>
@@ -320,7 +319,7 @@ export function TaskPanel({
         {mine && working && (
           <p
             role="alert"
-            className="mt-3 rounded-xl border border-warn/40 bg-warn/10 p-3 text-[13px] leading-snug text-ink-2"
+            className="mt-3 rounded-md border border-warn/40 bg-warn/10 p-3 text-[13px] leading-snug text-ink-2"
           >
             <b className="font-medium text-warn">
               An agent is also running this task in the background.
@@ -331,7 +330,7 @@ export function TaskPanel({
           </p>
         )}
         {mine && !working && status !== 'done' && (
-          <p className="mt-3 rounded-xl border border-brand/30 bg-brand/10 p-3 text-[13px] leading-snug text-ink-2">
+          <p className="mt-3 rounded-md border border-brand/30 bg-brand/10 p-3 text-[13px] leading-snug text-ink-2">
             <b className="font-medium text-ink">You took this task over.</b> Puff will not run it.
             Work in its terminal under Live, then press{' '}
             <b className="font-medium">Verify and merge my changes</b>.
@@ -359,9 +358,6 @@ export function TaskPanel({
                   {count}
                 </span>
               )}
-              {id === 'live' && working && (
-                <span className="inline-block size-1.5 animate-pulse rounded-full bg-info" />
-              )}
             </button>
           ))}
         </div>
@@ -382,7 +378,7 @@ export function TaskPanel({
               status !== 'done' && (
                 <button
                   onClick={() => setTerminalOpen(true)}
-                  className="inline-flex w-fit items-center gap-2 rounded-lg border border-line-strong bg-surface-2 px-3 py-1.5 text-xs text-ink-2 hover:bg-surface-3 hover:text-ink"
+                  className="inline-flex w-fit items-center gap-2 rounded-sm border border-line-strong bg-surface-2 px-3 py-1.5 text-xs text-ink-2 hover:bg-surface-3 hover:text-ink"
                 >
                   <Terminal className="size-3.5" /> Open a terminal in this task&apos;s folder
                 </button>
@@ -451,7 +447,7 @@ function ActionButton({
       onClick={onClick}
       title={title}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors',
+        'inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1.5 text-xs font-medium transition-colors',
         danger
           ? 'border-bad/30 text-bad hover:bg-bad/10'
           : 'border-line-strong bg-surface-2 text-ink-2 hover:bg-surface-3 hover:text-ink',
@@ -483,14 +479,14 @@ function ChangesTab({ diff, status }: { diff?: TaskDiffInfo; status: Task['statu
           {diff.files.map((f) => (
             <li
               key={f}
-              className="rounded-md border border-line bg-surface-2 px-2 py-0.5 font-mono text-[11px] text-ink-2"
+              className="rounded-sm border border-line bg-surface-2 px-2 py-0.5 font-mono text-[11px] text-ink-2"
             >
               {f}
             </li>
           ))}
         </ul>
       </div>
-      <pre className="overflow-x-auto rounded-xl border border-line bg-abyss/60 p-3 font-mono text-[11px] leading-relaxed">
+      <pre className="overflow-x-auto rounded-md border border-line bg-abyss/60 p-3 font-mono text-[11px] leading-relaxed">
         {diff.diff.split('\n').map((line, i) => (
           <div
             key={i}
@@ -532,7 +528,7 @@ function ContextTab({ task, pack }: { task: Task; pack?: ContextPack }) {
             return (
               <li
                 key={t}
-                className="flex items-center gap-2 rounded-lg border border-line bg-surface-2 px-3 py-2 font-mono text-xs"
+                className="flex items-center gap-2 rounded-sm border border-line bg-surface-2 px-3 py-2 font-mono text-xs"
               >
                 <FileCode2 className="size-3.5 text-brand-soft" />
                 <span className="text-ink-3">{file}</span>
@@ -557,12 +553,12 @@ function ContextTab({ task, pack }: { task: Task; pack?: ContextPack }) {
           </SectionTitle>
           <ul className="flex flex-col gap-2">
             {pack.items.map((item) => {
-              const color = NODE_COLORS[item.kind] ?? '#6b7894';
+              const color = NODE_COLORS[item.kind] ?? '#77777f';
               return (
                 <li
                   key={item.id}
                   className={cn(
-                    'relative overflow-hidden rounded-xl border border-line bg-surface-2 py-3 pr-3 pl-4',
+                    'relative overflow-hidden rounded-md border border-line bg-surface-2 py-3 pr-3 pl-4',
                     item.stale && 'opacity-60',
                   )}
                 >
@@ -579,10 +575,7 @@ function ContextTab({ task, pack }: { task: Task; pack?: ContextPack }) {
                     )}
                   </div>
                   <div className="mt-0.5 text-sm text-ink">{item.text}</div>
-                  <div className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-memory">
-                    <Sparkles className="size-3" />
-                    {item.reason}
-                  </div>
+                  <div className="mt-1.5 text-xs text-memory">{item.reason}</div>
                   {item.trust !== undefined && <TrustBar trust={item.trust} why={item.trustWhy} />}
                 </li>
               );
@@ -600,7 +593,7 @@ function ContextTab({ task, pack }: { task: Task; pack?: ContextPack }) {
           <summary className="cursor-pointer text-xs font-medium text-ink-2 hover:text-ink">
             The full prompt sent to the agent
           </summary>
-          <pre className="mt-3 overflow-x-auto rounded-xl border border-line bg-abyss p-4 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-ink-2">
+          <pre className="mt-3 overflow-x-auto rounded-md border border-line bg-abyss p-4 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-ink-2">
             {pack.prompt}
           </pre>
         </details>
@@ -613,7 +606,7 @@ function WhyTab({ why }: { why: WhyPath }) {
   const byId = new Map(why.nodes.map((n) => [n.id, n]));
   return (
     <div className="flex flex-col gap-6">
-      <div className="rounded-xl border border-brand/25 bg-brand/8 p-4 text-sm leading-relaxed text-ink-2">
+      <div className="rounded-md border border-brand/25 bg-brand/8 p-4 text-sm leading-relaxed text-ink-2">
         {why.summary}
       </div>
       <section>
@@ -626,7 +619,7 @@ function WhyTab({ why }: { why: WhyPath }) {
             return (
               <li
                 key={`${e.source}-${e.type}-${e.target}`}
-                className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface-2/60 p-2"
+                className="flex flex-wrap items-center gap-2 rounded-md border border-line bg-surface-2/60 p-2"
               >
                 <PathNode kind={from.kind} label={from.label} />
                 <span className="inline-flex items-center gap-1 font-mono text-[11px] text-memory">
@@ -645,7 +638,7 @@ function WhyTab({ why }: { why: WhyPath }) {
 
 /** How far a lesson is trusted, and what moved it (Q24) */
 function TrustBar({ trust, why }: { trust: number; why?: string[] }) {
-  const tone = trust >= 0.7 ? '#4ade80' : trust >= 0.5 ? '#f5b83d' : '#fb923c';
+  const tone = trust >= 0.7 ? '#34d399' : trust >= 0.5 ? '#d29922' : '#f85149';
   return (
     <div
       className="mt-2 flex items-center gap-2"
@@ -700,7 +693,7 @@ function PreviewTab({ merge, plan }: { merge?: MergePreview; plan?: PlanPreview 
             </p>
             <ol className="flex flex-col gap-2">
               {plan.lanes.map((lane, i) => (
-                <li key={i} className="rounded-xl border border-line bg-surface-2/60 p-3">
+                <li key={i} className="rounded-md border border-line bg-surface-2/60 p-3">
                   <div className="mb-1.5 flex flex-wrap items-center gap-2">
                     <span className="font-mono text-[10px] tracking-wider text-ink-3 uppercase">
                       Lane {i + 1}
@@ -727,19 +720,17 @@ function PreviewTab({ merge, plan }: { merge?: MergePreview; plan?: PlanPreview 
         <SectionTitle>Waves</SectionTitle>
         <ol className="flex flex-col gap-3">
           {plan.waves.map((w, i) => (
-            <li key={i} className="rounded-xl border border-line bg-surface-2/60 p-3">
+            <li key={i} className="rounded-md border border-line bg-surface-2/60 p-3">
               <div className="mb-2 font-mono text-[10px] tracking-wider text-ink-3 uppercase">
                 Wave {i + 1}
               </div>
               {w.start.map((id) => (
-                <div key={id} className="flex items-center gap-2 text-sm text-ink">
-                  <span className="size-1.5 rounded-full bg-emerald-400" />
+                <div key={id} className="text-sm text-ink">
                   {plan.titles[id] ?? id}
                 </div>
               ))}
               {w.waits.map((x) => (
-                <div key={x.task} className="mt-1 flex items-start gap-2 text-xs text-ink-3">
-                  <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-amber-400" />
+                <div key={x.task} className="mt-1 text-xs text-ink-3">
                   <span>
                     <span className="text-ink-2">{plan.titles[x.task] ?? x.task}</span> waits:{' '}
                     {x.reason}
@@ -750,7 +741,7 @@ function PreviewTab({ merge, plan }: { merge?: MergePreview; plan?: PlanPreview 
           ))}
         </ol>
         {plan.stuck.length > 0 && (
-          <p className="text-xs text-rose-300">
+          <p className="text-xs text-bad">
             Could never start: {plan.stuck.map((id) => plan.titles[id] ?? id).join(', ')}
           </p>
         )}
@@ -770,7 +761,7 @@ function PreviewTab({ merge, plan }: { merge?: MergePreview; plan?: PlanPreview 
         <SectionTitle>{title}</SectionTitle>
         <ul className="flex flex-wrap gap-1.5">
           {items.map((i) => (
-            <li key={i} className={cn('rounded-md px-2 py-0.5 font-mono text-[11px]', tone)}>
+            <li key={i} className={cn('rounded-sm px-2 py-0.5 font-mono text-[11px]', tone)}>
               {i}
             </li>
           ))}
@@ -779,7 +770,7 @@ function PreviewTab({ merge, plan }: { merge?: MergePreview; plan?: PlanPreview 
     );
   return (
     <div className="flex flex-col gap-5">
-      <div className="rounded-xl border border-brand/25 bg-brand/8 p-4 text-sm leading-relaxed text-ink-2">
+      <div className="rounded-md border border-brand/25 bg-brand/8 p-4 text-sm leading-relaxed text-ink-2">
         {merge.summary}
         <div className="mt-1 font-mono text-[10px] text-ink-3">
           Made on a copy of the graph in {merge.ms} ms, before merging
@@ -790,7 +781,7 @@ function PreviewTab({ merge, plan }: { merge?: MergePreview; plan?: PlanPreview 
           <SectionTitle>New callers of load-bearing code</SectionTitle>
           <ul className="flex flex-col gap-1">
             {merge.newCallersOfRisky.map((c) => (
-              <li key={`${c.from}>${c.to}`} className="text-sm text-rose-300">
+              <li key={`${c.from}>${c.to}`} className="text-sm text-bad">
                 {fn(c.from)} now calls {fn(c.to)} (top {Math.max(1, Math.round((1 - c.risk) * 100))}
                 % by risk)
               </li>
@@ -803,7 +794,7 @@ function PreviewTab({ merge, plan }: { merge?: MergePreview; plan?: PlanPreview 
           <SectionTitle>Lessons this merge would make possibly outdated</SectionTitle>
           <ul className="flex flex-col gap-1">
             {merge.wouldGoStale.map((m) => (
-              <li key={m.id} className="text-sm text-amber-200">
+              <li key={m.id} className="text-sm text-warn">
                 <span className="mr-1.5 text-[11px] text-ink-3">{m.kind}</span>
                 {m.text}
               </li>
@@ -811,9 +802,9 @@ function PreviewTab({ merge, plan }: { merge?: MergePreview; plan?: PlanPreview 
           </ul>
         </section>
       )}
-      {list('Functions added', merge.symbolsAdded.map(fn), 'bg-emerald-500/12 text-emerald-300')}
-      {list('Functions changed', merge.symbolsChanged.map(fn), 'bg-amber-500/12 text-amber-200')}
-      {list('Functions removed', merge.symbolsRemoved.map(fn), 'bg-rose-500/12 text-rose-300')}
+      {list('Functions added', merge.symbolsAdded.map(fn), 'bg-brand/10 text-brand')}
+      {list('Functions changed', merge.symbolsChanged.map(fn), 'bg-warn/10 text-warn')}
+      {list('Functions removed', merge.symbolsRemoved.map(fn), 'bg-bad/10 text-bad')}
       {list(
         'Calls added',
         merge.callsAdded.map((c) => `${fn(c.from)} → ${fn(c.to)}`),
@@ -844,7 +835,7 @@ function TraceTab({ traces }: { traces: GraphTrace[] }) {
         FalkorDB, newest first.
       </p>
       {traces.map((t) => (
-        <section key={t.id} className="rounded-xl border border-line bg-surface-2/60">
+        <section key={t.id} className="rounded-md border border-line bg-surface-2/60">
           <button
             onClick={() => setOpen(open === t.id ? undefined : t.id)}
             className="flex w-full flex-col gap-1.5 p-3 text-left"
@@ -855,7 +846,7 @@ function TraceTab({ traces }: { traces: GraphTrace[] }) {
               </span>
               <span className="text-xs font-medium text-ink">{TRACE_KIND[t.kind]}</span>
               {t.graphOff && (
-                <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-mono text-[10px] text-amber-300">
+                <span className="rounded bg-warn/10 px-1.5 py-0.5 font-mono text-[10px] text-warn">
                   graph off
                 </span>
               )}
@@ -874,7 +865,7 @@ function TraceTab({ traces }: { traces: GraphTrace[] }) {
                     {s.ms.toFixed(2)} ms · {s.rows} rows
                     {s.params.length ? ` · $${s.params.join(', $')}` : ''}
                   </div>
-                  <pre className="overflow-x-auto rounded-lg border border-line bg-surface p-2.5 font-mono text-[11px] leading-relaxed whitespace-pre text-ink-2">
+                  <pre className="overflow-x-auto rounded-sm border border-line bg-surface p-2.5 font-mono text-[11px] leading-relaxed whitespace-pre text-ink-2">
                     {s.cypher}
                   </pre>
                 </li>
@@ -895,14 +886,12 @@ function TraceTab({ traces }: { traces: GraphTrace[] }) {
 function PathNode({ kind, label }: { kind: string; label: string }) {
   const agent = kind === 'Agent' ? (label as AgentName) : undefined;
   const color =
-    agent && AGENT_META[agent] ? AGENT_META[agent].color : (NODE_COLORS[kind] ?? '#6b7894');
+    agent && AGENT_META[agent] ? AGENT_META[agent].color : (NODE_COLORS[kind] ?? '#77777f');
   return (
-    <span className="inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1 text-sm">
-      <span
-        className="size-2.5 rounded-full"
-        style={{ background: color, boxShadow: `0 0 8px ${color}` }}
-      />
-      <span className="text-[11px] text-ink-3">{kind}</span>
+    <span className="inline-flex items-center gap-2 rounded-sm border border-line bg-surface px-2.5 py-1 text-sm">
+      <span className="text-[11px]" style={{ color }}>
+        {kind}
+      </span>
       <span className="text-ink">{label}</span>
     </span>
   );
@@ -917,7 +906,7 @@ function SessionsTab({ sessions }: { sessions: SessionInfo[] }) {
           s.outcome === 'success'
             ? 'var(--color-good)'
             : s.outcome === 'running'
-              ? 'var(--color-info)'
+              ? 'var(--color-brand)'
               : 'var(--color-bad)';
         return (
           <li key={s.id} className="relative mb-4 pl-6">
@@ -925,7 +914,7 @@ function SessionsTab({ sessions }: { sessions: SessionInfo[] }) {
               className="absolute top-3 -left-[5px] size-2.5 rounded-full ring-4 ring-surface"
               style={{ background: color }}
             />
-            <div className="rounded-xl border border-line bg-surface-2 p-3.5">
+            <div className="rounded-md border border-line bg-surface-2 p-3.5">
               <div className="flex items-center justify-between gap-3">
                 <AgentChip agent={s.agent} sub={`${s.role} · ${s.id}`} />
                 <span className="text-xs font-medium capitalize" style={{ color }}>
@@ -988,7 +977,7 @@ function TerminalTab({
       key={`${c.cli}-${start}`}
       disabled={opening}
       onClick={() => void open(c.cli, start)}
-      className="inline-flex items-center gap-2 rounded-xl border border-line-strong bg-surface-2 px-3.5 py-2 text-sm font-medium hover:bg-surface-3 disabled:opacity-50"
+      className="inline-flex items-center gap-2 rounded-md border border-line-strong bg-surface-2 px-3.5 py-2 text-sm font-medium hover:bg-surface-3 disabled:opacity-50"
     >
       {c.cli === 'shell' ? <Terminal className="size-4" /> : <AgentMini cli={c.cli} />}
       {c.cli === 'shell' ? c.label : start ? `Start ${c.label}` : `Open ${c.label}`}
@@ -1045,7 +1034,7 @@ function TerminalTab({
           <span
             key={t.info.id}
             className={cn(
-              'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs',
+              'inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1 text-xs',
               t.info.id === current.info.id
                 ? 'border-brand/50 bg-brand/15 text-ink'
                 : 'border-line bg-surface-2 text-ink-2',
@@ -1101,7 +1090,7 @@ function TerminalTab({
               setLanding(false);
             }
           }}
-          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-brand to-brand-deep px-3.5 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-md bg-brand px-3.5 py-2 text-sm font-semibold text-abyss hover:bg-brand-soft disabled:opacity-60"
         >
           {landing ? (
             <LoaderCircle className="size-4 animate-spin" />
@@ -1117,14 +1106,14 @@ function TerminalTab({
               void puff.terminalWrite(current.info.id, `\x1b[200~${current.info.brief}\x1b[201~`)
             }
             title="Type what the task is and what was tried into the program's input. Nothing is sent until you press Enter."
-            className="inline-flex items-center gap-2 rounded-xl border border-line-strong bg-surface-2 px-3 py-2 text-sm hover:bg-surface-3"
+            className="inline-flex items-center gap-2 rounded-md border border-line-strong bg-surface-2 px-3 py-2 text-sm hover:bg-surface-3"
           >
             <StickyNote className="size-4" /> Paste task brief
           </button>
         )}
         <button
           onClick={() => void puff.openTaskFolder(taskId).catch(() => {})}
-          className="inline-flex items-center gap-2 rounded-xl border border-line-strong bg-surface-2 px-3 py-2 text-sm hover:bg-surface-3"
+          className="inline-flex items-center gap-2 rounded-md border border-line-strong bg-surface-2 px-3 py-2 text-sm hover:bg-surface-3"
         >
           <FolderOpen className="size-4" /> Open folder
         </button>
@@ -1139,7 +1128,7 @@ function TerminalTab({
         <p
           role="status"
           className={cn(
-            'rounded-xl border p-3 text-[13px] leading-snug',
+            'rounded-md border p-3 text-[13px] leading-snug',
             result.status === 'done'
               ? 'border-good/30 bg-good/10 text-good'
               : 'border-bad/30 bg-bad/10 text-bad',
@@ -1155,7 +1144,7 @@ function TerminalTab({
 function AgentMini({ cli }: { cli: AgentName }) {
   return (
     <span
-      className="inline-grid size-5 place-items-center rounded-md text-[9px] font-bold"
+      className="inline-grid size-5 place-items-center rounded-sm text-[9px] font-bold"
       style={{
         color: AGENT_META[cli].color,
         background: `color-mix(in oklab, ${AGENT_META[cli].color} 16%, transparent)`,

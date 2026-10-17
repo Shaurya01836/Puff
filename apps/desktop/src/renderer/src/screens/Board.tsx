@@ -1,22 +1,13 @@
-import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from 'react';
+import { useEffect, useRef, useState, type DragEvent } from 'react';
 import {
   Check,
-  CheckCheck,
-  Coins,
   Columns3,
-  FlaskConical,
-  GitBranch,
-  Hand,
-  Hourglass,
   LayoutList,
-  Link2,
   LoaderCircle,
-  Network,
   Pause,
   RotateCcw,
   Search,
   Square,
-  StickyNote,
   Terminal,
   TriangleAlert,
   X,
@@ -27,18 +18,18 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AgentAvatar, AgentChip, StatusPill, WaitingChip } from '@/components/ui';
 import { Menu } from '@/components/Menu';
 import { cn } from '@/lib/cn';
-import { TaskPanel } from '@/screens/TaskDetail';
+import { TaskPanel } from '@/screens/TaskPanel';
 import { AGENT_META, STATUS_META, TONE_COLOR, formatTokens } from '@/lib/theme';
 
 /** Risk at or above this counts as load-bearing code (the default of graph.riskThreshold) */
 const RISKY = 0.9;
 
-const COLUMNS: { title: string; statuses: TaskStatus[]; tone: keyof typeof TONE_COLOR }[] = [
-  { title: 'Planned', statuses: ['planned', 'ready'], tone: 'neutral' },
-  { title: 'Running', statuses: ['running'], tone: 'info' },
-  { title: 'Verifying', statuses: ['verifying'], tone: 'brand' },
-  { title: 'Needs attention', statuses: ['failed', 'retrying', 'escalated'], tone: 'bad' },
-  { title: 'Done', statuses: ['done'], tone: 'good' },
+const COLUMNS: { title: string; statuses: TaskStatus[] }[] = [
+  { title: 'Planned', statuses: ['planned', 'ready'] },
+  { title: 'Running', statuses: ['running'] },
+  { title: 'Verifying', statuses: ['verifying'] },
+  { title: 'Needs attention', statuses: ['failed', 'retrying', 'escalated'] },
+  { title: 'Done', statuses: ['done'] },
 ];
 
 /** Something the person asks of a task from the board */
@@ -149,13 +140,13 @@ export function Board({
   return (
     <div className="flex h-full flex-col overflow-hidden bg-abyss">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-2.5">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-2">
           {counts.map((c) => (
             <span key={c.label}>
               <b
                 className={cn(
                   'font-semibold tabular-nums',
-                  c.bad && c.n > 0 ? 'text-rose-300' : 'text-slate-100',
+                  c.bad && c.n > 0 ? 'text-bad' : 'text-ink',
                 )}
               >
                 {c.n}
@@ -166,21 +157,21 @@ export function Board({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex h-7 items-center gap-1.5 rounded border border-line bg-surface px-2 focus-within:border-emerald-500/60">
-            <Search className="size-3 text-slate-400" />
+          <label className="flex h-7 items-center gap-1.5 rounded border border-line bg-surface px-2 focus-within:border-brand/50">
+            <Search className="size-3 text-ink-2" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Find a task…"
               aria-label="Find a task"
-              className="w-28 bg-transparent font-sans text-xs text-slate-200 transition-all outline-none placeholder:text-slate-500 focus:w-36"
+              className="w-28 bg-transparent font-sans text-xs text-ink transition-all outline-none placeholder:text-ink-3 focus:w-36"
             />
           </label>
           <select
             value={agent}
             onChange={(e) => setAgent(e.target.value as AgentName | 'you' | 'all')}
             aria-label="Show tasks worked on by"
-            className="h-7 rounded border border-line bg-surface px-2 text-xs text-slate-300 outline-none"
+            className="h-7 rounded border border-line bg-surface px-2 text-xs text-ink outline-none"
           >
             <option value="all">Any agent</option>
             {AGENTS.map((a) => (
@@ -196,8 +187,8 @@ export function Board({
             className={cn(
               'h-7 rounded border px-2 text-xs transition-colors',
               hideDone
-                ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300'
-                : 'border-line bg-surface text-slate-400 hover:text-white',
+                ? 'border-brand/40 bg-brand/10 text-brand'
+                : 'border-line bg-surface text-ink-2 hover:text-ink',
             )}
           >
             Hide done
@@ -216,8 +207,8 @@ export function Board({
                 className={cn(
                   'inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs transition-colors',
                   viewMode === mode
-                    ? 'bg-surface-3 font-medium text-white'
-                    : 'text-slate-400 hover:text-white',
+                    ? 'bg-surface-3 font-medium text-ink'
+                    : 'text-ink-2 hover:text-ink',
                 )}
               >
                 <Icon className="size-3" />
@@ -231,10 +222,10 @@ export function Board({
       {tasks.length === 0 ? (
         <div className="grid flex-1 place-items-center p-10 text-center">
           <div className="max-w-sm">
-            <p className="font-display text-lg font-semibold text-white">No tasks yet</p>
-            <p className="mt-2 text-sm leading-relaxed text-slate-400">
+            <p className="font-display text-lg font-semibold text-ink">No tasks yet</p>
+            <p className="mt-2 text-sm leading-relaxed text-ink-2">
               Give the team a goal in the box above and a planner splits it into tasks, or press{' '}
-              <b className="font-medium text-slate-200">New task</b> to add one yourself.
+              <b className="font-medium text-ink">New task</b> to add one yourself.
             </p>
           </div>
         </div>
@@ -251,7 +242,7 @@ export function Board({
               />
             ))}
             {ordered.length === 0 && (
-              <li className="py-12 text-center text-xs text-slate-500">No matching tasks</li>
+              <li className="py-12 text-center text-xs text-ink-3">No matching tasks</li>
             )}
           </ul>
           <div className="min-h-0 min-w-0">
@@ -266,7 +257,7 @@ export function Board({
                 />
               </ErrorBoundary>
             ) : (
-              <div className="grid h-full place-items-center text-sm text-slate-500">
+              <div className="grid h-full place-items-center text-sm text-ink-3">
                 Pick a task to see what its agent is doing
               </div>
             )}
@@ -279,7 +270,6 @@ export function Board({
             const items = shown
               .filter((t) => col.statuses.includes(t.status))
               .sort((a, b) => b.updatedAt - a.updatedAt);
-            const color = TONE_COLOR[col.tone];
             return (
               <section
                 key={col.title}
@@ -290,14 +280,13 @@ export function Board({
                 onDragLeave={() => setDropOn((d) => (d === col.title ? undefined : d))}
                 onDrop={(e) => drop(e, col.title)}
                 className={cn(
-                  'flex min-h-0 flex-col rounded-xl border bg-surface transition-colors',
-                  dropOn === col.title ? 'border-emerald-500/60 bg-emerald-500/5' : 'border-line',
+                  'flex min-h-0 flex-col rounded-md border bg-surface transition-colors',
+                  dropOn === col.title ? 'border-brand/50 bg-brand/5' : 'border-line',
                 )}
               >
                 <header className="flex items-center gap-2 border-b border-line px-3.5 py-2.5">
-                  <span className="size-2 rounded-full" style={{ background: color }} />
-                  <h3 className="text-xs font-semibold text-white">{col.title}</h3>
-                  <span className="ml-auto rounded border border-line bg-surface-2 px-1.5 font-mono text-[10px] text-slate-400 tabular-nums">
+                  <h3 className="text-xs font-semibold text-ink">{col.title}</h3>
+                  <span className="ml-auto rounded border border-line bg-surface-2 px-1.5 font-mono text-[10px] text-ink-2 tabular-nums">
                     {items.length}
                   </span>
                 </header>
@@ -315,7 +304,7 @@ export function Board({
                     />
                   ))}
                   {items.length === 0 && (
-                    <div className="grid flex-1 place-items-center rounded-lg border border-dashed border-line py-8 text-xs text-slate-500">
+                    <div className="grid flex-1 place-items-center rounded-sm border border-dashed border-line py-8 text-xs text-ink-3">
                       Nothing here
                     </div>
                   )}
@@ -360,20 +349,14 @@ function whyLine(task: Task): { text: string; tone: 'wait' | 'graph' | 'risk' } 
 function WhyLine({ task, wrap }: { task: Task; wrap?: boolean }) {
   const why = whyLine(task);
   if (!why) return null;
-  const Icon = why.tone === 'wait' ? Hourglass : Network;
   return (
     <p
       title={why.text + (task.why?.graphOff ? ' (graph off)' : '')}
       className={cn(
-        'mt-1 flex items-start gap-1.5 text-[11px] leading-snug',
-        why.tone === 'wait'
-          ? 'text-amber-300/90'
-          : why.tone === 'risk'
-            ? 'text-rose-300/90'
-            : 'text-memory',
+        'mt-1 text-[11px] leading-snug',
+        why.tone === 'wait' ? 'text-warn' : why.tone === 'risk' ? 'text-bad' : 'text-memory',
       )}
     >
-      <Icon className="mt-px size-3 shrink-0" />
       <span className={wrap ? 'line-clamp-3' : 'line-clamp-2'}>{why.text}</span>
     </p>
   );
@@ -409,30 +392,24 @@ function TaskRow({
         aria-current={selected}
         className={cn(
           'flex w-full items-start gap-3 border-b border-l-2 border-b-line px-4 py-3 text-left transition-colors',
-          selected
-            ? 'border-l-emerald-400 bg-surface-2'
-            : 'border-l-transparent hover:bg-surface/60',
+          selected ? 'border-l-brand bg-surface-2' : 'border-l-transparent hover:bg-surface/60',
         )}
       >
         <span className="mt-0.5 shrink-0">
           {who ? (
-            <AgentAvatar agent={who} size={22} />
+            <AgentAvatar agent={mine ? 'you' : who} size={22} />
           ) : (
             <span
-              title={mine ? 'You took this over' : 'No agent yet'}
-              className="grid size-[22px] place-items-center rounded-md border border-line bg-surface-3 text-slate-400"
+              title="No agent yet"
+              className="grid size-[22px] place-items-center rounded-sm border border-line bg-surface-3 font-mono text-[11px] text-ink-3"
             >
-              {mine ? (
-                <Hand className="size-3" />
-              ) : (
-                <span className="size-1.5 rounded-full bg-slate-500" />
-              )}
+              —
             </span>
           )}
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-start justify-between gap-2">
-            <span className="line-clamp-2 text-sm leading-snug font-medium text-slate-100">
+            <span className="line-clamp-2 text-sm leading-snug font-medium text-ink">
               {task.title}
             </span>
             <span className="shrink-0">
@@ -440,7 +417,7 @@ function TaskRow({
             </span>
           </span>
           {task.targets.length > 0 && (
-            <span className="mt-0.5 block truncate font-mono text-[11px] text-sky-400/80">
+            <span className="mt-0.5 block truncate font-mono text-[11px] text-ink-3">
               {task.targets.slice(0, 2).map(fnName).join(', ')}
               {task.targets.length > 2 ? ` +${task.targets.length - 2}` : ''}
             </span>
@@ -448,10 +425,7 @@ function TaskRow({
           <WhyLine task={task} />
           {working && (since || task.stalledAt) && (
             <span
-              className={cn(
-                'mt-1 block text-[11px]',
-                task.stalledAt ? 'text-amber-300' : 'text-slate-400',
-              )}
+              className={cn('mt-1 block text-[11px]', task.stalledAt ? 'text-warn' : 'text-ink-2')}
             >
               {task.stalledAt
                 ? `silent for ${duration(now - task.stalledAt)}: it may be stuck`
@@ -464,16 +438,13 @@ function TaskRow({
   );
 }
 
-const OUTCOME: Record<
-  TrailEntry['outcome'],
-  { icon: typeof Check; color: string; word: string; spin?: boolean }
-> = {
-  success: { icon: Check, color: TONE_COLOR.good, word: 'finished' },
-  failure: { icon: X, color: TONE_COLOR.bad, word: 'failed' },
-  error: { icon: X, color: TONE_COLOR.warn, word: "couldn't run" },
-  stalled: { icon: Pause, color: TONE_COLOR.warn, word: 'stalled' },
-  stopped: { icon: Square, color: TONE_COLOR.neutral, word: 'stopped' },
-  running: { icon: LoaderCircle, color: TONE_COLOR.info, word: 'working', spin: true },
+const OUTCOME: Record<TrailEntry['outcome'], { color: string; word: string }> = {
+  success: { color: TONE_COLOR.good, word: 'finished' },
+  failure: { color: TONE_COLOR.bad, word: 'failed' },
+  error: { color: TONE_COLOR.warn, word: "couldn't run" },
+  stalled: { color: TONE_COLOR.warn, word: 'stalled' },
+  stopped: { color: TONE_COLOR.neutral, word: 'stopped' },
+  running: { color: TONE_COLOR.brand, word: 'working' },
 };
 
 /** Who has worked on the task, in order, and how each attempt ended: nothing disappears when the task moves on. */
@@ -481,22 +452,19 @@ function Trail({ trail }: { trail: TrailEntry[] }) {
   const hidden = Math.max(0, trail.length - 4);
   return (
     <ol className="flex flex-wrap items-center gap-1" aria-label="Attempts so far">
-      {hidden > 0 && <li className="font-mono text-[10px] text-slate-500">+{hidden} earlier</li>}
+      {hidden > 0 && <li className="font-mono text-[10px] text-ink-3">+{hidden} earlier</li>}
       {trail.slice(-4).map((e, i) => {
         const o = OUTCOME[e.outcome];
-        const Icon = o.icon;
         return (
           <li
             key={`${e.at}-${i}`}
             title={`${AGENT_META[e.agent].label} ${o.word}${e.detail ? `: ${e.detail}` : ''}`}
-            className="inline-flex items-center gap-1 rounded border border-line bg-surface-3 py-0.5 pr-1.5 pl-0.5"
+            className="inline-flex items-center gap-1.5 rounded border border-line bg-surface-3 py-0.5 pr-2 pl-1"
           >
             <AgentAvatar agent={e.agent} size={16} />
-            <Icon
-              className={cn('size-3', o.spin && 'animate-spin')}
-              style={{ color: o.color }}
-              aria-label={o.word}
-            />
+            <span className="font-mono text-[10px]" style={{ color: o.color }}>
+              {o.word}
+            </span>
           </li>
         );
       })}
@@ -519,7 +487,6 @@ function TaskCard({
   const working = WORKING.includes(task.status);
   const tests = task.testSummary;
   const pass = tests ? tests.passed / Math.max(tests.total, 1) : 0;
-  const agentColor = task.assignedAgent ? AGENT_META[task.assignedAgent].color : undefined;
   const since = [...(task.trail ?? [])].reverse().find((e) => e.outcome === 'running')?.at;
   const mine = takenOver(task);
   const act = (action: BoardAction) => onAction(action);
@@ -535,12 +502,11 @@ function TaskCard({
       }}
       onClick={onOpen}
       onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onOpen())}
-      style={live && agentColor ? ({ '--live-color': agentColor } as CSSProperties) : undefined}
       className={cn(
-        'group cursor-pointer rounded-xl border border-line bg-surface-2 p-3 text-left transition-all outline-none',
-        'hover:-translate-y-px hover:border-line-strong hover:bg-surface-3 hover:shadow-lg focus-visible:border-emerald-500/60',
-        live && 'live-border',
-        task.stalledAt && working && 'border-amber-500/50',
+        'group cursor-pointer rounded-md border border-line bg-surface-2 p-3 text-left transition-colors outline-none',
+        'hover:border-line-strong hover:bg-surface-3 focus-visible:border-brand/50',
+        live && 'border-brand/40',
+        task.stalledAt && working && 'border-warn/40',
       )}
     >
       <div className="mb-2">
@@ -557,49 +523,47 @@ function TaskCard({
           }
         />
       </div>
-      <div className="text-xs leading-snug font-medium text-slate-100">{task.title}</div>
+      <div className="text-xs leading-snug font-medium text-ink">{task.title}</div>
       <WhyLine task={task} wrap />
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
         <StatusPill status={task.status} />
         {working && since && (
-          <span className="font-mono text-[10px] text-slate-400">
+          <span className="font-mono text-[10px] text-ink-2">
             working for {duration(now - since)}
           </span>
         )}
         {task.stalledAt && working && (
           <span
-            className="inline-flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 font-mono text-[10px] font-medium text-amber-300"
+            className="rounded bg-warn/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-warn"
             title="The agent has printed nothing for a while. It may be stuck: stop it or switch agent."
           >
-            <TriangleAlert className="size-3" />
             stalled for {duration(now - task.stalledAt)}
           </span>
         )}
         {task.risk !== undefined && task.risk >= RISKY && (
           <span
             title="One of the functions this task changes is among the most depended-on in this code (PageRank and betweenness over the call graph). It goes to an agent that declares reasoning, with more room for what the team learned."
-            className="inline-flex items-center gap-1 rounded bg-rose-500/12 px-1.5 py-0.5 font-mono text-[10px] font-medium text-rose-300"
+            className="rounded bg-bad/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-bad"
           >
-            <Network className="size-3" /> load-bearing · top{' '}
-            {Math.max(1, Math.round((1 - task.risk) * 100))}%
+            load-bearing · top {Math.max(1, Math.round((1 - task.risk) * 100))}%
           </span>
         )}
         {task.doneByHand && (
-          <span className="inline-flex items-center gap-1 rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[10px] text-slate-300">
-            <CheckCheck className="size-3" /> done by you
+          <span className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[10px] text-ink">
+            done by you
           </span>
         )}
         {mine && task.status !== 'done' && (
-          <span className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 font-mono text-[10px] text-emerald-300">
-            <Hand className="size-3" /> you are working on it
+          <span className="rounded bg-brand/10 px-1.5 py-0.5 font-mono text-[10px] text-brand">
+            you are working on it
           </span>
         )}
         {task.note && (
           <span
             title={`Your note: ${task.note}`}
-            className="inline-flex items-center gap-1 rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[10px] text-slate-300"
+            className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[10px] text-ink"
           >
-            <StickyNote className="size-3" /> note
+            note
           </span>
         )}
       </div>
@@ -613,40 +577,29 @@ function TaskCard({
       {tests && (
         <div className="mt-3">
           <div className="flex items-center justify-between font-mono text-[10px]">
-            <span className="inline-flex items-center gap-1 text-slate-400">
-              <FlaskConical className="size-3" /> Tests
-            </span>
-            <span className={cn('tabular-nums', pass === 1 ? 'text-emerald-400' : 'text-rose-400')}>
+            <span className="text-ink-2">Tests</span>
+            <span className={cn('tabular-nums', pass === 1 ? 'text-brand' : 'text-bad')}>
               {tests.passed}/{tests.total}
             </span>
           </div>
           <div className="mt-1 flex h-1 gap-px overflow-hidden bg-surface-3">
-            <div className="bg-emerald-400" style={{ width: `${pass * 100}%` }} />
-            {pass < 1 && <div className="flex-1 bg-rose-500/70" />}
+            <div className="bg-brand" style={{ width: `${pass * 100}%` }} />
+            {pass < 1 && <div className="flex-1 bg-bad/70" />}
           </div>
         </div>
       )}
 
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] text-slate-400">
-        <span className="border border-line bg-surface px-1.5 py-0.5 text-slate-300">
-          {task.type}
-        </span>
-        {task.worktree && (
-          <span className="inline-flex items-center gap-1">
-            <GitBranch className="size-3" />
-            {task.id}
-          </span>
-        )}
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] text-ink-2">
+        <span className="border border-line bg-surface px-1.5 py-0.5 text-ink">{task.type}</span>
+        {task.worktree && <span>{task.id}</span>}
         {task.tokens && (
-          <span className="inline-flex items-center gap-1 tabular-nums">
-            <Coins className="size-3" />
-            {formatTokens(task.tokens.in + task.tokens.out)}
+          <span className="tabular-nums">
+            {formatTokens(task.tokens.in + task.tokens.out)} tokens
           </span>
         )}
         {task.dependsOn.length > 0 && (
-          <span className="inline-flex items-center gap-1">
-            <Link2 className="size-3" />
-            {task.dependsOn.length}
+          <span>
+            {task.dependsOn.length} {task.dependsOn.length === 1 ? 'dependency' : 'dependencies'}
           </span>
         )}
       </div>
@@ -725,7 +678,7 @@ function CardButton({
       type="button"
       title={title}
       onClick={onClick}
-      className="inline-flex items-center gap-1 rounded border border-line bg-surface px-2 py-1 font-mono text-[11px] text-slate-300 transition-colors hover:border-slate-600 hover:bg-surface-3 hover:text-white"
+      className="inline-flex items-center gap-1 rounded border border-line bg-surface px-2 py-1 font-mono text-[11px] text-ink transition-colors hover:border-line-strong hover:bg-surface-3 hover:text-ink"
     >
       <Icon className="size-3" />
       {label}

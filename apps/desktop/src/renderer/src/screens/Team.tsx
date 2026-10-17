@@ -1,6 +1,4 @@
-import type { ComponentType } from 'react';
-import { ArrowRightLeft, ListPlus, RefreshCw, TrendingUp } from 'lucide-react';
-import type { TeamEvent, TeamEventKind } from '@puff/shared';
+import type { TeamEvent } from '@puff/shared';
 import { AgentAvatar, Panel } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { AGENT_META, timeAgo } from '@/lib/theme';
@@ -9,17 +7,7 @@ const OUTCOME: Record<string, { label: string; color: string }> = {
   success: { label: 'passed', color: 'var(--color-good)' },
   failure: { label: 'failed', color: 'var(--color-bad)' },
   error: { label: "couldn't run", color: 'var(--color-warn)' },
-  running: { label: 'working', color: 'var(--color-info)' },
-};
-
-const KIND_ICON: Record<
-  Exclude<TeamEventKind, 'session'>,
-  ComponentType<{ className?: string }>
-> = {
-  handoff: ArrowRightLeft,
-  spawned: ListPlus,
-  escalated: TrendingUp,
-  retried: RefreshCw,
+  running: { label: 'working', color: 'var(--color-brand)' },
 };
 
 const name = (a?: string) =>
@@ -86,27 +74,27 @@ function Marker({ event: e, compact }: { event: TeamEvent; compact?: boolean }) 
   const box = compact ? 'size-8' : 'size-10';
   if (e.kind === 'session' && e.agent) {
     return (
-      <span className={cn('z-10 grid shrink-0 place-items-center rounded-full bg-abyss', box)}>
-        <AgentAvatar agent={e.agent} size={compact ? 26 : 34} />
+      <span
+        className={cn(
+          'z-10 grid shrink-0 place-items-center rounded-sm border border-line bg-abyss',
+          box,
+        )}
+      >
+        <AgentAvatar agent={e.agent} size={compact ? 22 : 28} />
       </span>
     );
   }
-  const Icon = KIND_ICON[e.kind as keyof typeof KIND_ICON] ?? ArrowRightLeft;
+  // A team event (a handoff, an escalation, a follow-up) is about the team, not one agent:
+  // a plain tone-marked block keeps the rail readable without a second set of glyphs.
   const color =
     e.kind === 'escalated'
       ? 'var(--color-warn)'
       : e.kind === 'retried'
-        ? 'var(--color-info)'
+        ? 'var(--color-brand)'
         : 'var(--color-memory)';
   return (
-    <span
-      className={cn(
-        'z-10 grid shrink-0 place-items-center rounded-full border border-line bg-abyss',
-        box,
-      )}
-      style={{ color }}
-    >
-      <Icon className="size-4" />
+    <span className={cn('z-10 grid shrink-0 place-items-center', box)}>
+      <span className="h-5 w-1" style={{ background: color }} />
     </span>
   );
 }
@@ -123,7 +111,7 @@ function TaskLink({
   return (
     <button
       onClick={() => onOpen(id)}
-      className="max-w-full truncate rounded-md bg-surface-3 px-2 py-0.5 text-left text-xs text-ink-2 hover:text-ink"
+      className="max-w-full truncate rounded-sm bg-surface-3 px-2 py-0.5 text-left text-xs text-ink-2 hover:text-ink"
       title={title}
     >
       {title}
@@ -143,7 +131,7 @@ function Body({ event: e, onOpenTask }: { event: TeamEvent; onOpenTask: (id: str
           <span className="text-ink-3">as {e.role}</span>
           {outcome && (
             <span
-              className="rounded-full px-2 py-0.5 text-[11px] font-medium"
+              className="rounded-sm px-2 py-0.5 text-[11px] font-medium"
               style={{
                 color: outcome.color,
                 background: `color-mix(in oklab, ${outcome.color} 14%, transparent)`,
@@ -208,7 +196,7 @@ function Body({ event: e, onOpenTask }: { event: TeamEvent; onOpenTask: (id: str
   return (
     <>
       <div className="flex items-center gap-2 text-sm">
-        <span className={cn('font-medium', e.kind === 'escalated' ? 'text-warn' : 'text-info')}>
+        <span className={cn('font-medium', e.kind === 'escalated' ? 'text-warn' : 'text-brand')}>
           {e.kind === 'escalated'
             ? `Escalated from ${name(e.agent)} to ${name(e.toAgent)}`
             : `${name(e.toAgent)} tries again`}

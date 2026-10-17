@@ -50,7 +50,7 @@ export function Menu({
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          'inline-flex items-center gap-1.5 rounded-lg border border-line-strong bg-surface-2 font-medium text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink',
+          'inline-flex items-center gap-1.5 rounded-sm border border-line-strong bg-surface-2 font-medium text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink',
           compact ? 'px-2 py-1 text-[11px]' : 'px-2.5 py-1.5 text-xs',
         )}
       >
@@ -61,7 +61,7 @@ export function Menu({
       {open && (
         <ul
           role="menu"
-          className="absolute top-full left-0 z-30 mt-1 min-w-48 rounded-xl border border-line-strong bg-surface p-1 shadow-[0_20px_50px_-15px_rgb(0_0_0/0.9)]"
+          className="absolute top-full left-0 z-30 mt-1 min-w-48 rounded-md border border-line-strong bg-surface p-1 shadow-[0_16px_40px_-16px_rgb(0_0_0/0.8)]"
         >
           {items.map((item, i) => (
             <li key={i} role="none">
@@ -72,7 +72,7 @@ export function Menu({
                   setOpen(false);
                   item.onSelect();
                 }}
-                className="flex w-full flex-col rounded-lg px-2.5 py-1.5 text-left text-xs text-ink hover:bg-surface-3 disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex w-full flex-col rounded-sm px-2.5 py-1.5 text-left text-xs text-ink hover:bg-surface-3 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {item.label}
                 {item.hint && <span className="text-[10px] text-ink-3">{item.hint}</span>}

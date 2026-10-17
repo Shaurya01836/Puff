@@ -1,16 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import {
-  Check,
-  CircleX,
-  CornerDownLeft,
-  LoaderCircle,
-  LogIn,
-  Play,
-  RotateCcw,
-  Sparkles,
-  Terminal,
-  X,
-} from 'lucide-react';
+import { CornerDownLeft, LoaderCircle, LogIn, RotateCcw, X } from 'lucide-react';
 import { matchCommands, type AgentName, type ChatInfo, type ChatMessage } from '@puff/shared';
 import { cn } from '@/lib/cn';
 import { formatTokens } from '@/lib/theme';
@@ -138,8 +127,8 @@ export function ChatPanel({
       }}
       className={cn(
         'absolute top-0 right-0 bottom-0 z-40 flex w-[390px] sm:w-[410px] max-w-[calc(100vw-4rem)] flex-col',
-        'border-l border-line-strong bg-surface/95 backdrop-blur-2xl',
-        'shadow-[-20px_0_50px_rgba(0,0,0,0.7)]',
+        'border-l border-line-strong bg-surface/95 backdrop-blur-sm',
+        'shadow-[-16px_0_40px_-16px_rgb(0_0_0/0.8)]',
         'transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
         open
           ? 'translate-x-0 pointer-events-auto visible'
@@ -152,16 +141,8 @@ export function ChatPanel({
           <PuffMark className="size-6 shrink-0" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="font-display text-xs font-bold tracking-tight text-white">
-              Ask Puff
-            </span>
-            <span className="inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/15 px-1.5 py-0.2 font-mono text-[9px] font-semibold uppercase tracking-wider text-emerald-400">
-              <span className="size-1 rounded-full bg-emerald-400 animate-pulse-dot" />
-              Agent
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 truncate font-mono text-[10px] text-slate-400">
+          <span className="font-display text-xs font-bold tracking-tight text-ink">Ask Puff</span>
+          <div className="flex items-center gap-1.5 truncate font-mono text-[10px] text-ink-2">
             <span>Talking to</span>
             {info?.choices && info.agent ? (
               <select
@@ -170,7 +151,7 @@ export function ChatPanel({
                 disabled={busy}
                 aria-label="Which agent answers"
                 title="Which agent answers in Ask Puff. Changing it starts a new conversation."
-                className="rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[10px] text-slate-200 outline-none focus:border-emerald-500/60 disabled:opacity-50"
+                className="rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[10px] text-ink outline-none focus:border-brand/50 disabled:opacity-50"
               >
                 {info.choices.map((c) => (
                   <option key={c.id} value={c.id} disabled={!c.installed}>
@@ -180,7 +161,7 @@ export function ChatPanel({
                 ))}
               </select>
             ) : (
-              <span className="text-slate-200">{info?.brain ?? 'your agent'}</span>
+              <span className="text-ink">{info?.brain ?? 'your agent'}</span>
             )}
             {info?.autoApprove ? <span>· auto-run enabled</span> : null}
           </div>
@@ -192,7 +173,7 @@ export function ChatPanel({
               onClick={onReset}
               title="Start a new conversation"
               aria-label="New conversation"
-              className="rounded border border-line bg-surface p-1.5 text-slate-400 hover:border-slate-600 hover:bg-surface-3 hover:text-white transition-colors"
+              className="rounded border border-line bg-surface p-1.5 text-ink-2 hover:border-line-strong hover:bg-surface-3 hover:text-ink transition-colors"
             >
               <RotateCcw className="size-3.5" />
             </button>
@@ -201,7 +182,7 @@ export function ChatPanel({
             onClick={onClose}
             title="Close panel (Esc)"
             aria-label="Close chat"
-            className="rounded border border-line bg-surface p-1.5 text-slate-400 hover:border-slate-600 hover:bg-surface-3 hover:text-white transition-colors"
+            className="rounded border border-line bg-surface p-1.5 text-ink-2 hover:border-line-strong hover:bg-surface-3 hover:text-ink transition-colors"
           >
             <X className="size-3.5" />
           </button>
@@ -209,13 +190,13 @@ export function ChatPanel({
       </header>
 
       {info && (!info.ready || info.needsSignIn) && (
-        <div className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 font-mono text-[11px] leading-snug text-amber-300">
+        <div className="border-b border-warn/20 bg-warn/10 px-4 py-2 font-mono text-[11px] leading-snug text-warn">
           <p>{info.note ?? `${info.brain} is not available.`}</p>
           {info.needsSignIn && (
             <button
               onClick={() => onSend('/login')}
               disabled={busy}
-              className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-500/20 px-2.5 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-500/30 disabled:opacity-50"
+              className="mt-2 inline-flex items-center gap-1.5 rounded-sm bg-warn/15 px-2.5 py-1 text-xs font-semibold text-warn hover:bg-warn/25 disabled:opacity-50"
             >
               <LogIn className="size-3.5" />
               Sign in
@@ -233,24 +214,20 @@ export function ChatPanel({
         >
           {messages.length === 0 && !busy ? (
             <div className="flex h-full flex-col justify-center gap-5 px-1">
-              <div className="rounded-xl border border-line bg-surface-2/60 p-4">
-                <div className="flex items-center gap-2 text-xs font-semibold text-white">
-                  <Sparkles className="size-3.5 text-emerald-400" />
-                  Orchestrate your team
-                </div>
-                <p className="mt-1.5 text-xs leading-relaxed text-slate-300">
+              <div className="rounded-md border border-line bg-surface-2/60 p-4">
+                <div className="text-xs font-semibold text-ink">Orchestrate your team</div>
+                <p className="mt-1.5 text-xs leading-relaxed text-ink">
                   Tell Puff what you want in plain words. It coordinates Claude Code, Codex, and
                   OpenCode, writes goals, and reviews graph diffs.
                 </p>
-                <p className="mt-2 font-mono text-[11px] text-slate-400">
-                  Start with <b className="font-semibold text-emerald-400">/</b> for instant
-                  zero-token commands.
+                <p className="mt-2 font-mono text-[11px] text-ink-2">
+                  Start with <b className="font-semibold text-brand">/</b> for instant zero-token
+                  commands.
                 </p>
               </div>
 
               <div className="space-y-2">
-                <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-slate-400">
-                  <Terminal className="size-3 text-emerald-400" />
+                <div className="font-mono text-[10px] uppercase tracking-wide text-ink-2">
                   Suggested prompts
                 </div>
                 <div className="grid grid-cols-1 gap-1.5">
@@ -258,16 +235,12 @@ export function ChatPanel({
                     <button
                       key={s}
                       onClick={() => (s.startsWith('/') ? send(s) : setText(s))}
-                      className="group flex items-center justify-between rounded-lg border border-line bg-surface-2 px-3 py-2 text-left text-xs text-slate-300 hover:border-emerald-500/40 hover:bg-surface-3 hover:text-white transition-all"
+                      className="group flex items-center justify-between rounded-sm border border-line bg-surface-2 px-3 py-2 text-left text-xs text-ink transition-colors hover:border-brand/30 hover:bg-surface-3 hover:text-ink"
                     >
-                      <span
-                        className={cn(
-                          s.startsWith('/') ? 'font-mono text-emerald-400' : 'text-slate-200',
-                        )}
-                      >
+                      <span className={cn(s.startsWith('/') ? 'font-mono text-brand' : 'text-ink')}>
                         {s}
                       </span>
-                      <CornerDownLeft className="size-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <CornerDownLeft className="size-3 text-ink-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </button>
                   ))}
                 </div>
@@ -281,25 +254,25 @@ export function ChatPanel({
                 </li>
               ))}
               {busy && (
-                <li className="flex items-center gap-2 rounded-lg border border-line bg-surface-2/50 px-3 py-2 text-xs text-slate-400">
-                  <LoaderCircle className="size-3.5 animate-spin text-emerald-400" />
+                <li className="flex items-center gap-2 rounded-sm border border-line bg-surface-2/50 px-3 py-2 text-xs text-ink-2">
+                  <LoaderCircle className="size-3.5 animate-spin text-brand" />
                   <span>Orchestrating agent run…</span>
                 </li>
               )}
             </ol>
           )}
-          {error && <p className="mt-3 font-mono text-xs text-red-400">{error}</p>}
+          {error && <p className="mt-3 font-mono text-xs text-bad">{error}</p>}
         </div>
       }
 
       {/* Input Dock */}
       {
-        <div className="relative border-t border-line bg-surface-2/80 p-3 backdrop-blur-md">
+        <div className="relative border-t border-line bg-surface-2/80 p-3 backdrop-blur-sm">
           {completions.length > 0 && (
             <ul
               role="listbox"
               aria-label="Commands"
-              className="absolute right-3 bottom-full left-3 mb-2 max-h-60 overflow-y-auto rounded-xl border border-line-strong bg-surface p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.9)]"
+              className="absolute right-3 bottom-full left-3 mb-2 max-h-60 overflow-y-auto rounded-md border border-line-strong bg-surface p-1.5 shadow-[0_16px_40px_-16px_rgb(0_0_0/0.8)]"
             >
               {completions.map((c, i) => (
                 <li key={c.name}>
@@ -311,18 +284,16 @@ export function ChatPanel({
                       complete(c.name);
                     }}
                     className={cn(
-                      'flex w-full items-baseline gap-3 rounded-lg px-2.5 py-1.5 text-left transition-colors',
+                      'flex w-full items-baseline gap-3 rounded-sm px-2.5 py-1.5 text-left transition-colors',
                       i === pick ? 'bg-surface-3' : 'hover:bg-surface-2',
                     )}
                   >
-                    <span className="font-mono text-xs font-semibold text-emerald-400">
-                      {c.usage}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-[11px] text-slate-300">
+                    <span className="font-mono text-xs font-semibold text-brand">{c.usage}</span>
+                    <span className="min-w-0 flex-1 truncate text-[11px] text-ink">
                       {c.summary}
                     </span>
                     {c.spends && (
-                      <span className="font-mono text-[9px] uppercase tracking-wider text-amber-400">
+                      <span className="font-mono text-[9px] uppercase tracking-wider text-warn">
                         tokens
                       </span>
                     )}
@@ -331,7 +302,7 @@ export function ChatPanel({
               ))}
             </ul>
           )}
-          <div className="rounded-xl border border-line-strong bg-surface p-2.5 transition-all focus-within:border-emerald-500/60 focus-within:ring-1 focus-within:ring-emerald-500/20">
+          <div className="rounded-md border border-line-strong bg-surface p-2.5 transition-colors focus-within:border-brand/50 focus-within:ring-1 focus-within:ring-brand/20">
             <textarea
               ref={input}
               value={text}
@@ -340,10 +311,10 @@ export function ChatPanel({
               rows={Math.min(5, Math.max(1, text.split('\n').length))}
               placeholder="Ask Puff anything, or type / for commands..."
               aria-label="Message"
-              className="max-h-32 min-h-10 w-full resize-none bg-transparent font-sans text-xs text-slate-100 outline-none placeholder:text-slate-500"
+              className="max-h-32 min-h-10 w-full resize-none bg-transparent font-sans text-xs text-ink outline-none placeholder:text-ink-3"
             />
             <div className="mt-1 flex items-center justify-between border-t border-line/60 pt-2">
-              <div className="flex items-center gap-2 font-mono text-[10px] text-slate-500">
+              <div className="flex items-center gap-2 font-mono text-[10px] text-ink-3">
                 <span>↵ to send</span>
                 <span>·</span>
                 <span>/ for commands</span>
@@ -354,7 +325,7 @@ export function ChatPanel({
                 onClick={() => send()}
                 disabled={!text.trim() || busy}
                 aria-label="Send"
-                className="grid size-6 shrink-0 place-items-center rounded bg-emerald-500 text-slate-950 transition-all hover:bg-emerald-400 disabled:opacity-30 disabled:hover:bg-emerald-500"
+                className="grid size-6 shrink-0 place-items-center rounded bg-brand text-abyss transition-colors hover:bg-brand-soft disabled:opacity-30 disabled:hover:bg-brand"
               >
                 <CornerDownLeft className="size-3.5" />
               </button>
@@ -376,12 +347,10 @@ function Bubble({
   if (m.role === 'user') {
     return (
       <div className="ml-8 flex flex-col items-end">
-        <div className="rounded-xl rounded-br-xs border border-emerald-500/30 bg-emerald-950/40 px-3.5 py-2.5 text-xs leading-relaxed text-emerald-100 shadow-sm backdrop-blur-sm whitespace-pre-wrap">
+        <div className="rounded-md rounded-br-xs border border-line bg-surface-3 px-3.5 py-2.5 text-xs leading-relaxed text-ink whitespace-pre-wrap">
           {m.text}
         </div>
-        <span className="mt-1 font-mono text-[9px] uppercase tracking-wider text-slate-500">
-          You
-        </span>
+        <span className="mt-1 font-mono text-[9px] uppercase tracking-wider text-ink-3">You</span>
       </div>
     );
   }
@@ -389,16 +358,15 @@ function Bubble({
   if (m.role === 'assistant') {
     return (
       <div className="mr-6 flex flex-col items-start">
-        <div className="mb-1 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-slate-400">
-          <span className="size-1 rounded-full bg-emerald-400" />
+        <div className="mb-1 font-mono text-[9px] uppercase tracking-wider text-ink-2">
           Puff Orchestrator
         </div>
-        <div className="rounded-xl rounded-bl-xs border border-line-strong bg-surface-2 px-3.5 py-2.5 text-xs leading-relaxed text-slate-200 shadow-sm whitespace-pre-wrap">
+        <div className="rounded-md rounded-bl-xs border border-line-strong bg-surface-2 px-3.5 py-2.5 text-xs leading-relaxed text-ink whitespace-pre-wrap">
           {m.text}
         </div>
         {m.tokens && (
-          <div className="mt-1 font-mono text-[9px] text-slate-500 tabular-nums">
-            ⚡ {formatTokens(m.tokens.in + m.tokens.out)} tokens used
+          <div className="mt-1 font-mono text-[9px] text-ink-3 tabular-nums">
+            {formatTokens(m.tokens.in + m.tokens.out)} tokens used
           </div>
         )}
       </div>
@@ -409,18 +377,13 @@ function Bubble({
     return (
       <div
         className={cn(
-          'flex items-start gap-2 rounded-lg border px-3 py-2 font-mono text-xs leading-snug',
+          'flex items-start gap-2 rounded-sm border px-3 py-2 font-mono text-xs leading-snug',
           m.ok === false
-            ? 'border-red-500/30 bg-red-950/20 text-red-300'
-            : 'border-emerald-500/30 bg-emerald-950/20 text-emerald-300',
+            ? 'border-bad/25 bg-bad/10 text-bad'
+            : 'border-brand/25 bg-brand/10 text-brand',
         )}
       >
-        {m.ok === false ? (
-          <CircleX className="mt-0.5 size-3.5 shrink-0 text-red-400" />
-        ) : (
-          <Check className="mt-0.5 size-3.5 shrink-0 text-emerald-400" />
-        )}
-        <span className="min-w-0 break-words">{m.text}</span>
+        <span className="min-w-0 flex-1 break-words">{m.text}</span>
       </div>
     );
   }
@@ -428,31 +391,26 @@ function Bubble({
   if (m.role === 'approval' && m.approval) {
     const a = m.approval;
     return (
-      <div className="rounded-xl border border-emerald-500/30 bg-surface-2 p-3.5 shadow-lg">
-        <div className="flex items-center gap-2 text-xs font-semibold text-white">
-          <span className="grid size-5 place-items-center rounded bg-emerald-500/20 text-emerald-400">
-            <Play className="size-3 fill-current" />
-          </span>
-          {m.text}
-        </div>
-        <p className="mt-2 font-mono text-xs leading-snug text-slate-300">{a.summary}</p>
+      <div className="rounded-md border border-brand/25 bg-surface-2 p-3.5">
+        <div className="text-xs font-semibold text-ink">{m.text}</div>
+        <p className="mt-2 font-mono text-xs leading-snug text-ink">{a.summary}</p>
         {a.state === 'pending' ? (
           <div className="mt-3 flex gap-2">
             <button
               onClick={() => onApprove(a.id, true)}
-              className="flex-1 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-emerald-400 transition-colors"
+              className="flex-1 rounded-sm bg-brand px-3 py-1.5 text-xs font-semibold text-abyss hover:bg-brand-soft transition-colors"
             >
               Approve & Run
             </button>
             <button
               onClick={() => onApprove(a.id, false)}
-              className="rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-surface-3 transition-colors"
+              className="rounded-sm border border-line-strong bg-surface px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-3 transition-colors"
             >
               Decline
             </button>
           </div>
         ) : (
-          <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+          <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-ink-3">
             {a.state === 'approved' ? '✓ Run approved' : '✕ Run declined'}
           </p>
         )}
@@ -464,13 +422,10 @@ function Bubble({
   return (
     <div
       className={cn(
-        'rounded-lg border px-3 py-2 font-mono text-xs leading-relaxed',
-        m.ok === false
-          ? 'border-amber-500/30 bg-amber-950/20 text-amber-300'
-          : 'border-line bg-abyss text-slate-300',
+        'rounded-sm border px-3 py-2 font-mono text-xs leading-relaxed',
+        m.ok === false ? 'border-warn/25 bg-warn/10 text-warn' : 'border-line bg-abyss text-ink',
       )}
     >
-      <Terminal className="mr-1.5 mb-0.5 inline size-3 text-slate-500" />
       <span className="whitespace-pre-wrap">{m.text}</span>
     </div>
   );
