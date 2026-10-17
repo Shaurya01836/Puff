@@ -105,7 +105,17 @@ export function Board({
   const counts = [
     { label: 'running', n: count(['running', 'verifying']) },
     { label: 'queued', n: count(['planned', 'ready']) },
-    { label: 'need attention', n: count(['failed', 'retrying', 'escalated']), bad: true },
+    {
+      label: 'need attention',
+      n: tasks.filter(
+        (t) => ['failed', 'retrying', 'escalated'].includes(t.status) && !takenOver(t),
+      ).length,
+      bad: true,
+    },
+    {
+      label: 'taken over by you',
+      n: tasks.filter((t) => takenOver(t) && t.status !== 'done').length,
+    },
     { label: 'done', n: count(['done']) },
   ];
 
@@ -348,6 +358,15 @@ const ORDER: Record<TaskStatus, number> = {
 function whyLine(task: Task): { text: string; tone: 'wait' | 'graph' | 'risk' } | undefined {
   if (task.blockedBy?.length && task.why?.schedule)
     return { text: task.why.schedule, tone: 'wait' };
+  // Who took the task over after an agent could not finish it
+  const [prev, last] = (task.trail ?? []).slice(-2);
+  if (prev && last && last.agent !== prev.agent && last.agent !== 'you') {
+    const name = (a: string) => AGENT_META[a as AgentName]?.label ?? a;
+    return {
+      text: `${name(last.agent)} took over from ${name(prev.agent)} (${OUTCOME[prev.outcome].word})`,
+      tone: 'graph',
+    };
+  }
   if (task.why?.route) return { text: task.why.route, tone: 'graph' };
   if (task.risk !== undefined && task.risk >= RISKY)
     return {
@@ -436,7 +455,7 @@ function TaskRow({
               {task.title}
             </span>
             <span className="shrink-0">
-              <StatusPill status={task.status} />
+              <StatusPill status={task.status} byYou={takenOver(task)} />
             </span>
           </span>
           {task.targets.length > 0 && (
@@ -560,7 +579,7 @@ function TaskCard({
       <div className="text-xs leading-snug font-medium text-slate-100">{task.title}</div>
       <WhyLine task={task} wrap />
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-        <StatusPill status={task.status} />
+        <StatusPill status={task.status} byYou={takenOver(task)} />
         {working && since && (
           <span className="font-mono text-[10px] text-slate-400">
             working for {duration(now - since)}

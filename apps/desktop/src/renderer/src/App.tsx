@@ -401,7 +401,7 @@ export function App() {
           onAdd={async (input) => {
             const added = await puff.addProject(input);
             reloadProjects();
-            setScreen('memory');
+            setScreen('board');
             setNotice({ tone: 'good', text: `${added.name} added and indexed.` });
           }}
         />

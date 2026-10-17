@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ArrowRight,
   Check,
@@ -105,7 +105,6 @@ export function TaskPanel({
   const diff = useLoad(() => puff.getTaskDiff(taskId), [taskId, tick, detail?.task.status]);
   // The tab the person picked; until they pick one it follows the task (live while an agent works)
   const [picked, setPicked] = useState<Tab | undefined>(terminalAsked ? 'live' : undefined);
-  const [terminalOpen, setTerminalOpen] = useState(Boolean(terminalAsked));
   const terms = useTerminals(taskId);
   const [noting, setNoting] = useState(false);
   const [noteText, setNoteText] = useState('');
@@ -133,17 +132,29 @@ export function TaskPanel({
   const canRemove = (status === 'planned' || status === 'ready') && detail?.sessions.length === 0;
   const mine = Boolean(detail?.task.worktree?.endsWith('-manual'));
   const isPlan = detail?.task.type === 'plan';
+  // The agent this task is using: the one that ran it last, else the one it was given to
+  const lastAgent = detail?.sessions.at(-1)?.agent;
+  const agentNow: AgentName = (AGENTS as string[]).includes(lastAgent ?? '')
+    ? (lastAgent as AgentName)
+    : (detail?.task.assignedAgent ?? detail?.task.preferredAgent ?? 'claude-code');
   const openCli = async (cli: TerminalCli, start = false) => {
     setProblem(undefined);
     try {
       await openTerminal(taskId, cli, start);
-      setTerminalOpen(true);
       setPicked('live');
       setTick((t) => t + 1);
     } catch (err) {
       setProblem((err as Error).message);
     }
   };
+  // Take over from a board card opens that agent's terminal straight away, once
+  const autoOpened = useRef(false);
+  useEffect(() => {
+    if (!terminalAsked || !detail || autoOpened.current || terms.length > 0) return;
+    autoOpened.current = true;
+    void openCli(agentNow, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [terminalAsked, detail]);
 
   useEffect(
     () =>
@@ -169,7 +180,7 @@ export function TaskPanel({
       <header className="border-b border-line px-6 pt-5">
         <div className="mb-1.5 flex items-center gap-2">
           <span className="font-mono text-[11px] text-ink-3">{taskId}</span>
-          {detail && <StatusPill status={detail.task.status} />}
+          {detail && <StatusPill status={detail.task.status} byYou={mine} />}
         </div>
         <h2 className="font-display text-lg leading-snug font-semibold">
           {detail?.task.title ?? 'Loading…'}
@@ -225,25 +236,11 @@ export function TaskPanel({
                 onSelect: () => void act(() => puff.reassignTask(taskId, a)),
               }))}
             />
-            <Menu
-              label="Take over"
-              icon={<Terminal className="size-3.5" />}
-              title="Stop the agent and work on it yourself in a real terminal"
-              items={[
-                ...CLIS.filter((c) => c.cli !== 'shell').map((c) => ({
-                  label: `Start ${c.label} on this task`,
-                  hint: 'Watch it work in its own screen. Uses tokens.',
-                  onSelect: () => void openCli(c.cli, true),
-                })),
-                ...CLIS.map((c) => ({
-                  label: c.cli === 'shell' ? c.label : `Open ${c.label} and wait`,
-                  hint:
-                    c.cli === 'shell'
-                      ? "A shell in the task's folder"
-                      : "Its own screen, idle, in the task's folder",
-                  onSelect: () => void openCli(c.cli),
-                })),
-              ]}
+            <ActionButton
+              icon={Terminal}
+              label={`Open in ${AGENT_META[agentNow].label}`}
+              title={`Stop the agent here and continue in ${AGENT_META[agentNow].label}'s own terminal, in this task's folder, starting from its last attempt`}
+              onClick={() => void openCli(agentNow, true)}
             />
             <ActionButton
               icon={StickyNote}
@@ -371,20 +368,22 @@ export function TaskPanel({
         {!detail && <p className="text-sm text-ink-3">Loading…</p>}
         {detail && tab === 'live' && (
           <div className="flex flex-col gap-6">
-            {terminalOpen || terms.length > 0 ? (
+            {terms.length > 0 ? (
               <TerminalTab
                 taskId={taskId}
                 terms={terms}
+                cli={agentNow}
                 onOpen={openCli}
                 onLanded={() => setTick((t) => t + 1)}
               />
             ) : (
               status !== 'done' && (
                 <button
-                  onClick={() => setTerminalOpen(true)}
+                  onClick={() => void openCli(agentNow, true)}
+                  title="Stops the agent here and continues in its own terminal, in this task's folder"
                   className="inline-flex w-fit items-center gap-2 rounded-lg border border-line-strong bg-surface-2 px-3 py-1.5 text-xs text-ink-2 hover:bg-surface-3 hover:text-ink"
                 >
-                  <Terminal className="size-3.5" /> Open a terminal in this task&apos;s folder
+                  <Terminal className="size-3.5" /> Open in {AGENT_META[agentNow].label}
                 </button>
               )
             )}
@@ -396,11 +395,20 @@ export function TaskPanel({
         )}
         {detail && tab === 'changes' && (
           <div className="flex flex-col gap-8">
-            {!isPlan && <ChangesTab diff={diff} status={detail.task.status} />}
-            <section>
-              {!isPlan && <SectionTitle>What the merge changes in the graph</SectionTitle>}
-              <PreviewTab merge={detail.mergePreview} plan={detail.planPreview} />
-            </section>
+            {detail.task.type === 'verify' ? (
+              <p className="text-sm text-ink-3">
+                This task only reads the code and reports what it finds, so it makes no changes. Its
+                findings are on the History tab.
+              </p>
+            ) : (
+              <>
+                {!isPlan && <ChangesTab diff={diff} status={detail.task.status} />}
+                <section>
+                  {!isPlan && <SectionTitle>What the merge changes in the graph</SectionTitle>}
+                  <PreviewTab merge={detail.mergePreview} plan={detail.planPreview} />
+                </section>
+              </>
+            )}
           </div>
         )}
         {detail && tab === 'why' && (
@@ -953,90 +961,33 @@ function SessionsTab({ sessions }: { sessions: SessionInfo[] }) {
 }
 
 /**
- * Take the task over in a real terminal. The agent's own CLI opens in the task's working folder, which starts
- * from the agent's last attempt, so the person continues from there with the program's own screen.
+ * The task in a real terminal: its agent's own CLI, in the task's working folder, which starts from the agent's
+ * last attempt, so the person continues from there with the program's own screen.
  */
 function TerminalTab({
   taskId,
   terms,
+  cli,
   onOpen,
   onLanded,
 }: {
   taskId: string;
   terms: ReturnType<typeof useTerminals>;
+  /** The agent the task is using */
+  cli: AgentName;
   onOpen: (cli: TerminalCli, start?: boolean) => Promise<void>;
   onLanded: () => void;
 }) {
   const [active, setActive] = useState<string>();
   const [landing, setLanding] = useState(false);
   const [result, setResult] = useState<ManualResult>();
-  const [opening, setOpening] = useState(false);
   const current = terms.find((t) => t.info.id === active) ?? terms.at(-1);
 
-  const open = async (cli: TerminalCli, start = false) => {
-    setOpening(true);
-    try {
-      await onOpen(cli, start);
-      setActive(undefined);
-    } finally {
-      setOpening(false);
-    }
+  const open = async (which: TerminalCli, start = false) => {
+    await onOpen(which, start);
+    setActive(undefined);
   };
-
-  const choice = (c: (typeof CLIS)[number], start: boolean) => (
-    <button
-      key={`${c.cli}-${start}`}
-      disabled={opening}
-      onClick={() => void open(c.cli, start)}
-      className="inline-flex items-center gap-2 rounded-xl border border-line-strong bg-surface-2 px-3.5 py-2 text-sm font-medium hover:bg-surface-3 disabled:opacity-50"
-    >
-      {c.cli === 'shell' ? <Terminal className="size-4" /> : <AgentMini cli={c.cli} />}
-      {c.cli === 'shell' ? c.label : start ? `Start ${c.label}` : `Open ${c.label}`}
-    </button>
-  );
-  const picker = (
-    <div className="flex flex-col gap-4">
-      <div>
-        <div className="mb-1.5 text-xs font-medium text-ink">
-          Start an agent on this task, in its own screen
-        </div>
-        <p className="mb-2 text-[12px] text-ink-3">
-          It begins working at once and you watch it in its real terminal. This uses tokens. When it
-          is done, press Verify and merge.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {CLIS.filter((c) => c.cli !== 'shell').map((c) => choice(c, true))}
-        </div>
-      </div>
-      <div>
-        <div className="mb-1.5 text-xs font-medium text-ink">Or open one and do it yourself</div>
-        <p className="mb-2 text-[12px] text-ink-3">
-          The program opens idle and waits for you. Nothing is sent until you type.
-        </p>
-        <div className="flex flex-wrap gap-2">{CLIS.map((c) => choice(c, false))}</div>
-      </div>
-    </div>
-  );
-
-  if (!current) {
-    return (
-      <div className="flex flex-col gap-5">
-        <p className="text-sm leading-relaxed text-ink-2">
-          Work on this task in a real terminal. Puff stops the agent if it is running and opens the
-          program you choose, with its own screen, in the task's working folder. The folder starts
-          from the agent's last attempt, so you continue from there. When you are done, press{' '}
-          <b className="font-medium text-ink">Verify and merge my changes</b>: Puff runs the
-          project's tests on your work like it does for an agent, then merges it.
-        </p>
-        {picker}
-        {opening && (
-          <p className="inline-flex items-center gap-2 text-sm text-ink-3">
-            <LoaderCircle className="size-4 animate-spin" /> Opening…
-          </p>
-        )}
-      </div>
-    );
-  }
+  if (!current) return null;
 
   return (
     <div className="flex flex-col gap-3">
@@ -1069,15 +1020,16 @@ function TerminalTab({
           label="Another"
           icon={<Plus className="size-3" />}
           items={[
-            ...CLIS.filter((c) => c.cli !== 'shell').map((c) => ({
-              label: `Start ${c.label} on the task`,
-              hint: 'Uses tokens',
-              onSelect: () => void open(c.cli, true),
-            })),
-            ...CLIS.map((c) => ({
-              label: c.cli === 'shell' ? c.label : `Open ${c.label} and wait`,
-              onSelect: () => void open(c.cli),
-            })),
+            {
+              label: `Another ${AGENT_META[cli].label}`,
+              hint: 'Starts on the task again. Uses tokens.',
+              onSelect: () => void open(cli, true),
+            },
+            {
+              label: 'Plain terminal',
+              hint: "A shell in the task's folder",
+              onSelect: () => void open('shell'),
+            },
           ]}
         />
       </div>
@@ -1149,19 +1101,5 @@ function TerminalTab({
         </p>
       )}
     </div>
-  );
-}
-
-function AgentMini({ cli }: { cli: AgentName }) {
-  return (
-    <span
-      className="inline-grid size-5 place-items-center rounded-md text-[9px] font-bold"
-      style={{
-        color: AGENT_META[cli].color,
-        background: `color-mix(in oklab, ${AGENT_META[cli].color} 16%, transparent)`,
-      }}
-    >
-      {AGENT_META[cli].short}
-    </span>
   );
 }

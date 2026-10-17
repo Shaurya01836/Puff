@@ -98,8 +98,12 @@ const STATUS_ICON: Record<TaskStatus, typeof CircleDot> = {
 };
 
 /** Status always shows icon + label, styled in landing page monospace badge style. */
-export function StatusPill({ status }: { status: TaskStatus }) {
-  const meta = STATUS_META[status];
+export function StatusPill({ status, byYou }: { status: TaskStatus; byYou?: boolean }) {
+  // A task the person took over is theirs to finish: it is not a failure of the team
+  const meta =
+    byYou && status !== 'done'
+      ? { label: 'taken over', tone: 'brand' as const, live: false }
+      : STATUS_META[status];
   const color = TONE_COLOR[meta.tone];
   const Icon = STATUS_ICON[status];
   return (
