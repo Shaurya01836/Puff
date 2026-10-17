@@ -307,6 +307,11 @@ export function createMockApi(opts: MockApiOptions = {}): PuffApi {
     async retrySetup() {
       return sampleSetup(databaseUp, claudeSignedIn);
     },
+    async connectToCloud(_mode, _url) {
+      await new Promise((r) => setTimeout(r, 1500));
+      databaseUp = true;
+      return sampleSetup(true, claudeSignedIn);
+    },
     async listProjects() {
       return clone(projects);
     },

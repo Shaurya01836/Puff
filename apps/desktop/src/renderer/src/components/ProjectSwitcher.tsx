@@ -11,6 +11,7 @@ export function ProjectSwitcher({
   onSwitch,
   onAdd,
   onSettings,
+  onConfigureDatabase,
 }: {
   info?: BackendInfo;
   projects?: ProjectSummary[];
@@ -18,6 +19,7 @@ export function ProjectSwitcher({
   onSwitch: (id: string) => void;
   onAdd: () => void;
   onSettings: (project: ProjectSummary) => void;
+  onConfigureDatabase?: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string>();
@@ -150,9 +152,19 @@ export function ProjectSwitcher({
           <button
             onClick={() => {
               setOpen(false);
+              onConfigureDatabase?.();
+            }}
+            className="flex w-full items-center gap-2 border-t border-line px-3.5 py-2.5 text-sm text-ink-2 hover:bg-surface-2 hover:text-ink cursor-pointer"
+          >
+            <Database className="size-4 text-brand" />
+            Configure FalkorDB…
+          </button>
+          <button
+            onClick={() => {
+              setOpen(false);
               onAdd();
             }}
-            className="flex w-full items-center gap-2 border-t border-line px-3.5 py-2.5 text-sm text-ink-2 hover:bg-surface-2 hover:text-ink"
+            className="flex w-full items-center gap-2 border-t border-line px-3.5 py-2.5 text-sm text-ink-2 hover:bg-surface-2 hover:text-ink cursor-pointer"
           >
             <Plus className="size-4" />
             Add a project…

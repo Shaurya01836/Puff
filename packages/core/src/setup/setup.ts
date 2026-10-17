@@ -210,3 +210,31 @@ export async function startDatabase(log: (line: string) => void = () => {}): Pro
   await waitForDatabase(url, 40);
   return url;
 }
+
+/**
+ * The URL of your hosted/demo FalkorDB Cloud instance.
+ * Update this to your real FalkorDB Cloud connection string before shipping.
+ */
+export const getDemoCloudUrl = (): string =>
+  process.env.PUFF_DEMO_CLOUD_URL ?? 'rediss://demo.falkordb.cloud:6380';
+export const DEMO_CLOUD_URL = process.env.PUFF_DEMO_CLOUD_URL ?? 'rediss://demo.falkordb.cloud:6380';
+
+/**
+ * Connect to a caller-supplied FalkorDB URL (own cloud or the shared demo instance).
+ * Validates connectivity, then persists the URL in ~/.puff/.env so it survives restarts.
+ * Throws a human-readable error if the URL is unreachable.
+ */
+export async function connectToDatabase(url: string): Promise<void> {
+  let db;
+  try {
+    db = await connect(url);
+  } catch (err) {
+    throw new Error(
+      `Could not connect to FalkorDB at ${url}.\n${(err as Error).message}`,
+    );
+  }
+  await db.close().catch(() => {});
+  process.env.FALKORDB_URL = url;
+  if (url !== DEFAULT_FALKORDB_URL) await saveUserEnv('FALKORDB_URL', url);
+}
+

@@ -58,6 +58,7 @@ export function App() {
   const [chatOpen, setChatOpen] = useState(false);
   /** Bumped when a sign-in finished, so the agent list is read again */
   const [setupTick, setSetupTick] = useState(0);
+  const [setupOpen, setSetupOpen] = useState(false);
   const [settingsFor, setSettingsFor] = useState<ProjectSummary>();
   /** Bumped when the active project changes (added, switched, removed, edited): everything reloads */
   const [projectTick, setProjectTick] = useState(0);
@@ -69,8 +70,8 @@ export function App() {
   // What the setup screen shows (database and Docker) or the welcome screen (agent tools)
   const setup = useLoad(
     () =>
-      info?.needsSetup || info?.noProject ? puff.getSetupStatus() : Promise.resolve(undefined),
-    [info?.needsSetup, info?.noProject, projectTick, setupTick],
+      info?.needsSetup || info?.noProject || setupOpen ? puff.getSetupStatus() : Promise.resolve(undefined),
+    [info?.needsSetup, info?.noProject, setupOpen, projectTick, setupTick],
   );
   const projectId = info?.projectId ?? MOCK_PROJECT_ID;
   const live = info?.mode === 'live';
@@ -266,19 +267,23 @@ export function App() {
     }
   };
 
-  if (info?.needsSetup) {
+  if (info?.needsSetup || setupOpen) {
     return (
       <Setup
         status={setup}
+        canClose={!info?.needsSetup}
+        onClose={() => setSetupOpen(false)}
         onRefresh={() => setSetupTick((t) => t + 1)}
         onStart={async () => {
           await puff.startDatabase();
           reloadProjects();
+          setSetupOpen(false);
         }}
         onRetry={async () => {
           const status = await puff.retrySetup();
           if (!status.databaseOk) throw new Error(status.databaseError ?? 'Still not reachable.');
           reloadProjects();
+          setSetupOpen(false);
         }}
       />
     );
@@ -304,6 +309,7 @@ export function App() {
           onSwitchProject={switchProject}
           onAddProject={() => setImportOpen(true)}
           onProjectSettings={setSettingsFor}
+          onConfigureDatabase={() => setSetupOpen(true)}
           counts={{ board: tasks.filter((t) => !t.archived && t.status !== 'done').length }}
         />
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -382,14 +388,25 @@ export function App() {
 
       {/* Status bar: what the app is connected to and the last thing that really happened */}
       <footer className="flex h-7 shrink-0 items-center justify-between gap-4 border-t border-line bg-surface-2 px-4 text-[11px] text-ink-3 select-none">
-        <span
-          className={cn('inline-flex shrink-0 items-center', live ? 'text-ink-2' : 'text-warn')}
-          title={live ? `Connected to FalkorDB, graph ${info?.graphName ?? ''}` : info?.error}
+        <button
+          type="button"
+          onClick={() => setSetupOpen(true)}
+          className={cn(
+            'inline-flex shrink-0 items-center gap-1.5 rounded px-2 py-0.5 hover:bg-surface-3 transition-colors cursor-pointer',
+            live ? 'text-ink-2' : 'text-warn',
+          )}
+          title={
+            live
+              ? `Connected to FalkorDB (${info?.graphName ?? info?.projectName}). Click to configure connection.`
+              : 'Not connected to FalkorDB. Click to configure connection.'
+          }
         >
+          <span className={cn('size-1.5 rounded-full', live ? 'bg-emerald-400' : 'bg-amber-400')} />
           {live
             ? `FalkorDB · ${info?.graphName ?? info?.projectName}`
             : 'Not connected · sample data'}
-        </span>
+          <span className="text-[10px] text-ink-3 underline ml-1">Configure</span>
+        </button>
         <span className="hidden min-w-0 flex-1 items-center sm:flex">
           <span className="truncate text-ink">{statusText}</span>
         </span>

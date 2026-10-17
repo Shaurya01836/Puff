@@ -1,6 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Check, CircleAlert, Database, LoaderCircle, LogIn, RefreshCw } from 'lucide-react';
-import type { AgentCliStatus, AgentName, SetupStatus } from '@puff/shared';
+import {
+  Check,
+  CircleAlert,
+  Cloud,
+  Container,
+  Database,
+  ExternalLink,
+  LoaderCircle,
+  LogIn,
+  RefreshCw,
+} from 'lucide-react';
+import type { AgentCliStatus, AgentName, ConnectMode, SetupStatus } from '@puff/shared';
 import { Mascot } from '@/components/Mascot';
 import { puff } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -46,8 +56,7 @@ export function AgentChecklist({
 }
 
 /**
- * Sign in to an agent from here. The button starts the agent's own sign-in, which opens the browser on
- * the provider's page. If the page ends by showing a one-time code, it is pasted into the box below.
+ * Sign in to an agent from here.
  */
 function SignIn({ agent, onChanged }: { agent: AgentCliStatus; onChanged?: () => void }) {
   const [state, setState] = useState<'idle' | 'opening' | 'waiting'>('idle');
@@ -55,7 +64,6 @@ function SignIn({ agent, onChanged }: { agent: AgentCliStatus; onChanged?: () =>
   const [code, setCode] = useState('');
   const [problem, setProblem] = useState<string>();
 
-  // The sign-in ends on its own (the browser step finished, or it gave up)
   useEffect(() => {
     if (state !== 'waiting') return;
     return puff.onEvent((e) => {
@@ -96,39 +104,26 @@ function SignIn({ agent, onChanged }: { agent: AgentCliStatus; onChanged?: () =>
         <button
           onClick={() => void start()}
           disabled={state === 'opening'}
-          className="inline-flex items-center gap-1.5 rounded-sm border border-line-strong bg-surface-2 px-2.5 py-1 text-xs font-medium hover:bg-surface-3 disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong bg-surface-2 px-2.5 py-1 text-xs font-medium hover:bg-surface-3 disabled:opacity-60"
         >
-          {state === 'opening' ? (
-            <LoaderCircle className="size-3.5 animate-spin" />
-          ) : (
-            <LogIn className="size-3.5" />
-          )}
+          {state === 'opening' ? <LoaderCircle className="size-3.5 animate-spin" /> : <LogIn className="size-3.5" />}
           Sign in
         </button>
       )}
       {state === 'waiting' && (
-        <div className="flex flex-col gap-2 rounded-md border border-line bg-surface-2/60 p-3 text-[12px] leading-snug text-ink-2">
+        <div className="flex flex-col gap-2 rounded-xl border border-line bg-surface-2/60 p-3 text-[12px] leading-snug text-ink-2">
           <p className="flex items-center gap-2">
-            <LoaderCircle className="size-3.5 shrink-0 animate-spin text-brand" />
+            <LoaderCircle className="size-3.5 shrink-0 animate-spin text-info" />
             Your browser opened. Approve the sign-in there.
           </p>
           {url && (
             <p className="text-ink-3">
               If it did not open, go to{' '}
-              <a href={url} target="_blank" rel="noreferrer" className="break-all underline">
-                the sign-in page
-              </a>
-              .
+              <a href={url} target="_blank" rel="noreferrer" className="break-all underline">the sign-in page</a>.
             </p>
           )}
           <p className="text-ink-3">If the page shows a one-time code, paste it here:</p>
-          <form
-            className="flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void send();
-            }}
-          >
+          <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void send(); }}>
             <input
               value={code}
               onChange={(e) => setCode(e.target.value)}
@@ -141,7 +136,7 @@ function SignIn({ agent, onChanged }: { agent: AgentCliStatus; onChanged?: () =>
             <button
               type="submit"
               disabled={!code.trim()}
-              className="rounded-sm bg-brand px-3 py-1 text-xs font-semibold text-abyss disabled:opacity-40"
+              className="rounded-lg bg-brand px-3 py-1 text-xs font-semibold text-white disabled:opacity-40"
             >
               Send
             </button>
@@ -153,30 +148,76 @@ function SignIn({ agent, onChanged }: { agent: AgentCliStatus; onChanged?: () =>
   );
 }
 
+/** One selectable connection-mode card */
+function ModeCard({
+  id, selected, icon: Icon, title, description, badge, onSelect,
+}: {
+  id: ConnectMode;
+  selected: boolean;
+  icon: React.ElementType;
+  title: string;
+  description: string;
+  badge?: string;
+  onSelect: (id: ConnectMode) => void;
+}) {
+  return (
+    <button
+      type="button"
+      id={`connect-mode-${id}`}
+      onClick={() => onSelect(id)}
+      className={cn(
+        'relative flex w-full items-start gap-3 rounded-xl border p-4 text-left transition-all',
+        selected ? 'border-brand/60 bg-brand/10 ring-1 ring-brand/30' : 'border-line bg-surface-2 hover:border-line-strong hover:bg-surface-3',
+      )}
+    >
+      <div className={cn('mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg', selected ? 'bg-brand/20 text-brand' : 'bg-surface-3 text-ink-3')}>
+        <Icon className="size-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-ink">{title}</span>
+          {badge && <span className="rounded-full bg-brand/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand">{badge}</span>}
+        </div>
+        <p className="mt-0.5 text-[12px] leading-snug text-ink-3">{description}</p>
+      </div>
+      <div className={cn('mt-1 flex size-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors', selected ? 'border-brand bg-brand' : 'border-line-strong')}>
+        {selected && <Check className="size-3 text-white" strokeWidth={3} />}
+      </div>
+    </button>
+  );
+}
+
 /**
- * Shown when the database is not reachable (every first run of an installed app). Puff's memory lives in
- * FalkorDB; the one button here starts it in Docker, which only happens because the person pressed it.
+ * Shown when the database is not reachable. Presents three connection options:
+ * local Docker, own FalkorDB Cloud URL, or the hosted demo instance.
  */
 export function Setup({
-  status,
-  onStart,
-  onRetry,
-  onRefresh,
+  status, onStart, onRetry, onRefresh, canClose, onClose,
 }: {
   status?: SetupStatus;
   onStart: () => Promise<void>;
   onRetry: () => Promise<void>;
-  /** Read the status again (a sign-in finished) */
   onRefresh?: () => void;
+  canClose?: boolean;
+  onClose?: () => void;
 }) {
-  const [working, setWorking] = useState<'start' | 'retry'>();
+  const [mode, setMode] = useState<ConnectMode>('docker');
+  const [cloudUrl, setCloudUrl] = useState('');
+  const [working, setWorking] = useState<'connect' | 'retry'>();
   const [error, setError] = useState<string>();
 
-  const run = (kind: 'start' | 'retry', action: () => Promise<void>) => async () => {
-    setWorking(kind);
+  const docker = status?.docker;
+
+  const handleConnect = async () => {
+    setWorking('connect');
     setError(undefined);
     try {
-      await action();
+      if (mode === 'docker') {
+        await onStart();
+      } else {
+        await puff.connectToCloud(mode, mode === 'own-cloud' ? cloudUrl.trim() : undefined);
+      }
+      onClose?.();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -184,102 +225,124 @@ export function Setup({
     }
   };
 
-  const docker = status?.docker;
+  const handleRetry = async () => {
+    setWorking('retry');
+    setError(undefined);
+    try {
+      await onRetry();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setWorking(undefined);
+    }
+  };
+
+  const canConnect =
+    mode === 'docker' ? docker === 'ready'
+    : mode === 'demo-cloud' ? true
+    : cloudUrl.trim().length > 0;
+
+  const connectLabel =
+    working === 'connect' ? 'Connecting...'
+    : mode === 'docker' ? (docker === 'ready' ? 'Start the database' : 'Start Docker first')
+    : mode === 'demo-cloud' ? 'Connect to demo'
+    : 'Connect';
+
   return (
-    <div className="grid h-full place-items-center overflow-auto p-10">
+    <div className="relative grid h-full place-items-center overflow-auto p-10">
+      {canClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-6 left-6 inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-xs font-medium text-ink-2 hover:bg-surface-3 transition-colors cursor-pointer"
+        >
+          ← Back to app
+        </button>
+      )}
       <div className="flex w-full max-w-xl flex-col items-center text-center">
         <Mascot state={error ? 'worried' : 'idle'} size={84} />
-        <h2 className="mt-5 font-display text-2xl font-semibold">One thing to set up</h2>
+        <h2 className="mt-5 font-display text-2xl font-semibold">Connect to FalkorDB</h2>
         <p className="mt-2 max-w-md text-sm leading-relaxed text-ink-2">
-          Puff keeps its memory in <b className="font-medium text-ink">FalkorDB</b>, a graph
-          database that runs on your computer. It is not running yet.
+          Puff keeps its memory in <b className="font-medium text-ink">FalkorDB</b>, a graph database.
+          Choose how you want to connect.
         </p>
 
-        <div className="mt-6 w-full rounded-lg border border-line bg-surface p-5 text-left">
-          <div className="flex items-center gap-2.5 text-sm font-medium">
-            <Database className="size-4 text-brand-soft" />
-            Database
-            <span className="ml-auto font-mono text-[11px] text-ink-3">{status?.databaseUrl}</span>
-          </div>
-          {status?.databaseError && (
-            <p className="mt-2 text-[12px] leading-snug whitespace-pre-wrap text-ink-3">
-              {status.databaseError}
-            </p>
-          )}
-
-          {docker === 'ready' && (
-            <p className="mt-4 text-[13px] leading-snug text-ink-2">
-              Docker is running. Puff can start the database for you in a container named{' '}
-              <code className="font-mono text-xs">puff-falkordb</code>. The first time downloads the
-              image, which can take a few minutes.
-            </p>
-          )}
-          {docker === 'stopped' && (
-            <p className="mt-4 text-[13px] leading-snug text-warn">
-              Docker is installed but not running. Start Docker Desktop, wait until it says it is
-              running, then press Try again.
-            </p>
-          )}
-          {docker === 'missing' && (
-            <p className="mt-4 text-[13px] leading-snug text-warn">
-              Docker was not found. Install{' '}
-              <a
-                href="https://www.docker.com/products/docker-desktop/"
-                target="_blank"
-                rel="noreferrer"
-                className="underline"
-              >
-                Docker Desktop
-              </a>{' '}
-              and start it, or run FalkorDB yourself and press Try again.
-            </p>
-          )}
-
-          <div className="mt-4 flex flex-wrap gap-2.5">
-            {docker === 'ready' && (
-              <button
-                onClick={run('start', onStart)}
-                disabled={!!working}
-                className={cn(
-                  'inline-flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-abyss hover:bg-brand-soft',
-                  'disabled:cursor-wait disabled:opacity-60',
-                )}
-              >
-                {working === 'start' ? (
-                  <LoaderCircle className="size-4 animate-spin" />
-                ) : (
-                  <Database className="size-4" />
-                )}
-                {working === 'start' ? 'Starting the database…' : 'Start the database'}
-              </button>
-            )}
-            <button
-              onClick={run('retry', onRetry)}
-              disabled={!!working}
-              className="inline-flex items-center gap-2 rounded-md border border-line-strong bg-surface-2 px-4 py-2 text-sm font-medium hover:bg-surface-3 disabled:opacity-60"
-            >
-              {working === 'retry' ? (
-                <LoaderCircle className="size-4 animate-spin" />
-              ) : (
-                <RefreshCw className="size-4" />
-              )}
-              Try again
-            </button>
-          </div>
-          {error && (
-            <p role="alert" className="mt-3 text-[13px] leading-snug whitespace-pre-wrap text-bad">
-              {error}
-            </p>
-          )}
+        <div className="mt-6 flex w-full flex-col gap-2.5">
+          <ModeCard id="docker" selected={mode === 'docker'} icon={Container} title="Run locally with Docker" description="Puff starts FalkorDB in a Docker container on your machine. Requires Docker Desktop." onSelect={setMode} />
+          <ModeCard id="own-cloud" selected={mode === 'own-cloud'} icon={Cloud} title="Use your own FalkorDB Cloud" description="Connect to a FalkorDB Cloud instance you control. Paste your connection URL below." onSelect={setMode} />
+          <ModeCard id="demo-cloud" selected={mode === 'demo-cloud'} icon={Database} title="Use our hosted demo" description="Try Puff instantly with a shared cloud instance. No Docker needed." badge="Quickest" onSelect={setMode} />
         </div>
+
+        {mode === 'docker' && (
+          <div className="mt-4 w-full rounded-xl border border-line bg-surface p-4 text-left">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Database className="size-4 text-brand-soft" />
+              Database
+              <span className="ml-auto font-mono text-[11px] text-ink-3">{status?.databaseUrl}</span>
+            </div>
+            {status?.databaseError && <p className="mt-2 text-[12px] leading-snug whitespace-pre-wrap text-ink-3">{status.databaseError}</p>}
+            {docker === 'ready' && <p className="mt-2 text-[13px] leading-snug text-ink-2">Docker is running. Puff will start FalkorDB in a container named <code className="font-mono text-xs">puff-falkordb</code>. The first time downloads the image (a few minutes).</p>}
+            {docker === 'stopped' && <p className="mt-2 text-[13px] leading-snug text-warn">Docker is installed but not running. Start Docker Desktop, wait until it says it is running, then press Try again.</p>}
+            {docker === 'missing' && <p className="mt-2 text-[13px] leading-snug text-warn">Docker was not found. <a href="https://www.docker.com/products/docker-desktop/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline">Install Docker Desktop <ExternalLink className="size-3" /></a> and start it, or choose another option above.</p>}
+          </div>
+        )}
+
+        {mode === 'own-cloud' && (
+          <div className="mt-4 w-full rounded-xl border border-line bg-surface p-4 text-left">
+            <label htmlFor="cloud-url" className="text-sm font-medium text-ink">FalkorDB connection URL</label>
+            <p className="mt-0.5 text-[12px] text-ink-3">Format: <code className="font-mono">rediss://&lt;user&gt;:&lt;password&gt;@host:port</code></p>
+            <input
+              id="cloud-url"
+              type="text"
+              value={cloudUrl}
+              onChange={(e) => setCloudUrl(e.target.value)}
+              placeholder="rediss://default:password@my-instance.falkordb.cloud:6380"
+              spellCheck={false}
+              autoComplete="off"
+              className="mt-2.5 w-full rounded-lg border border-line bg-abyss px-3 py-2 font-mono text-xs text-ink outline-none focus:border-brand/60"
+            />
+            <p className="mt-2 text-[11px] text-ink-3">
+              Find this in your <a href="https://app.falkordb.cloud" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline">FalkorDB Cloud dashboard <ExternalLink className="size-3" /></a>
+            </p>
+          </div>
+        )}
+
+        {mode === 'demo-cloud' && (
+          <div className="mt-4 w-full rounded-xl border border-brand/20 bg-brand/5 p-4 text-left text-[13px] leading-snug text-ink-2">
+            <p>You will connect to a shared hosted FalkorDB instance maintained by the Puff team. Ideal for exploring without any local setup.</p>
+            <p className="mt-2 text-[12px] text-ink-3">Note: the demo instance is shared and resets periodically. For persistent memory, use your own cloud or local Docker.</p>
+          </div>
+        )}
+
+        <div className="mt-5 flex w-full flex-wrap gap-2.5">
+          <button
+            id="connect-btn"
+            onClick={() => void handleConnect()}
+            disabled={!!working || !canConnect}
+            className={cn('inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-all bg-gradient-to-br from-brand to-brand-deep hover:brightness-110 disabled:cursor-wait disabled:opacity-60')}
+          >
+            {working === 'connect' ? <LoaderCircle className="size-4 animate-spin" /> : mode === 'docker' ? <Container className="size-4" /> : mode === 'demo-cloud' ? <Database className="size-4" /> : <Cloud className="size-4" />}
+            {connectLabel}
+          </button>
+          <button
+            id="retry-setup-btn"
+            onClick={() => void handleRetry()}
+            disabled={!!working}
+            className="inline-flex items-center gap-2 rounded-xl border border-line-strong bg-surface-2 px-4 py-2.5 text-sm font-medium hover:bg-surface-3 disabled:opacity-60"
+          >
+            {working === 'retry' ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+            Try again
+          </button>
+        </div>
+
+        {error && <p role="alert" className="mt-3 w-full text-left text-[13px] leading-snug whitespace-pre-wrap text-bad">{error}</p>}
 
         {status && (
           <div className="mt-4 w-full rounded-lg border border-line bg-surface p-5">
             <div className="mb-3 text-sm font-medium">Agent tools</div>
             <AgentChecklist agents={status.agents} onChanged={onRefresh} />
             <p className="mt-3 text-left text-[12px] leading-snug text-ink-3">
-              Puff drives these command-line agents. You need at least one, signed in. You can
-              explore the graph without any.
+              Puff drives these command-line agents. You need at least one, signed in. You can explore the graph without any.
             </p>
           </div>
         )}

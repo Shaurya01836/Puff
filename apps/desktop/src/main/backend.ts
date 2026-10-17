@@ -55,6 +55,8 @@ import {
   setWasmDirectory,
   SignInManager,
   startDatabase,
+  connectToDatabase,
+  DEMO_CLOUD_URL,
   updateProject as updateInRegistry,
   withDetectedSettings,
   userEnvPath,
@@ -173,10 +175,8 @@ export async function createBackend(appDir: string, hooks: BackendHooks = {}): P
       : status;
   };
   const retrySetup = async () => {
-    if (!live) {
-      await connectLive();
-      if (live) emit({ type: 'project', projectId: '' });
-    }
+    await connectLive();
+    if (live) emit({ type: 'project', projectId: '' });
     return setupStatus();
   };
 
@@ -205,6 +205,26 @@ export async function createBackend(appDir: string, hooks: BackendHooks = {}): P
   };
   api.startDatabase = async () => {
     await startDatabase((line) => console.log(`[puff] ${line}`));
+    return retrySetup();
+  };
+  api.connectToCloud = async (mode, url) => {
+    if (mode === 'docker') {
+      // Delegate to the existing Docker start flow
+      await startDatabase((line) => console.log(`[puff] ${line}`));
+    } else {
+      const demoUrl = process.env.PUFF_DEMO_CLOUD_URL ?? DEMO_CLOUD_URL;
+      if (
+        mode === 'demo-cloud' &&
+        (!process.env.PUFF_DEMO_CLOUD_URL || demoUrl.includes('demo.falkordb.cloud'))
+      ) {
+        throw new Error(
+          'No hosted demo instance is configured yet in .env (PUFF_DEMO_CLOUD_URL).\n\nTo connect to the cloud:\n• Select "Use your own FalkorDB Cloud" and paste your FalkorDB Cloud URL, or\n• Select "Run locally with Docker" to use your local database.',
+        );
+      }
+      const target = mode === 'demo-cloud' ? demoUrl : (url ?? '');
+      if (!target) throw new Error('A FalkorDB URL is required.');
+      await connectToDatabase(target);
+    }
     return retrySetup();
   };
   api.onEvent = (cb) => {
