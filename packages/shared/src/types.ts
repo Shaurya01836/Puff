@@ -58,6 +58,8 @@ export interface Task {
   note?: string;
   /** Marked done by the person, not by an agent's verified work */
   doneByHand?: boolean;
+  /** Hidden from the active board; sessions and lessons stay in graph memory */
+  archived?: boolean;
   /**
    * How load-bearing the riskiest target is (Q20): 0 to 1, the share of the project's functions that
    * score lower by PageRank and betweenness over CALLS. 0.9 and up counts as risky by default.

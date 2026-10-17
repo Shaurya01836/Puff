@@ -393,6 +393,40 @@ export class ProjectController {
     return task;
   }
 
+  /** Archive or restore a task. Archiving hides it from the board while keeping its sessions and lessons in memory. */
+  async archiveTask(ref: string, archived = true): Promise<Task> {
+    const task = await this.find(ref);
+    if (archived && ['running', 'verifying'].includes(task.status)) {
+      throw new Error(
+        `Task ${shortId(task.id)} is ${task.status}; only a task that is not running can be archived.`,
+      );
+    }
+    const updated = await updateTask(this.graph, task.id, { archived });
+    this.emit({ type: 'task:update', task: updated });
+    return updated;
+  }
+
+  /** Archive every finished, failed or stopped task that is not currently running. */
+  async clearFinishedTasks(): Promise<Task[]> {
+    const tasks = await listTasks(this.graph);
+    const clearable = tasks.filter(
+      (t) =>
+        !t.archived &&
+        !['running', 'verifying'].includes(t.status) &&
+        (t.status === 'done' ||
+          t.status === 'failed' ||
+          t.status === 'escalated' ||
+          (t.trail ?? []).some((e) => e.outcome === 'stopped')),
+    );
+    const updated: Task[] = [];
+    for (const t of clearable) {
+      const up = await updateTask(this.graph, t.id, { archived: true });
+      this.emit({ type: 'task:update', task: up });
+      updated.push(up);
+    }
+    return updated;
+  }
+
   async index(): Promise<IndexStats> {
     return indexRepo(this.graph, this.project);
   }

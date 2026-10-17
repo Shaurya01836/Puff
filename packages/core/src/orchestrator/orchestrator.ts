@@ -178,7 +178,7 @@ export class Orchestrator {
       for (const t of await promoteReady(graph)) emit?.({ type: 'task:update', task: t });
 
       const ready = (await listTasks(graph))
-        .filter((t) => t.status === 'ready')
+        .filter((t) => t.status === 'ready' && !t.archived)
         .sort((a, b) => a.createdAt - b.createdAt);
 
       for (const task of ready) {
@@ -243,7 +243,7 @@ export class Orchestrator {
     }
     await Promise.all(running.values());
 
-    const waiting = (await listTasks(graph)).filter((t) => t.status === 'planned');
+    const waiting = (await listTasks(graph)).filter((t) => t.status === 'planned' && !t.archived);
     if (waiting.length && !signal.aborted) {
       log?.(`${waiting.length} task(s) are waiting on tasks that did not finish`);
     }

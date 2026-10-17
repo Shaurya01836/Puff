@@ -110,6 +110,7 @@ function toTask({ p, targets, dependsOn, risk, decisions }: TaskRow): Task {
     stalledAt: num(p.stalledAt),
     note: (p.note as string | undefined) ?? undefined,
     doneByHand: p.doneByHand === true ? true : undefined,
+    archived: p.archived === true ? true : undefined,
     risk: risk === undefined || risk === null ? undefined : Number(risk),
     why: toWhy(decisions),
     tokens: tokensIn === undefined ? undefined : { in: tokensIn, out: num(p.tokensOut) ?? 0 },
@@ -219,6 +220,7 @@ export interface TaskPatch {
   /** A note for the next attempt; `null` clears it */
   note?: string | null;
   doneByHand?: boolean;
+  archived?: boolean;
   /** Running tasks whose code overlaps this one (set while it waits); `null` clears it */
   blockedBy?: string[] | null;
   /** Override the update time (seeding and tests) */
@@ -251,6 +253,7 @@ export async function updateTask(graph: Graph, id: string, patch: TaskPatch): Pr
   if (patch.stalledAt !== undefined) set('stalledAt', patch.stalledAt);
   if (patch.note !== undefined) set('note', patch.note?.trim().slice(0, 2000) || null);
   if (patch.doneByHand !== undefined) set('doneByHand', patch.doneByHand);
+  if (patch.archived !== undefined) set('archived', patch.archived);
   const rows = await run<{ id: string }>(
     graph,
     `MATCH (t:Task {id: $id}) SET ${sets.join(', ')} RETURN t.id AS id`,
@@ -266,7 +269,7 @@ export async function promoteReady(graph: Graph): Promise<Task[]> {
   const done = new Set(tasks.filter((t) => t.status === 'done').map((t) => t.id));
   const promoted: Task[] = [];
   for (const t of tasks) {
-    if (t.status === 'planned' && t.dependsOn.every((d) => done.has(d))) {
+    if (t.status === 'planned' && !t.archived && t.dependsOn.every((d) => done.has(d))) {
       promoted.push(await updateTask(graph, t.id, { status: 'ready' }));
     }
   }
@@ -395,3 +398,17 @@ export async function removeTask(graph: Graph, id: string): Promise<void> {
     throw new Error(`Other tasks wait for task ${id}. Remove or change those first.`);
   await run(graph, `MATCH (t:Task {id: $id}) DETACH DELETE t`, { id });
 }
+
+/**
+ * Archive or restore a task. Archiving hides it from the active board while keeping its
+ * sessions and lessons in memory.
+ */
+export async function archiveTask(graph: Graph, id: string, archived = true): Promise<Task> {
+  const task = await getTask(graph, id);
+  if (!task) throw new Error(`Unknown task ${id}`);
+  if (archived && ['running', 'verifying'].includes(task.status)) {
+    throw new Error(`Task ${id} is currently running and cannot be archived.`);
+  }
+  return updateTask(graph, id, { archived });
+}
+

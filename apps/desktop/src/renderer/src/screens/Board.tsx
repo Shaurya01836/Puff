@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import {
+  Archive,
+  ArchiveRestore,
   Check,
   Columns3,
   LayoutList,
@@ -34,7 +36,8 @@ const COLUMNS: { title: string; statuses: TaskStatus[] }[] = [
 
 /** Something the person asks of a task from the board */
 export type BoardAction =
-  | { kind: 'stop' | 'retry' | 'done' | 'takeover'; id: string }
+  | { kind: 'stop' | 'retry' | 'done' | 'takeover' | 'archive' | 'restore'; id: string }
+  | { kind: 'clearFinished' }
   | { kind: 'switch'; id: string; agent: AgentName };
 
 const AGENTS: AgentName[] = ['claude-code', 'codex', 'opencode'];
@@ -84,6 +87,7 @@ export function Board({
   const [query, setQuery] = useState('');
   const [agent, setAgent] = useState<AgentName | 'you' | 'all'>('all');
   const [hideDone, setHideDone] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [dropOn, setDropOn] = useState<string>();
   const now = useNow();
 
@@ -92,26 +96,51 @@ export function Board({
     if (terminalFor) setViewMode('list');
   }, [terminalFor]);
 
-  const count = (statuses: TaskStatus[]) => tasks.filter((t) => statuses.includes(t.status)).length;
+  const activeTasks = tasks.filter((t) => !t.archived);
+  const archivedTasks = tasks.filter((t) => t.archived);
+  const archivedCount = archivedTasks.length;
+
+  const count = (statuses: TaskStatus[]) =>
+    activeTasks.filter((t) => statuses.includes(t.status)).length;
   const counts = [
     { label: 'running', n: count(['running', 'verifying']) },
     { label: 'queued', n: count(['planned', 'ready']) },
     {
       label: 'need attention',
-      n: tasks.filter(
+      n: activeTasks.filter(
         (t) => ['failed', 'retrying', 'escalated'].includes(t.status) && !takenOver(t),
       ).length,
       bad: true,
     },
     {
       label: 'taken over by you',
-      n: tasks.filter((t) => takenOver(t) && t.status !== 'done').length,
+      n: activeTasks.filter((t) => takenOver(t) && t.status !== 'done').length,
     },
     { label: 'done', n: count(['done']) },
   ];
 
-  const shown = tasks.filter((t) => {
-    if (hideDone && t.status === 'done') return false;
+  const clearable = activeTasks.filter(
+    (t) =>
+      !WORKING.includes(t.status) &&
+      (t.status === 'done' ||
+        t.status === 'failed' ||
+        t.status === 'escalated' ||
+        (t.trail ?? []).some((e) => e.outcome === 'stopped')),
+  );
+  const clearableCount = clearable.length;
+
+  const handleClearFinished = () => {
+    if (clearableCount === 0) return;
+    const confirmed = window.confirm(
+      `Archive ${clearableCount} finished, failed, or stopped task${clearableCount === 1 ? '' : 's'}? They will be hidden from the active board, and their sessions and lessons stay in graph memory.`,
+    );
+    if (!confirmed) return;
+    onAction({ kind: 'clearFinished' });
+  };
+
+  const pool = showArchived ? archivedTasks : activeTasks;
+  const shown = pool.filter((t) => {
+    if (!showArchived && hideDone && t.status === 'done') return false;
     if (query && !t.title.toLowerCase().includes(query.trim().toLowerCase())) return false;
     if (agent === 'you') return takenOver(t);
     if (agent !== 'all') {
@@ -124,7 +153,7 @@ export function Board({
   const ordered = [...shown].sort(
     (a, b) => ORDER[a.status] - ORDER[b.status] || b.updatedAt - a.updatedAt,
   );
-  const selected = tasks.find((t) => t.id === selectedId) ?? ordered[0];
+  const selected = ordered.find((t) => t.id === selectedId) ?? ordered[0];
 
   /** Dropping a card on a column asks for what that column means (Puff moves the others itself). */
   const drop = (e: DragEvent, column: string) => {
@@ -133,6 +162,10 @@ export function Board({
     const id = e.dataTransfer.getData('text/plain');
     const task = tasks.find((t) => t.id === id);
     if (!task) return;
+    if (task.archived) {
+      onHint('This task is archived. Restore it first before moving it on the board.');
+      return;
+    }
     if (column === 'Done') {
       if (task.status === 'done') return;
       onAction({ kind: 'done', id });
@@ -203,6 +236,49 @@ export function Board({
           >
             Hide done
           </button>
+          {!showArchived && (
+            <button
+              onClick={handleClearFinished}
+              disabled={clearableCount === 0}
+              title={
+                clearableCount > 0
+                  ? 'Archive every done, failed or stopped task. Kept in graph memory.'
+                  : 'No finished, failed, or stopped tasks to clear'
+              }
+              className={cn(
+                'inline-flex h-7 items-center gap-1.5 rounded border px-2 text-xs transition-colors',
+                clearableCount > 0
+                  ? 'border-line bg-surface text-ink hover:border-line-strong hover:bg-surface-2'
+                  : 'cursor-not-allowed border-line/40 bg-surface/30 text-ink-3',
+              )}
+            >
+              <Archive className="size-3 text-ink-2" />
+              <span>Clear finished</span>
+              {clearableCount > 0 && (
+                <span className="rounded bg-surface-3 px-1 py-0.2 font-mono text-[10px] text-ink-2 tabular-nums">
+                  {clearableCount}
+                </span>
+              )}
+            </button>
+          )}
+          <button
+            onClick={() => setShowArchived((s) => !s)}
+            aria-pressed={showArchived}
+            title={
+              showArchived
+                ? 'Return to the active board'
+                : 'View archived tasks and restore them to the board'
+            }
+            className={cn(
+              'inline-flex h-7 items-center gap-1.5 rounded border px-2 text-xs transition-colors',
+              showArchived
+                ? 'border-brand/40 bg-brand/10 font-medium text-brand'
+                : 'border-line bg-surface text-ink-2 hover:bg-surface-2 hover:text-ink',
+            )}
+          >
+            <ArchiveRestore className="size-3" />
+            <span>Archived ({archivedCount})</span>
+          </button>
           <div className="flex items-center rounded border border-line bg-surface p-0.5">
             {(
               [
@@ -241,20 +317,91 @@ export function Board({
         </div>
       ) : viewMode === 'list' ? (
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(17rem,24rem)_1fr]">
-          <ul className="min-h-0 overflow-y-auto border-r border-line" aria-label="Tasks">
-            {ordered.map((t) => (
-              <TaskRow
-                key={t.id}
-                task={t}
-                now={now}
-                selected={t.id === selected?.id}
-                onSelect={() => onSelect(t.id)}
-              />
-            ))}
-            {ordered.length === 0 && (
-              <li className="py-12 text-center text-xs text-ink-3">No matching tasks</li>
-            )}
-          </ul>
+          <div className="flex min-h-0 flex-col border-r border-line">
+            <div className="flex h-9 shrink-0 items-center justify-between border-b border-line bg-surface/30 px-3.5 py-1 text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="font-medium text-ink">
+                  {showArchived ? 'Archived tasks' : 'Tasks'}
+                </span>
+                <span className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[10px] text-ink-2 tabular-nums">
+                  {ordered.length}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {!showArchived && clearableCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearFinished}
+                    title="Archive all done, failed, and stopped tasks"
+                    className="inline-flex items-center gap-1 rounded border border-line bg-surface px-2 py-0.5 font-mono text-[11px] text-ink transition-colors hover:border-line-strong hover:bg-surface-2"
+                  >
+                    <Archive className="size-3 text-ink-2" />
+                    Clear finished
+                  </button>
+                )}
+                {showArchived && (
+                  <button
+                    type="button"
+                    onClick={() => setShowArchived(false)}
+                    className="inline-flex items-center gap-1 rounded border border-line bg-surface px-2 py-0.5 font-mono text-[11px] text-ink transition-colors hover:border-line-strong hover:bg-surface-2"
+                  >
+                    Exit archive
+                  </button>
+                )}
+              </div>
+            </div>
+            <ul
+              className="min-h-0 flex-1 overflow-y-auto"
+              aria-label={showArchived ? 'Archived tasks' : 'Tasks'}
+            >
+              {ordered.map((t) => (
+                <TaskRow
+                  key={t.id}
+                  task={t}
+                  now={now}
+                  selected={t.id === selected?.id}
+                  onSelect={() => onSelect(t.id)}
+                  onAction={onAction}
+                />
+              ))}
+              {ordered.length === 0 && (
+                <li className="py-12 text-center text-xs text-ink-3">
+                  {showArchived ? (
+                    <div className="px-4">
+                      <p className="font-medium text-ink-2">No archived tasks</p>
+                      <p className="mt-1 text-ink-3">
+                        Finished, failed, or stopped tasks that you archive or clear will appear here.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setShowArchived(false)}
+                        className="mt-3 inline-flex items-center gap-1 rounded border border-line bg-surface px-2.5 py-1 text-xs text-ink hover:bg-surface-2"
+                      >
+                        Return to active tasks
+                      </button>
+                    </div>
+                  ) : archivedCount > 0 ? (
+                    <div className="px-4">
+                      <p className="font-medium text-ink-2">All tasks are archived</p>
+                      <p className="mt-1 text-ink-3">
+                        You cleared or archived all tasks.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setShowArchived(true)}
+                        className="mt-3 inline-flex items-center gap-1.5 rounded border border-brand/40 bg-brand/10 px-2.5 py-1 text-xs text-brand hover:bg-brand/20"
+                      >
+                        <ArchiveRestore className="size-3" />
+                        View archived ({archivedCount})
+                      </button>
+                    </div>
+                  ) : (
+                    'No matching tasks'
+                  )}
+                </li>
+              )}
+            </ul>
+          </div>
           <div className="min-h-0 min-w-0">
             {selected ? (
               <ErrorBoundary resetKey={selected.id} label="This task's panel">
@@ -389,11 +536,13 @@ function TaskRow({
   now,
   selected,
   onSelect,
+  onAction,
 }: {
   task: Task;
   now: number;
   selected: boolean;
   onSelect: () => void;
+  onAction?: (action: BoardAction) => void;
 }) {
   const mine = takenOver(task);
   const who = mine ? undefined : (task.assignedAgent ?? task.preferredAgent);
@@ -431,8 +580,35 @@ function TaskRow({
             <span className="line-clamp-2 text-sm leading-snug font-medium text-ink">
               {task.title}
             </span>
-            <span className="shrink-0">
+            <span className="flex shrink-0 items-center gap-1.5">
               <StatusPill status={task.status} byYou={takenOver(task)} />
+              {task.archived && (
+                <span className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[10px] text-ink-3">
+                  archived
+                </span>
+              )}
+              {task.archived && onAction && (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  title="Restore this task to the active board"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAction({ kind: 'restore', id: task.id });
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      onAction({ kind: 'restore', id: task.id });
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[10px] text-ink transition-colors hover:border-brand/50 hover:bg-surface-3 hover:text-brand"
+                >
+                  <ArchiveRestore className="size-3" />
+                  Restore
+                </span>
+              )}
             </span>
           </span>
           {task.targets.length > 0 && (
@@ -572,6 +748,11 @@ function TaskCard({
             done by you
           </span>
         )}
+        {task.archived && (
+          <span className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[10px] text-ink-3">
+            archived
+          </span>
+        )}
         {mine && task.status !== 'done' && (
           <span className="rounded bg-brand/10 px-1.5 py-0.5 font-mono text-[10px] text-brand">
             you are working on it
@@ -629,7 +810,7 @@ function TaskCard({
         </div>
       )}
 
-      {task.status !== 'done' && (
+      {(task.status !== 'done' || !working) && (
         <div
           className={cn(
             'mt-3 flex flex-wrap items-center gap-1.5 border-t border-line pt-2.5 transition-opacity',
@@ -653,28 +834,46 @@ function TaskCard({
               onClick={() => act({ kind: 'retry', id: task.id })}
             />
           )}
-          <Menu
-            compact
-            label="Switch agent"
-            title="Give this task to another agent"
-            items={AGENTS.map((a) => ({
-              label: AGENT_META[a].label,
-              hint: a === (task.assignedAgent ?? task.preferredAgent) ? 'current' : undefined,
-              onSelect: () => act({ kind: 'switch', id: task.id, agent: a }),
-            }))}
-          />
-          <CardButton
-            icon={Terminal}
-            label="Take over"
-            title="Stop the agent and open a real terminal in this task's folder"
-            onClick={() => act({ kind: 'takeover', id: task.id })}
-          />
-          <CardButton
-            icon={Check}
-            label="Done"
-            title="You did this yourself: mark it done"
-            onClick={() => act({ kind: 'done', id: task.id })}
-          />
+          {task.status !== 'done' && (
+            <Menu
+              compact
+              label="Switch agent"
+              title="Give this task to another agent"
+              items={AGENTS.map((a) => ({
+                label: AGENT_META[a].label,
+                hint: a === (task.assignedAgent ?? task.preferredAgent) ? 'current' : undefined,
+                onSelect: () => act({ kind: 'switch', id: task.id, agent: a }),
+              }))}
+            />
+          )}
+          {task.status !== 'done' && (
+            <CardButton
+              icon={Terminal}
+              label="Take over"
+              title="Stop the agent and open a real terminal in this task's folder"
+              onClick={() => act({ kind: 'takeover', id: task.id })}
+            />
+          )}
+          {task.status !== 'done' && (
+            <CardButton
+              icon={Check}
+              label="Done"
+              title="You did this yourself: mark it done"
+              onClick={() => act({ kind: 'done', id: task.id })}
+            />
+          )}
+          {!working && (
+            <CardButton
+              icon={task.archived ? ArchiveRestore : Archive}
+              label={task.archived ? 'Restore' : 'Archive'}
+              title={
+                task.archived
+                  ? 'Restore this task to the active board'
+                  : 'Archive this task. Its sessions and lessons stay in graph memory.'
+              }
+              onClick={() => act({ kind: task.archived ? 'restore' : 'archive', id: task.id })}
+            />
+          )}
         </div>
       )}
     </div>

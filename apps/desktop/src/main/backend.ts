@@ -517,6 +517,12 @@ async function buildLive(
     async removeTask(taskId) {
       await need().controller.removeTask(taskId);
     },
+    async archiveTask(taskId, archived) {
+      return need().controller.archiveTask(taskId, archived);
+    },
+    async clearFinishedTasks() {
+      return need().controller.clearFinishedTasks();
+    },
     async getTaskDiff(taskId) {
       return (await need().controller.diff(taskId)).diff;
     },

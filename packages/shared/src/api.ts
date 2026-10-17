@@ -83,6 +83,10 @@ export interface PuffApi {
   editTask(taskId: string, edit: TaskEditInput): Promise<Task>;
   /** Delete a task that never ran; a task with history, or that others wait for, stays */
   removeTask(taskId: string): Promise<void>;
+  /** Archive or restore a task: hides it from the board while keeping its sessions and lessons in memory */
+  archiveTask(taskId: string, archived?: boolean): Promise<Task>;
+  /** Archive every finished, failed or stopped task that is not currently running */
+  clearFinishedTasks(projectId?: string): Promise<Task[]>;
   /** What a task changed: the commit that merged it, or its newest kept attempt. Undefined if it changed nothing yet. */
   getTaskDiff(taskId: string): Promise<TaskDiffInfo | undefined>;
   getContextPack(sessionId: string): Promise<ContextPack | undefined>;
@@ -180,6 +184,8 @@ export const PUFF_INVOKE_METHODS = [
   'retryTask',
   'editTask',
   'removeTask',
+  'archiveTask',
+  'clearFinishedTasks',
   'getTaskDiff',
   'getContextPack',
   'getWhy',

@@ -139,9 +139,10 @@ export function App() {
   }, [loadGraph]);
 
   const mascot: MascotState = useMemo(() => {
-    if (tasks.some((t) => t.status === 'failed')) return 'worried';
-    if (running || tasks.some((t) => t.status === 'running')) return 'working';
-    if (tasks.length > 0 && tasks.every((t) => t.status === 'done')) return 'happy';
+    const active = tasks.filter((t) => !t.archived);
+    if (active.some((t) => t.status === 'failed')) return 'worried';
+    if (running || active.some((t) => t.status === 'running')) return 'working';
+    if (active.length > 0 && active.every((t) => t.status === 'done')) return 'happy';
     return 'idle';
   }, [tasks, running]);
 
@@ -216,6 +217,19 @@ export function App() {
               ? `Moved to ${a.agent}; it starts now.`
               : `Moved to ${a.agent}. Press Run team to start it.`,
           );
+        case 'archive':
+          await puff.archiveTask(a.id, true);
+          return say('good', 'Archived. Kept in graph memory.');
+        case 'restore':
+          await puff.archiveTask(a.id, false);
+          return say('good', 'Restored to the active board.');
+        case 'clearFinished': {
+          const cleared = await puff.clearFinishedTasks(projectId);
+          return say(
+            'good',
+            `Archived ${cleared.length} finished task${cleared.length === 1 ? '' : 's'}. Kept in graph memory.`,
+          );
+        }
       }
     } catch (err) {
       say('bad', (err as Error).message);
@@ -290,7 +304,7 @@ export function App() {
           onSwitchProject={switchProject}
           onAddProject={() => setImportOpen(true)}
           onProjectSettings={setSettingsFor}
-          counts={{ board: tasks.filter((t) => t.status !== 'done').length }}
+          counts={{ board: tasks.filter((t) => !t.archived && t.status !== 'done').length }}
         />
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <TopBar

@@ -526,6 +526,36 @@ export function createMockApi(opts: MockApiOptions = {}): PuffApi {
       tasks.splice(i, 1);
       emit({ type: 'task:removed', taskId });
     },
+    async archiveTask(taskId, archived = true) {
+      const t = tasks.find((x) => x.id === taskId);
+      if (!t) throw new Error(`Unknown task ${taskId}`);
+      if (archived && ['running', 'verifying'].includes(t.status)) {
+        throw new Error('Only a task that is not running can be archived.');
+      }
+      t.archived = archived ? true : undefined;
+      t.updatedAt = Date.now();
+      emit({ type: 'task:update', task: clone(t) });
+      return clone(t);
+    },
+    async clearFinishedTasks() {
+      const clearable = tasks.filter(
+        (t) =>
+          !t.archived &&
+          !['running', 'verifying'].includes(t.status) &&
+          (t.status === 'done' ||
+            t.status === 'failed' ||
+            t.status === 'escalated' ||
+            (t.trail ?? []).some((e) => e.outcome === 'stopped')),
+      );
+      const updated: Task[] = [];
+      for (const t of clearable) {
+        t.archived = true;
+        t.updatedAt = Date.now();
+        emit({ type: 'task:update', task: clone(t) });
+        updated.push(clone(t));
+      }
+      return updated;
+    },
     async getTaskDiff(taskId) {
       const t = tasks.find((x) => x.id === taskId);
       if (!t || ['planned', 'ready'].includes(t.status)) return undefined;

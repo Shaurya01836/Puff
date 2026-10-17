@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  Archive,
+  ArchiveRestore,
   ArrowRight,
   Check,
   FileCode2,
@@ -130,6 +132,7 @@ export function TaskPanel({
   const stepCount = activity.reduce((n, g) => n + g.steps.length, 0);
   const canEdit = status === 'planned' || status === 'ready' || status === 'failed';
   const canRemove = (status === 'planned' || status === 'ready') && detail?.sessions.length === 0;
+  const canArchive = detail !== undefined && !working;
   const mine = Boolean(detail?.task.worktree?.endsWith('-manual'));
   const isPlan = detail?.task.type === 'plan';
   // The agent this task is using: the one that ran it last, else the one it was given to
@@ -180,7 +183,16 @@ export function TaskPanel({
       <header className="border-b border-line px-6 pt-5">
         <div className="mb-1.5 flex items-center gap-2">
           <span className="font-mono text-[11px] text-ink-3">{taskId}</span>
-          {detail && <StatusPill status={detail.task.status} byYou={mine} />}
+          {detail && (
+            <div className="flex items-center gap-1.5">
+              <StatusPill status={detail.task.status} byYou={mine} />
+              {detail.task.archived && (
+                <span className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[10px] text-ink-3">
+                  archived
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <h2 className="font-display text-lg leading-snug font-semibold">
           {detail?.task.title ?? 'Loading…'}
@@ -203,7 +215,7 @@ export function TaskPanel({
           </div>
         )}
 
-        {detail && status !== 'done' && (
+        {detail && (
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {working && (
               <ActionButton
@@ -224,24 +236,28 @@ export function TaskPanel({
             {canEdit && (
               <ActionButton icon={Pencil} label="Edit" onClick={() => setEditing(true)} />
             )}
-            <Menu
-              label="Switch agent"
-              title="Give this task to another agent (it is stopped first if it is running)"
-              items={AGENTS.map((a) => ({
-                label: AGENT_META[a].label,
-                hint:
-                  a === (detail.task.assignedAgent ?? detail.task.preferredAgent)
-                    ? 'current'
-                    : undefined,
-                onSelect: () => void act(() => puff.reassignTask(taskId, a)),
-              }))}
-            />
-            <ActionButton
-              icon={Terminal}
-              label={`Open in ${AGENT_META[agentNow].label}`}
-              title={`Stop the agent here and continue in ${AGENT_META[agentNow].label}'s own terminal, in this task's folder, starting from its last attempt`}
-              onClick={() => void openCli(agentNow, true)}
-            />
+            {status !== 'done' && (
+              <Menu
+                label="Switch agent"
+                title="Give this task to another agent (it is stopped first if it is running)"
+                items={AGENTS.map((a) => ({
+                  label: AGENT_META[a].label,
+                  hint:
+                    a === (detail.task.assignedAgent ?? detail.task.preferredAgent)
+                      ? 'current'
+                      : undefined,
+                  onSelect: () => void act(() => puff.reassignTask(taskId, a)),
+                }))}
+              />
+            )}
+            {status !== 'done' && (
+              <ActionButton
+                icon={Terminal}
+                label={`Open in ${AGENT_META[agentNow].label}`}
+                title={`Stop the agent here and continue in ${AGENT_META[agentNow].label}'s own terminal, in this task's folder, starting from its last attempt`}
+                onClick={() => void openCli(agentNow, true)}
+              />
+            )}
             <ActionButton
               icon={StickyNote}
               label={detail.task.note ? 'Edit note' : 'Add note'}
@@ -251,17 +267,36 @@ export function TaskPanel({
                 setNoting((n) => !n);
               }}
             />
-            <ActionButton
-              icon={Check}
-              label="Mark done"
-              title="You finished it yourself"
-              onClick={() => {
-                if (
-                  window.confirm('Mark this task as done? Use this when you finished it yourself.')
-                )
-                  void act(() => puff.markTaskDone(taskId));
-              }}
-            />
+            {status !== 'done' && (
+              <ActionButton
+                icon={Check}
+                label="Mark done"
+                title="You finished it yourself"
+                onClick={() => {
+                  if (
+                    window.confirm('Mark this task as done? Use this when you finished it yourself.')
+                  )
+                    void act(() => puff.markTaskDone(taskId));
+                }}
+              />
+            )}
+            {canArchive && (
+              <ActionButton
+                icon={detail.task.archived ? ArchiveRestore : Archive}
+                label={detail.task.archived ? 'Restore' : 'Archive'}
+                title={
+                  detail.task.archived
+                    ? 'Restore this task to the active board'
+                    : 'Archive this task. Its sessions and lessons stay in graph memory.'
+                }
+                onClick={() =>
+                  void act(
+                    () => puff.archiveTask(taskId, !detail.task.archived),
+                    !detail.task.archived,
+                  )
+                }
+              />
+            )}
             {canRemove && (
               <ActionButton
                 icon={Trash2}
