@@ -31,7 +31,9 @@ Run a newer installer. If Puff is already installed, Setup says so (which versio
 - **Setup screen.** If the database is not reachable, Puff says so and shows what it found: whether Docker is installed and running, and which agent CLIs are on your PATH. **Start the database** runs FalkorDB in a Docker container named `puff-falkordb` (the first time downloads the image, a few minutes). If port 6379 is taken, Puff picks the next free port and remembers it in `~/.puff/.env`. Nothing is started until you press the button.
 - **Agent tools.** The setup and welcome screens list each agent CLI with whether it is installed and signed in (asked of the CLI itself: `claude auth status`, `codex login status`). Next to a Claude Code or Codex that is not signed in there is a **Sign in** button: it starts the CLI's own sign-in, which opens your browser on the provider's page. If the page shows a one-time code, paste it into the box under the button. Puff never sees your password or token. OpenCode's sign-in asks which provider you use, so do that in a terminal (`opencode auth login`).
 - **Welcome screen.** Press **Add a project…** and choose a folder. Puff checks it first (git, TypeScript or JavaScript files, a test command), tells you what will work, and indexes it.
-- **Ask Puff** (Ctrl+K) talks to the project; **Run team** starts the agents.
+- **Tasks** shows what each agent is doing: pick a task for its live steps, the graph's reason for its agent, and **Open in Codex** (or Claude Code, or OpenCode: the agent the task uses) to continue in that agent's own terminal. **Memory** lists what the team has learned. **Ask Puff** (Ctrl+K) talks to the project; **Run team** starts the agents.
+- **A project whose check already fails** still runs: Puff notes the failures that were there and a task passes if it adds no new one. Landing your own work uses the same rule.
+- **First run of 0.1.6 downloads a 30 MB language model** (once, in the background, to `~/.puff/models`) so similar failures are found by meaning. Without it Puff falls back to word matching; `PUFF_EMBED=off` turns it off.
 
 ## Where things are kept
 
@@ -47,7 +49,7 @@ Uninstalling removes the app. It leaves `~/.puff` and the database volume alone,
 
 ## Build the installer yourself
 
-Releases are built by GitHub Actions: pushing a tag such as `v0.1.5` runs `.github/workflows/release.yml`, which builds the installer on a Windows machine and attaches `Puff-Setup.exe` to the release. To build it on your own computer:
+Releases are built by GitHub Actions: pushing a tag such as `v0.1.6` runs `.github/workflows/release.yml`, which builds the installer on a Windows machine and attaches `Puff-Setup.exe` to the release. To build it on your own computer:
 
 ```bash
 npm install

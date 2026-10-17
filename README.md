@@ -93,6 +93,13 @@ What this does and does not show:
 3. **Have at least one agent CLI installed:** Claude Code, Codex or OpenCode. The same screen lists which are installed and signed in, and has a **Sign in** button for Claude Code and Codex. One is enough: Ask Puff, the chat that plans and runs the team, works with whichever you have (pick it in the panel header).
 4. **Press Add a project…**, choose a git repository (TypeScript or JavaScript), give the team a goal, and press **Run team**.
 
+**What is new in 0.1.6**
+
+- **Tasks** is a live view: pick a task and see the agent's steps as they happen, the graph's reason for its agent and its wait, and **Open in Codex** (or Claude Code, or OpenCode, whichever the task uses) to continue in that agent's own terminal.
+- **Memory** lists every lesson Puff has learned with its state (current, possibly outdated, replaced, reverted) and how far it is trusted.
+- **More from the graph:** plan lanes (`algo.WCC`), waiting reasons by call path (`algo.SPpaths`), and a vector index so a task finds lessons that mean the same without sharing a word (a 30 MB model downloads once).
+- **Fixes found on real projects:** a project whose check already fails no longer fails every task, landing your own work after a failed try works, and the type-check command works under Windows PowerShell.
+
 Already installed? Run the new installer: it updates in place and keeps your projects and memory. Details, where files are kept, and building the installer yourself are in [docs/INSTALL.md](docs/INSTALL.md). macOS and Linux: run from source ([Quick start](#quick-start)).
 
 

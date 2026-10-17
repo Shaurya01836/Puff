@@ -52,7 +52,7 @@ export function DownloadSection() {
               className="inline-flex w-full items-center justify-center gap-2.5 whitespace-nowrap border border-slate-700 bg-slate-900 px-6 py-3.5 font-mono text-xs text-slate-100 transition-[transform,background-color,border-color] duration-150 ease-out hover:bg-slate-800 active:scale-[0.97] sm:w-auto"
             >
               <Terminal className="h-4 w-4 text-slate-400" />
-              {copiedCmd ? "Command Copied!" : "npm run puff -- quickstart"}
+              {copiedCmd ? "Command Copied!" : "git clone … && npm install"}
               {copiedCmd ? (
                 <Check className="h-3.5 w-3.5 text-emerald-400" />
               ) : (
@@ -62,7 +62,10 @@ export function DownloadSection() {
           </div>
 
           <p className="mx-auto max-w-xl text-xs leading-relaxed text-slate-500">
-            Windows 10 or 11, 64-bit, about 115 MB. Already installed? Run the new installer and it
+            New in this release: a live Tasks view with the graph&apos;s reason for each task and
+            one-click &ldquo;Open in&rdquo; your agent&apos;s terminal, a Memory screen with every
+            lesson&apos;s trust, and fixes for projects whose checks already fail. Windows 10 or
+            11, 64-bit, about 115 MB. Already installed? Run the new installer and it
             updates in place, keeping your projects and memory. The installer is not code-signed
             yet, so Windows may warn about an unknown publisher: choose{" "}
             <span className="text-slate-300">More info</span>, then{" "}
