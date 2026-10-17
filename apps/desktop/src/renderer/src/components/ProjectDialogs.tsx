@@ -40,7 +40,7 @@ function Dialog({
       <div
         role="dialog"
         aria-label={title}
-        className="flex max-h-full w-full max-w-lg animate-fade-in flex-col rounded-2xl border border-line-strong bg-surface shadow-[0_30px_80px_-20px_rgb(0_0_0/0.9)]"
+        className="flex max-h-full w-full max-w-lg animate-fade-in flex-col rounded-lg border border-line-strong bg-surface shadow-[0_20px_50px_-24px_rgb(0_0_0/0.85)]"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex shrink-0 items-start justify-between border-b border-line px-6 py-4">
@@ -50,7 +50,7 @@ function Dialog({
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-ink-3 hover:bg-surface-3 hover:text-ink"
+            className="rounded-sm p-1.5 text-ink-3 hover:bg-surface-3 hover:text-ink"
             aria-label="Close"
           >
             <X className="size-4" />
@@ -68,7 +68,7 @@ function Dialog({
 function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <div>
-      <div className="mb-1.5 text-[11px] font-semibold tracking-[0.12em] text-ink-3 uppercase">
+      <div className="mb-1.5 text-[11px] font-semibold tracking-wide text-ink-3 uppercase">
         {label}
       </div>
       {children}
@@ -78,11 +78,11 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 }
 
 const INPUT =
-  'w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-sm outline-none placeholder:text-ink-3 focus:border-brand/60';
+  'w-full rounded-md border border-line bg-surface-2 px-3 py-2 text-sm outline-none placeholder:text-ink-3 focus:border-brand/60';
 
-const GHOST = 'rounded-xl px-4 py-2 text-sm text-ink-2 hover:text-ink';
+const GHOST = 'rounded-md px-4 py-2 text-sm text-ink-2 hover:text-ink';
 const PRIMARY =
-  'rounded-xl bg-gradient-to-br from-brand to-brand-deep px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_20px_-6px_rgb(139_124_246/0.7)] hover:brightness-110 disabled:opacity-50';
+  'rounded-md bg-brand px-4 py-2 text-sm font-semibold text-abyss hover:bg-brand-soft disabled:opacity-50';
 
 type Tone = 'good' | 'warn' | 'bad';
 
@@ -222,7 +222,7 @@ export function ImportProjectDialog({
           />
           <button
             onClick={() => void browse()}
-            className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-line-strong bg-surface-2 px-3 text-sm font-medium hover:bg-surface-3"
+            className="inline-flex shrink-0 items-center gap-2 rounded-md border border-line-strong bg-surface-2 px-3 text-sm font-medium hover:bg-surface-3"
           >
             <FolderOpen className="size-4" />
             Browse
@@ -239,7 +239,7 @@ export function ImportProjectDialog({
 
       {info && !checking && (
         <>
-          <ul className="flex flex-col gap-3 rounded-xl border border-line bg-surface-2/60 p-4">
+          <ul className="flex flex-col gap-3 rounded-md border border-line bg-surface-2/60 p-4">
             {info.problems.map((p) => (
               <Row key={p} tone="bad" label="Can't add this folder">
                 {p}
@@ -266,7 +266,7 @@ export function ImportProjectDialog({
           </ul>
 
           {info.problems.length === 0 && info.runBlockers.length > 0 && (
-            <div className="rounded-xl border border-warn/25 bg-warn/10 p-4 text-[13px] leading-snug text-ink-2">
+            <div className="rounded-md border border-warn/25 bg-warn/10 p-4 text-[13px] leading-snug text-ink-2">
               <div className="mb-1 font-medium text-warn">
                 You can add it and explore it, but agents can't run yet
               </div>
@@ -435,7 +435,7 @@ export function ProjectSettingsDialog({
         />
       </Field>
 
-      <div className="rounded-xl border border-bad/25 bg-bad/5 p-4">
+      <div className="rounded-md border border-bad/25 bg-bad/5 p-4">
         <div className="text-sm font-medium">Remove this project</div>
         <p className="mt-1 text-[13px] leading-snug text-ink-3">
           Puff forgets it. Your folder and files are never touched.
@@ -443,7 +443,7 @@ export function ProjectSettingsDialog({
         {!confirming ? (
           <button
             onClick={() => setConfirming(true)}
-            className="mt-3 inline-flex items-center gap-2 rounded-lg border border-bad/30 px-3 py-1.5 text-sm text-bad hover:bg-bad/10"
+            className="mt-3 inline-flex items-center gap-2 rounded-sm border border-bad/30 px-3 py-1.5 text-sm text-bad hover:bg-bad/10"
           >
             <Trash2 className="size-4" />
             Remove…
@@ -464,7 +464,7 @@ export function ProjectSettingsDialog({
               <button
                 disabled={busy}
                 onClick={() => void run(() => onRemove(deleteMemory))}
-                className="rounded-lg bg-bad px-3 py-1.5 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50"
+                className="rounded-sm bg-bad px-3 py-1.5 text-sm font-semibold text-abyss hover:brightness-110 disabled:opacity-50"
               >
                 {deleteMemory ? 'Remove and delete memory' : 'Remove project'}
               </button>

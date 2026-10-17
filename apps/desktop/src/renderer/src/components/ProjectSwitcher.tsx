@@ -61,27 +61,26 @@ export function ProjectSwitcher({
           className="flex w-full items-start justify-between text-left"
         >
           <div className="min-w-0 flex-1">
-            <span className="block font-mono text-[10px] uppercase tracking-widest text-slate-500">
+            <span className="block font-mono text-[10px] uppercase tracking-wide text-ink-3">
               WORKSPACE
             </span>
-            <span className="mt-0.5 block truncate text-sm font-semibold text-white">
+            <span className="mt-0.5 block truncate text-sm font-semibold text-ink">
               {noProject ? 'No project yet' : (info?.projectName ?? 'puff_demo')}
             </span>
-            <span className="mt-1 flex items-center gap-1.5 font-mono text-[10px] text-slate-400">
-              <span className="size-1.5 animate-pulse-dot rounded-full bg-emerald-400" />
+            <span className="mt-1 block font-mono text-[10px] text-ink-2">
               {live ? 'falkordb · connected' : 'mock data · connected'}
             </span>
           </div>
-          <ChevronsUpDown className="mt-1 size-3.5 shrink-0 text-slate-500" />
+          <ChevronsUpDown className="mt-1 size-3.5 shrink-0 text-ink-3" />
         </button>
 
         {!noProject && live && (
-          <div className="mt-2 flex items-center justify-between border-t border-line/60 pt-1.5 font-mono text-[10px] text-slate-500">
+          <div className="mt-2 flex items-center justify-between border-t border-line/60 pt-1.5 font-mono text-[10px] text-ink-3">
             <span className="truncate">{info?.graphName ?? 'graph: connected'}</span>
             <button
               onClick={reindex}
               disabled={busy}
-              className="rounded p-0.5 text-slate-400 hover:text-white disabled:opacity-50"
+              className="rounded p-0.5 text-ink-2 hover:text-ink disabled:opacity-50"
               title="Re-index the repository"
             >
               <RefreshCw className={cn('size-3', busy && 'animate-spin')} />
@@ -89,16 +88,16 @@ export function ProjectSwitcher({
           </div>
         )}
 
-        {result && <div className="mt-1.5 font-mono text-[10px] text-emerald-400">{result}</div>}
+        {result && <div className="mt-1.5 font-mono text-[10px] text-brand">{result}</div>}
         {!live && info?.error && (
-          <div className="mt-1.5 line-clamp-2 font-mono text-[10px] text-amber-400/80">{info.error}</div>
+          <div className="mt-1.5 line-clamp-2 font-mono text-[10px] text-warn">{info.error}</div>
         )}
       </div>
 
       {open && (
         <div
           role="listbox"
-          className="absolute bottom-full right-0 left-0 z-30 mb-1.5 animate-fade-in overflow-hidden border border-line-strong bg-surface shadow-2xl"
+          className="absolute right-0 bottom-full left-0 z-30 mb-1.5 animate-fade-in overflow-hidden border border-line-strong bg-surface shadow-[0_16px_40px_-16px_rgb(0_0_0/0.8)]"
         >
           <ul className="max-h-64 overflow-y-auto p-1.5">
             {projects?.map((p) => (
@@ -110,7 +109,7 @@ export function ProjectSwitcher({
                     setOpen(false);
                     if (!p.active) onSwitch(p.id);
                   }}
-                  className="flex min-w-0 flex-1 items-start gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-surface-2"
+                  className="flex min-w-0 flex-1 items-start gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-surface-2"
                 >
                   <Check
                     className={cn(
@@ -138,7 +137,7 @@ export function ProjectSwitcher({
                   }}
                   aria-label={`Settings for ${p.name}`}
                   title="Settings"
-                  className="rounded-md p-1.5 text-ink-3 opacity-0 group-hover:opacity-100 hover:bg-surface-3 hover:text-ink focus:opacity-100"
+                  className="rounded-sm p-1.5 text-ink-3 opacity-0 group-hover:opacity-100 hover:bg-surface-3 hover:text-ink focus:opacity-100"
                 >
                   <Settings2 className="size-3.5" />
                 </button>

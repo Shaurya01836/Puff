@@ -1,13 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  Check,
-  CircleAlert,
-  Database,
-  LoaderCircle,
-  LogIn,
-  RefreshCw,
-  TerminalSquare,
-} from 'lucide-react';
+import { Check, CircleAlert, Database, LoaderCircle, LogIn, RefreshCw } from 'lucide-react';
 import type { AgentCliStatus, AgentName, SetupStatus } from '@puff/shared';
 import { Mascot } from '@/components/Mascot';
 import { puff } from '@/lib/api';
@@ -104,7 +96,7 @@ function SignIn({ agent, onChanged }: { agent: AgentCliStatus; onChanged?: () =>
         <button
           onClick={() => void start()}
           disabled={state === 'opening'}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong bg-surface-2 px-2.5 py-1 text-xs font-medium hover:bg-surface-3 disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 rounded-sm border border-line-strong bg-surface-2 px-2.5 py-1 text-xs font-medium hover:bg-surface-3 disabled:opacity-60"
         >
           {state === 'opening' ? (
             <LoaderCircle className="size-3.5 animate-spin" />
@@ -115,9 +107,9 @@ function SignIn({ agent, onChanged }: { agent: AgentCliStatus; onChanged?: () =>
         </button>
       )}
       {state === 'waiting' && (
-        <div className="flex flex-col gap-2 rounded-xl border border-line bg-surface-2/60 p-3 text-[12px] leading-snug text-ink-2">
+        <div className="flex flex-col gap-2 rounded-md border border-line bg-surface-2/60 p-3 text-[12px] leading-snug text-ink-2">
           <p className="flex items-center gap-2">
-            <LoaderCircle className="size-3.5 shrink-0 animate-spin text-info" />
+            <LoaderCircle className="size-3.5 shrink-0 animate-spin text-brand" />
             Your browser opened. Approve the sign-in there.
           </p>
           {url && (
@@ -144,12 +136,12 @@ function SignIn({ agent, onChanged }: { agent: AgentCliStatus; onChanged?: () =>
               spellCheck={false}
               placeholder="Code from the browser"
               aria-label="One-time sign-in code"
-              className="min-w-0 flex-1 rounded-lg border border-line bg-abyss px-2.5 py-1 font-mono text-xs outline-none focus:border-brand/60"
+              className="min-w-0 flex-1 rounded-sm border border-line bg-abyss px-2.5 py-1 font-mono text-xs outline-none focus:border-brand/60"
             />
             <button
               type="submit"
               disabled={!code.trim()}
-              className="rounded-lg bg-brand px-3 py-1 text-xs font-semibold text-white disabled:opacity-40"
+              className="rounded-sm bg-brand px-3 py-1 text-xs font-semibold text-abyss disabled:opacity-40"
             >
               Send
             </button>
@@ -203,7 +195,7 @@ export function Setup({
           database that runs on your computer. It is not running yet.
         </p>
 
-        <div className="mt-6 w-full rounded-2xl border border-line bg-surface p-5 text-left">
+        <div className="mt-6 w-full rounded-lg border border-line bg-surface p-5 text-left">
           <div className="flex items-center gap-2.5 text-sm font-medium">
             <Database className="size-4 text-brand-soft" />
             Database
@@ -249,7 +241,7 @@ export function Setup({
                 onClick={run('start', onStart)}
                 disabled={!!working}
                 className={cn(
-                  'inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-brand to-brand-deep px-4 py-2 text-sm font-semibold text-white hover:brightness-110',
+                  'inline-flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-abyss hover:bg-brand-soft',
                   'disabled:cursor-wait disabled:opacity-60',
                 )}
               >
@@ -264,7 +256,7 @@ export function Setup({
             <button
               onClick={run('retry', onRetry)}
               disabled={!!working}
-              className="inline-flex items-center gap-2 rounded-xl border border-line-strong bg-surface-2 px-4 py-2 text-sm font-medium hover:bg-surface-3 disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-md border border-line-strong bg-surface-2 px-4 py-2 text-sm font-medium hover:bg-surface-3 disabled:opacity-60"
             >
               {working === 'retry' ? (
                 <LoaderCircle className="size-4 animate-spin" />
@@ -282,11 +274,8 @@ export function Setup({
         </div>
 
         {status && (
-          <div className="mt-4 w-full rounded-2xl border border-line bg-surface p-5">
-            <div className="mb-3 flex items-center gap-2.5 text-sm font-medium">
-              <TerminalSquare className="size-4 text-brand-soft" />
-              Agent tools
-            </div>
+          <div className="mt-4 w-full rounded-lg border border-line bg-surface p-5">
+            <div className="mb-3 text-sm font-medium">Agent tools</div>
             <AgentChecklist agents={status.agents} onChanged={onRefresh} />
             <p className="mt-3 text-left text-[12px] leading-snug text-ink-3">
               Puff drives these command-line agents. You need at least one, signed in. You can

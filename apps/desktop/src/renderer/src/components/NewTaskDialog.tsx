@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Cpu, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import type { AgentName, Complexity, Task, TaskEditInput, TaskType } from '@puff/shared';
 import { cn } from '@/lib/cn';
 import { AGENT_META } from '@/lib/theme';
+import { PuffMark } from './landing/puff-logo';
 import { AgentAvatar } from './ui';
 
 export interface SymbolOption {
@@ -117,7 +118,7 @@ export function NewTaskDialog({
       <div
         role="dialog"
         aria-label="New task"
-        className="w-full max-w-lg animate-fade-in rounded-2xl border border-line-strong bg-surface shadow-[0_30px_80px_-20px_rgb(0_0_0/0.9)]"
+        className="w-full max-w-lg animate-fade-in rounded-lg border border-line-strong bg-surface shadow-[0_20px_50px_-24px_rgb(0_0_0/0.85)]"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex items-start justify-between border-b border-line px-6 py-4">
@@ -133,7 +134,7 @@ export function NewTaskDialog({
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-ink-3 hover:bg-surface-3 hover:text-ink"
+            className="rounded-sm p-1.5 text-ink-3 hover:bg-surface-3 hover:text-ink"
             aria-label="Close"
           >
             <X className="size-4" />
@@ -148,14 +149,14 @@ export function NewTaskDialog({
               onChange={(e) => setTitle(e.target.value)}
               rows={3}
               placeholder="Add edge-case coverage for the login lockout and make sure the tests pass"
-              className="w-full resize-none rounded-xl border border-line bg-surface-2 px-3 py-2 text-sm outline-none placeholder:text-ink-3 focus:border-brand/60"
+              className="w-full resize-none rounded-md border border-line bg-surface-2 px-3 py-2 text-sm outline-none placeholder:text-ink-3 focus:border-brand/60"
             />
           </Field>
 
           <div className="grid grid-cols-2 gap-5">
             <Field label="Type">
               {edit ? (
-                <div className="rounded-xl border border-line bg-surface-2 px-3 py-2 text-sm text-ink-2 capitalize">
+                <div className="rounded-md border border-line bg-surface-2 px-3 py-2 text-sm text-ink-2 capitalize">
                   {type}
                 </div>
               ) : (
@@ -179,12 +180,12 @@ export function NewTaskDialog({
             label="Code it touches"
             hint="Tasks that touch the same functions never run at the same time."
           >
-            <div className="rounded-xl border border-line bg-surface-2 p-2">
+            <div className="rounded-md border border-line bg-surface-2 p-2">
               <div className="flex flex-wrap gap-1.5">
                 {targets.map((t) => (
                   <span
                     key={t.id}
-                    className="inline-flex items-center gap-1 rounded-md bg-brand/15 px-2 py-0.5 font-mono text-[11px] text-brand-soft"
+                    className="inline-flex items-center gap-1 rounded-sm bg-brand/15 px-2 py-0.5 font-mono text-[11px] text-brand-soft"
                     title={t.id}
                   >
                     {t.name}
@@ -219,7 +220,7 @@ export function NewTaskDialog({
                           setTargets((x) => [...x, s]);
                           setQuery('');
                         }}
-                        className="flex w-full items-baseline gap-2 rounded-md px-2 py-1 text-left text-sm hover:bg-surface-3"
+                        className="flex w-full items-baseline gap-2 rounded-sm px-2 py-1 text-left text-sm hover:bg-surface-3"
                       >
                         <span className="font-mono text-xs">{s.name}</span>
                         <span className="truncate font-mono text-[11px] text-ink-3">{s.file}</span>
@@ -240,9 +241,7 @@ export function NewTaskDialog({
                   label="Auto"
                   title="Puff picks from declared strengths and past results"
                 >
-                  <span className="grid size-6 place-items-center rounded-md bg-surface-3 text-ink-2">
-                    <Cpu className="size-3.5" />
-                  </span>
+                  <PuffMark className="size-6" />
                 </AgentButton>
                 {AGENTS.map((a) => (
                   <AgentButton
@@ -261,7 +260,7 @@ export function NewTaskDialog({
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
                 placeholder="CLI default"
-                className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-sm outline-none placeholder:text-ink-3 focus:border-brand/60"
+                className="w-full rounded-md border border-line bg-surface-2 px-3 py-2 text-sm outline-none placeholder:text-ink-3 focus:border-brand/60"
               />
             </Field>
           </div>
@@ -270,17 +269,14 @@ export function NewTaskDialog({
         </div>
 
         <footer className="flex items-center justify-end gap-2 border-t border-line px-6 py-4">
-          <button
-            onClick={onClose}
-            className="rounded px-4 py-2 text-sm text-slate-400 hover:text-white"
-          >
+          <button onClick={onClose} className="rounded px-4 py-2 text-sm text-ink-2 hover:text-ink">
             Cancel
           </button>
           {edit ? (
             <button
               disabled={busy}
               onClick={() => void submit(false)}
-              className="rounded bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
+              className="rounded bg-brand px-4 py-2 text-sm font-semibold text-abyss hover:bg-brand-soft disabled:opacity-50"
             >
               Save changes
             </button>
@@ -289,14 +285,14 @@ export function NewTaskDialog({
               <button
                 disabled={busy}
                 onClick={() => void submit(false)}
-                className="rounded border border-line bg-surface-2 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-surface-3 hover:text-white disabled:opacity-50"
+                className="rounded border border-line bg-surface-2 px-4 py-2 text-sm font-medium text-ink hover:bg-surface-3 hover:text-ink disabled:opacity-50"
               >
                 Add to board
               </button>
               <button
                 disabled={busy}
                 onClick={() => void submit(true)}
-                className="rounded bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
+                className="rounded bg-brand px-4 py-2 text-sm font-semibold text-abyss hover:bg-brand-soft disabled:opacity-50"
               >
                 Add and run
               </button>
@@ -319,7 +315,7 @@ function Field({
 }) {
   return (
     <div>
-      <div className="mb-1.5 text-[11px] font-semibold tracking-[0.12em] text-ink-3 uppercase">
+      <div className="mb-1.5 text-[11px] font-semibold tracking-wide text-ink-3 uppercase">
         {label}
       </div>
       {children}
@@ -338,7 +334,7 @@ function Segmented<T extends string>({
   options: { id: T; label: string; title?: string }[];
 }) {
   return (
-    <div className="flex rounded-xl border border-line bg-surface-2 p-0.5">
+    <div className="flex rounded-md border border-line bg-surface-2 p-0.5">
       {options.map((o) => (
         <button
           key={o.id}
@@ -376,16 +372,11 @@ function AgentButton({
       aria-label={label}
       aria-pressed={active}
       className={cn(
-        'relative grid size-11 place-items-center rounded-xl border transition-colors',
+        'relative grid size-11 place-items-center rounded-md border transition-colors',
         active ? 'border-brand bg-brand/10' : 'border-line bg-surface-2 hover:border-line-strong',
       )}
     >
       {children}
-      {active && (
-        <span className="absolute -top-1 -right-1 grid size-4 place-items-center rounded-full bg-brand text-white">
-          <Check className="size-2.5" />
-        </span>
-      )}
     </button>
   );
 }

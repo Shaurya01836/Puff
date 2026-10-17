@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ForceGraph2D, { type ForceGraphMethods, type NodeObject } from 'react-force-graph-2d';
 import { Crosshair, Maximize2, X } from 'lucide-react';
 import type { AgentName, GraphData, GraphEdge, GraphNode } from '@puff/shared';
-import { EventIcon, Panel, SectionTitle } from '@/components/ui';
+import { Panel, SectionTitle } from '@/components/ui';
 import { puff } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useMemoryFeed } from '@/lib/hooks';
@@ -12,9 +12,9 @@ type Group = 'code' | 'work' | 'memory';
 type GNode = NodeObject<GraphNode>;
 
 const GROUPS: { id: Group; label: string; color: string }[] = [
-  { id: 'code', label: 'Code', color: '#8b7cf6' },
-  { id: 'work', label: 'Work', color: '#e7ecf6' },
-  { id: 'memory', label: 'Memory', color: '#2dd4e0' },
+  { id: 'code', label: 'Code', color: '#8a8a96' },
+  { id: 'work', label: 'Work', color: '#e6e6ea' },
+  { id: 'memory', label: 'Memory', color: '#34d399' },
 ];
 
 const MEMORY_LINKS = new Set([
@@ -58,7 +58,7 @@ function nodeColor(n: GraphNode): string {
     const agent = n.id.replace('agent:', '') as AgentName;
     return AGENT_META[agent]?.color ?? NODE_COLORS.Agent!;
   }
-  return NODE_COLORS[n.kind] ?? '#6b7894';
+  return NODE_COLORS[n.kind] ?? '#77777f';
 }
 
 function useSize<T extends HTMLElement>() {
@@ -196,7 +196,7 @@ export function MemoryGraph({
 
       if (memoryState === 'outdated') {
         // dashed amber ring: the code this memory is about has changed since
-        ctx.strokeStyle = '#f5b83d';
+        ctx.strokeStyle = '#d29922';
         ctx.lineWidth = 1.2 / scale;
         ctx.setLineDash([2 / scale, 2 / scale]);
         ctx.beginPath();
@@ -206,7 +206,7 @@ export function MemoryGraph({
       }
 
       if (node.id === selected?.id || node.highlight) {
-        ctx.strokeStyle = '#e7ecf6';
+        ctx.strokeStyle = '#a4a4ad';
         ctx.lineWidth = 1.5 / scale;
         ctx.beginPath();
         ctx.arc(x, y, r + 3, 0, 2 * Math.PI);
@@ -224,7 +224,7 @@ export function MemoryGraph({
         ctx.font = `500 ${size}px 'Inter Variable', sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
-        ctx.fillStyle = group === 'memory' ? color : '#a9b4cc';
+        ctx.fillStyle = group === 'memory' ? color : '#a4a4ad';
         const label = node.label.length > 28 ? `${node.label.slice(0, 27)}…` : node.label;
         ctx.fillText(label, x, y + r + 2);
       }
@@ -241,7 +241,7 @@ export function MemoryGraph({
 
   return (
     <div className="grid h-full grid-cols-[minmax(0,1fr)_340px] gap-4 p-4">
-      <div className="sea relative min-h-0 overflow-hidden rounded-[14px] border border-line">
+      <div className="canvas relative min-h-0 overflow-hidden rounded-md border border-line">
         <div ref={ref} className="absolute inset-0">
           {size.width > 0 && (
             <ForceGraph2D<GraphNode, GraphEdge>
@@ -261,10 +261,10 @@ export function MemoryGraph({
               }}
               linkColor={(l) => {
                 const lit = !active || idOf(l.source) === active || idOf(l.target) === active;
-                if (!lit) return 'rgba(107,120,148,0.05)';
-                if (MEMORY_LINKS.has(l.type)) return 'rgba(45,212,224,0.5)';
-                if (l.type === 'CALLS') return 'rgba(139,124,246,0.4)';
-                return 'rgba(107,120,148,0.22)';
+                if (!lit) return 'rgba(112,112,122,0.05)';
+                if (MEMORY_LINKS.has(l.type)) return 'rgba(52,211,153,0.45)';
+                if (l.type === 'CALLS') return 'rgba(138,138,150,0.35)';
+                return 'rgba(112,112,122,0.22)';
               }}
               linkWidth={(l) => (MEMORY_LINKS.has(l.type) ? 1.4 : 0.8)}
               linkDirectionalArrowLength={(l) => (l.type === 'CALLS' ? 3 : 0)}
@@ -272,7 +272,7 @@ export function MemoryGraph({
               linkDirectionalParticles={(l) => (MEMORY_LINKS.has(l.type) ? 2 : 0)}
               linkDirectionalParticleWidth={2}
               linkDirectionalParticleSpeed={0.005}
-              linkDirectionalParticleColor={() => '#2dd4e0'}
+              linkDirectionalParticleColor={() => '#34d399'}
               onNodeHover={(n) => setHover(n ? n.id : undefined)}
               onNodeClick={(n) => setSelected(n)}
               onBackgroundClick={() => setSelected(undefined)}
@@ -296,10 +296,12 @@ export function MemoryGraph({
               key={s.label}
               className="border border-line bg-surface/90 px-3.5 py-2 backdrop-blur"
             >
-              <div className="font-display text-lg font-bold leading-none tabular-nums text-white">
+              <div className="font-display text-lg font-bold leading-none tabular-nums text-ink">
                 {s.value}
               </div>
-              <div className="mt-1 font-mono text-[10px] tracking-widest text-slate-500 uppercase">{s.label}</div>
+              <div className="mt-1 font-mono text-[10px] tracking-wide text-ink-3 uppercase">
+                {s.label}
+              </div>
             </div>
           ))}
         </div>
@@ -313,7 +315,7 @@ export function MemoryGraph({
               aria-pressed={groups[g.id]}
               className={cn(
                 'inline-flex items-center gap-1.5 px-2.5 py-1 font-mono text-xs transition-colors',
-                groups[g.id] ? 'bg-surface-3 text-white font-medium' : 'text-slate-400 hover:text-slate-200',
+                groups[g.id] ? 'bg-surface-3 text-ink font-medium' : 'text-ink-2 hover:text-ink',
               )}
             >
               <span
@@ -324,12 +326,12 @@ export function MemoryGraph({
                 }}
               />
               {g.label}
-              <span className="text-slate-400 tabular-nums">{groupCounts[g.id]}</span>
+              <span className="text-ink-2 tabular-nums">{groupCounts[g.id]}</span>
             </button>
           ))}
           <button
             onClick={() => fit(400)}
-            className="ml-1 p-1.5 text-slate-400 hover:bg-surface-3 hover:text-white"
+            className="ml-1 p-1.5 text-ink-2 hover:bg-surface-3 hover:text-ink"
             title="Fit to view"
           >
             <Maximize2 className="size-3.5" />
@@ -337,12 +339,12 @@ export function MemoryGraph({
         </div>
 
         {focus && (
-          <div className="absolute top-20 left-4 inline-flex items-center gap-2 border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 font-mono text-xs text-emerald-400 backdrop-blur">
+          <div className="absolute top-20 left-4 inline-flex items-center gap-2 border border-brand/25 bg-brand/10 px-3 py-1.5 font-mono text-xs text-brand backdrop-blur">
             <Crosshair className="size-3.5" />
-            Neighbourhood of <b className="font-semibold text-white">{focus.label}</b>
+            Neighbourhood of <b className="font-semibold text-ink">{focus.label}</b>
             <button
               onClick={() => setFocus(undefined)}
-              className="ml-1 text-slate-400 hover:text-white"
+              className="ml-1 text-ink-2 hover:text-ink"
               title="Show all"
             >
               <X className="size-3.5" />
@@ -353,28 +355,27 @@ export function MemoryGraph({
         {/* bottom-left: legend */}
         <div className="pointer-events-none absolute bottom-4 left-4 flex max-w-[60%] flex-wrap gap-x-3.5 gap-y-1.5 border border-line bg-surface/90 px-3 py-2 backdrop-blur">
           {[
-            'Symbol',
-            'File',
-            'Task',
-            'Session',
-            'Failure',
-            'Solution',
-            'Decision',
-            'Procedure',
-          ].map((k) => (
-            <span key={k} className="inline-flex items-center gap-1.5 font-mono text-[10px] text-slate-400">
+            { k: 'Failure', label: 'Failure' },
+            { k: 'Solution', label: 'Solution' },
+            { k: 'Decision', label: 'Decision' },
+            { k: 'Symbol', label: 'structure (code, tasks, history)' },
+          ].map(({ k, label }) => (
+            <span
+              key={k}
+              className="inline-flex items-center gap-1.5 font-mono text-[10px] text-ink-2"
+            >
               <span
-                className={cn('size-2', k === 'File' ? 'rounded-[1px]' : 'rounded-full')}
+                className={cn('size-2', k === 'Symbol' ? 'rounded-[1px]' : 'rounded-full')}
                 style={{ background: NODE_COLORS[k] }}
               />
-              {k}
+              {label}
             </span>
           ))}
         </div>
 
         {/* bottom-right: inspector */}
         {selected && (
-          <div className="absolute right-4 bottom-4 w-80 animate-fade-in border border-line-strong bg-surface p-4 shadow-2xl backdrop-blur">
+          <div className="absolute right-4 bottom-4 w-80 animate-fade-in border border-line-strong bg-surface p-4 shadow-[0_16px_40px_-16px_rgb(0_0_0/0.8)] backdrop-blur">
             <div className="flex items-center justify-between">
               <span
                 className="px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider"
@@ -385,14 +386,14 @@ export function MemoryGraph({
               >
                 {selected.kind}
               </span>
-              <button onClick={() => setSelected(undefined)} className="text-slate-400 hover:text-white">
+              <button onClick={() => setSelected(undefined)} className="text-ink-2 hover:text-ink">
                 <X className="size-4" />
               </button>
             </div>
-            <div className="mt-2 font-display text-sm font-semibold text-white">{selected.label}</div>
+            <div className="mt-2 font-display text-sm font-semibold text-ink">{selected.label}</div>
             {memoryStateOf(selected) && (
               <div
-                className="mt-1.5 inline-block border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10px] text-amber-400"
+                className="mt-1.5 inline-block border border-warn/25 bg-warn/10 px-1.5 py-0.5 font-mono text-[10px] text-warn"
                 title={
                   memoryStateOf(selected) === 'outdated'
                     ? 'The code this is about changed after it was recorded. It is shown to agents labelled "possibly outdated".'
@@ -402,12 +403,12 @@ export function MemoryGraph({
                 {memoryStateOf(selected) === 'outdated' ? 'possibly outdated' : 'superseded'}
               </div>
             )}
-            <div className="mt-1 font-mono text-[11px] break-all text-sky-400">{selected.id}</div>
-            <div className="mt-3 flex items-center justify-between font-mono text-xs text-slate-400">
+            <div className="mt-1 font-mono text-[11px] break-all text-ink-3">{selected.id}</div>
+            <div className="mt-3 flex items-center justify-between font-mono text-xs text-ink-2">
               <span>{neighbours.get(selected.id)?.size ?? 0} connections</span>
               <button
                 onClick={() => void focusOn(selected)}
-                className="inline-flex items-center gap-1.5 border border-line bg-surface-2 px-2.5 py-1 text-slate-200 hover:bg-surface-3 hover:text-white"
+                className="inline-flex items-center gap-1.5 border border-line bg-surface-2 px-2.5 py-1 text-ink hover:bg-surface-3 hover:text-ink"
               >
                 <Crosshair className="size-3.5" />
                 Focus 2 hops
@@ -421,12 +422,11 @@ export function MemoryGraph({
         <SectionTitle
           right={
             feedIsSample ? (
-              <span className="border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-amber-400">
+              <span className="border border-warn/25 bg-warn/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-warn">
                 sample
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-emerald-400">
-                <span className="size-1.5 animate-pulse-dot rounded-full bg-emerald-400" />
+              <span className="font-mono text-[10px] uppercase tracking-wider text-brand">
                 live
               </span>
             )
@@ -440,15 +440,17 @@ export function MemoryGraph({
               key={e.id}
               className="flex animate-fade-in gap-3 border-b border-line/50 p-2.5 transition-colors hover:bg-surface-2 last:border-b-0"
             >
-              <EventIcon type={e.type} />
               <div className="min-w-0">
                 <div className="flex items-baseline gap-2 font-mono text-[11px]">
-                  <span className="font-semibold" style={{ color: MEMORY_EVENT_META[e.type].color }}>
+                  <span
+                    className="font-semibold"
+                    style={{ color: MEMORY_EVENT_META[e.type].color }}
+                  >
                     {MEMORY_EVENT_META[e.type].label}
                   </span>
-                  <span className="text-slate-500">{timeAgo(e.at)}</span>
+                  <span className="text-ink-3">{timeAgo(e.at)}</span>
                 </div>
-                <div className="mt-0.5 text-xs leading-snug text-slate-300">{e.text}</div>
+                <div className="mt-0.5 text-xs leading-snug text-ink">{e.text}</div>
               </div>
             </li>
           ))}

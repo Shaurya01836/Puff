@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ForceGraph2D, { type ForceGraphMethods, type NodeObject } from 'react-force-graph-2d';
-import { Network, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import type {
   AgentName,
   GraphData,
@@ -35,22 +35,22 @@ const KIND_WORD: Record<LessonKind, string> = {
 const STATE_META: Record<MemoryState, { label: string; tone: string; why: string }> = {
   current: {
     label: 'current',
-    tone: 'text-emerald-300 bg-emerald-500/10',
+    tone: 'text-brand bg-brand/10',
     why: 'Agents are given it.',
   },
   outdated: {
     label: 'possibly outdated',
-    tone: 'text-amber-300 bg-amber-500/10',
+    tone: 'text-warn bg-warn/10',
     why: 'The code it is about changed after it was learned. Agents still see it, marked as possibly outdated.',
   },
   superseded: {
     label: 'replaced',
-    tone: 'text-slate-300 bg-surface-3',
+    tone: 'text-ink bg-surface-3',
     why: 'A newer decision replaced it. It is kept for history and not given to agents.',
   },
   reverted: {
     label: 'reverted',
-    tone: 'text-rose-300 bg-rose-500/10',
+    tone: 'text-bad bg-bad/10',
     why: 'The merge it was learned in was undone. It is never offered to an agent.',
   },
   downgraded: {
@@ -121,7 +121,7 @@ export function Memory({
           aria-pressed={view === id}
           className={cn(
             'rounded px-2.5 py-0.5 text-xs transition-colors',
-            view === id ? 'bg-surface-3 font-medium text-white' : 'text-slate-400 hover:text-white',
+            view === id ? 'bg-surface-3 font-medium text-ink' : 'text-ink-2 hover:text-ink',
           )}
         >
           {label}
@@ -159,39 +159,31 @@ export function Memory({
                 aria-pressed={kind === k.id}
                 className={cn(
                   'inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs transition-colors',
-                  kind === k.id
-                    ? 'bg-surface-3 font-medium text-white'
-                    : 'text-slate-400 hover:text-white',
+                  kind === k.id ? 'bg-surface-3 font-medium text-ink' : 'text-ink-2 hover:text-ink',
                 )}
               >
-                {k.id !== 'all' && (
-                  <span
-                    className="size-1.5 rounded-full"
-                    style={{ background: NODE_COLORS[k.id] }}
-                  />
-                )}
                 {k.label}
-                <span className="tabular-nums text-slate-500">{n}</span>
+                <span className="tabular-nums text-ink-3">{n}</span>
               </button>
             );
           })}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex h-7 items-center gap-1.5 rounded border border-line bg-surface px-2 focus-within:border-emerald-500/60">
-            <Search className="size-3 text-slate-400" />
+          <label className="flex h-7 items-center gap-1.5 rounded border border-line bg-surface px-2 focus-within:border-brand/50">
+            <Search className="size-3 text-ink-2" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Find a lesson or function…"
               aria-label="Find a lesson"
-              className="w-44 bg-transparent text-xs text-slate-200 outline-none placeholder:text-slate-500"
+              className="w-44 bg-transparent text-xs text-ink outline-none placeholder:text-ink-3"
             />
           </label>
           <select
             value={show}
             onChange={(e) => setShow(e.target.value as Show)}
             aria-label="Which lessons"
-            className="h-7 rounded border border-line bg-surface px-2 text-xs text-slate-300 outline-none"
+            className="h-7 rounded border border-line bg-surface px-2 text-xs text-ink outline-none"
           >
             <option value="all">Every state</option>
             <option value="current">Only what agents get as is</option>
@@ -204,8 +196,8 @@ export function Memory({
       {items && items.length === 0 ? (
         <div className="grid flex-1 place-items-center p-10 text-center">
           <div className="max-w-sm">
-            <p className="font-display text-lg font-semibold text-white">Nothing learned yet</p>
-            <p className="mt-2 text-sm leading-relaxed text-slate-400">
+            <p className="font-display text-lg font-semibold text-ink">Nothing learned yet</p>
+            <p className="mt-2 text-sm leading-relaxed text-ink-2">
               When an agent's tests fail, Puff records the failure on the function it happened in,
               and the fix that made them pass. Decisions and procedures agents write show up here
               too.
@@ -224,7 +216,7 @@ export function Memory({
               />
             ))}
             {items && shown.length === 0 && (
-              <li className="py-12 text-center text-xs text-slate-500">No lessons match</li>
+              <li className="py-12 text-center text-xs text-ink-3">No lessons match</li>
             )}
           </ul>
           <div className="min-h-0 min-w-0 overflow-y-auto">
@@ -241,7 +233,7 @@ export function Memory({
                 }}
               />
             ) : (
-              <div className="grid h-full place-items-center text-sm text-slate-500">
+              <div className="grid h-full place-items-center text-sm text-ink-3">
                 {items ? 'Pick a lesson' : 'Loading…'}
               </div>
             )}
@@ -262,7 +254,7 @@ function StateBadge({ state }: { state: MemoryState }) {
 }
 
 function trustTone(trust: number): string {
-  return trust >= 0.7 ? '#4ade80' : trust >= LOW_TRUST ? '#f5b83d' : '#fb923c';
+  return trust >= 0.7 ? '#34d399' : trust >= LOW_TRUST ? '#d29922' : '#f85149';
 }
 
 function LessonRow({
@@ -278,7 +270,7 @@ function LessonRow({
   useEffect(() => {
     if (selected) ref.current?.scrollIntoView({ block: 'nearest' });
   }, [selected]);
-  const color = NODE_COLORS[i.kind] ?? '#6b7894';
+  const color = NODE_COLORS[i.kind] ?? '#77777f';
   return (
     <li ref={ref}>
       <button
@@ -286,9 +278,7 @@ function LessonRow({
         aria-current={selected}
         className={cn(
           'flex w-full flex-col gap-1 border-b border-l-2 border-b-line px-4 py-3 text-left transition-colors',
-          selected
-            ? 'border-l-emerald-400 bg-surface-2'
-            : 'border-l-transparent hover:bg-surface/60',
+          selected ? 'border-l-brand bg-surface-2' : 'border-l-transparent hover:bg-surface/60',
           i.state === 'superseded' && !selected && 'opacity-60',
         )}
       >
@@ -297,19 +287,18 @@ function LessonRow({
             {KIND_WORD[i.kind]}
           </span>
           {i.state !== 'current' && <StateBadge state={i.state} />}
-          <span className="ml-auto text-slate-500">{timeAgo(i.at)}</span>
+          <span className="ml-auto text-ink-3">{timeAgo(i.at)}</span>
         </span>
         <span
           className={cn(
-            'line-clamp-2 text-sm leading-snug text-slate-100',
-            (i.state === 'reverted' || i.state === 'superseded') &&
-              'line-through decoration-slate-500',
+            'line-clamp-2 text-sm leading-snug text-ink',
+            (i.state === 'reverted' || i.state === 'superseded') && 'line-through decoration-ink-3',
           )}
         >
           {i.text}
         </span>
-        <span className="flex items-center gap-2 text-[11px] text-slate-400">
-          <span className="min-w-0 truncate font-mono text-sky-400/80">
+        <span className="flex items-center gap-2 text-[11px] text-ink-2">
+          <span className="min-w-0 truncate font-mono text-ink-3">
             {i.about.length ? i.about.slice(0, 2).map(fnName).join(', ') : (i.appliesTo ?? '')}
             {i.about.length > 2 ? ` +${i.about.length - 2}` : ''}
           </span>
@@ -341,7 +330,7 @@ function LessonDetail({
   item: MemoryItem;
   onOpen: (id: string) => void;
 }) {
-  const color = NODE_COLORS[i.kind] ?? '#6b7894';
+  const color = NODE_COLORS[i.kind] ?? '#77777f';
   const related =
     i.kind === 'Failure'
       ? 'Fixed by'
@@ -359,20 +348,18 @@ function LessonDetail({
           </span>
           <StateBadge state={i.state} />
           {i.seeded && (
-            <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-300">
-              sample
-            </span>
+            <span className="rounded bg-warn/10 px-1.5 py-0.5 text-[10px] text-warn">sample</span>
           )}
-          <span className="font-mono text-[11px] text-slate-500">{i.id}</span>
+          <span className="font-mono text-[11px] text-ink-3">{i.id}</span>
         </div>
-        <h2 className="font-display text-lg leading-snug font-semibold text-white">{i.text}</h2>
-        <p className="mt-2 text-[13px] leading-relaxed text-slate-400">{STATE_META[i.state].why}</p>
+        <h2 className="font-display text-lg leading-snug font-semibold text-ink">{i.text}</h2>
+        <p className="mt-2 text-[13px] leading-relaxed text-ink-2">{STATE_META[i.state].why}</p>
       </div>
 
       <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm xl:grid-cols-4">
         <Fact label={i.kind === 'Procedure' ? 'Applies to' : 'About'}>
           {i.about.length ? (
-            <span className="flex flex-col gap-0.5 font-mono text-xs text-sky-400">
+            <span className="flex flex-col gap-0.5 font-mono text-xs text-ink-3">
               {i.about.map((a) => (
                 <span key={a} title={a} className="truncate">
                   {fnName(a)}
@@ -390,7 +377,7 @@ function LessonDetail({
             ) : (
               <span>by a person or seed</span>
             )}
-            <span className="text-xs text-slate-400">{timeAgo(i.at)}</span>
+            <span className="text-xs text-ink-2">{timeAgo(i.at)}</span>
           </span>
         </Fact>
         <Fact label="Given to agents">
@@ -416,7 +403,7 @@ function LessonDetail({
             <span className="font-mono text-sm tabular-nums" style={{ color: trustTone(i.trust) }}>
               {i.trust.toFixed(2)}
             </span>
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-ink-3">
               {i.trust < 0.35
                 ? 'left out of agent prompts'
                 : i.trust < LOW_TRUST
@@ -424,7 +411,7 @@ function LessonDetail({
                   : 'given to agents'}
             </span>
           </div>
-          <ul className="mt-2 flex flex-col gap-0.5 text-[13px] text-slate-400">
+          <ul className="mt-2 flex flex-col gap-0.5 text-[13px] text-ink-2">
             <li>Starts at 0.60.</li>
             {(i.trustWhy ?? []).map((w) => (
               <li key={w}>{w}</li>
@@ -438,7 +425,7 @@ function LessonDetail({
           <SectionTitle>{related}</SectionTitle>
           <button
             onClick={() => onOpen(i.related!.id)}
-            className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-left text-sm text-slate-200 hover:border-line-strong hover:bg-surface-3"
+            className="w-full rounded-md border border-line bg-surface-2 px-3 py-2.5 text-left text-sm text-ink hover:border-line-strong hover:bg-surface-3"
           >
             {i.related.text}
           </button>
@@ -446,11 +433,7 @@ function LessonDetail({
       )}
 
       <section>
-        <SectionTitle>
-          <span className="inline-flex items-center gap-1.5">
-            <Network className="size-3.5" /> Where it sits in the graph
-          </span>
-        </SectionTitle>
+        <SectionTitle>Where it sits in the graph</SectionTitle>
         <FocusGraph projectId={projectId} focusId={i.id} />
       </section>
     </div>
@@ -460,8 +443,8 @@ function LessonDetail({
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <dt className="mb-1 text-[11px] text-slate-500">{label}</dt>
-      <dd className="text-slate-200">{children}</dd>
+      <dt className="mb-1 text-[11px] text-ink-3">{label}</dt>
+      <dd className="text-ink">{children}</dd>
     </div>
   );
 }
@@ -575,13 +558,13 @@ function FocusGraph({ projectId, focusId }: { projectId: string; focusId: string
       const color =
         node.kind === 'Agent'
           ? (AGENT_META[node.label as AgentName]?.color ?? NODE_COLORS.Agent!)
-          : (NODE_COLORS[node.kind] ?? '#6b7894');
+          : (NODE_COLORS[node.kind] ?? '#77777f');
       ctx.fillStyle = color;
       ctx.beginPath();
       ctx.arc(x, y, r, 0, 2 * Math.PI);
       ctx.fill();
       if (focus) {
-        ctx.strokeStyle = '#e7ecf6';
+        ctx.strokeStyle = '#a4a4ad';
         ctx.lineWidth = 1.5 / scale;
         ctx.beginPath();
         ctx.arc(x, y, r + 3, 0, 2 * Math.PI);
@@ -591,7 +574,7 @@ function FocusGraph({ projectId, focusId }: { projectId: string; focusId: string
       ctx.font = `${focus ? 600 : 500} ${size}px 'Inter Variable', sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillStyle = focus ? '#ffffff' : '#a9b4cc';
+      ctx.fillStyle = focus ? '#f2f2f4' : '#a4a4ad';
       const name = node.kind === 'Symbol' ? `${node.label}()` : node.label;
       ctx.fillText(name.length > 26 ? `${name.slice(0, 25)}…` : name, x, y + r + 2);
     },
@@ -599,12 +582,12 @@ function FocusGraph({ projectId, focusId }: { projectId: string; focusId: string
   );
 
   if (data && graph.nodes.length <= 1)
-    return <p className="text-sm text-slate-500">Nothing is connected to it yet.</p>;
+    return <p className="text-sm text-ink-3">Nothing is connected to it yet.</p>;
 
   return (
     <div
       ref={wrap}
-      className="sea relative h-[420px] overflow-hidden rounded-xl border border-line"
+      className="canvas relative h-[420px] overflow-hidden rounded-md border border-line"
     >
       {width > 0 && data && (
         <ForceGraph2D<GraphNode, GraphEdge>
@@ -637,7 +620,7 @@ function FocusGraph({ projectId, focusId }: { projectId: string; focusId: string
           onEngineStop={() => fg.current?.zoomToFit(400, 40)}
         />
       )}
-      <div className="pointer-events-none absolute bottom-2 left-3 text-[10px] text-slate-500">
+      <div className="pointer-events-none absolute bottom-2 left-3 text-[10px] text-ink-3">
         two steps around this lesson{hidden > 0 ? ` · ${hidden} more not drawn` : ''} · scroll to
         zoom
       </div>

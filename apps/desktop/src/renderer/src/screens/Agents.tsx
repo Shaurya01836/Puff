@@ -24,7 +24,7 @@ export function Agents({
 
   return (
     <div className="flex flex-col gap-6 overflow-y-auto p-6">
-      <p className="text-sm text-slate-400">
+      <p className="text-sm text-ink-2">
         {agents?.length ?? 0} agents in the pool · {busy} working now
       </p>
 
@@ -49,41 +49,23 @@ export function Agents({
 function AgentCard({ agent: a }: { agent: AgentProfile }) {
   const meta = AGENT_META[a.name];
   const Mark =
-    a.name === 'claude-code'
-      ? ClaudeMark
-      : a.name === 'codex'
-        ? OpenAIMark
-        : OpenCodeMark;
+    a.name === 'claude-code' ? ClaudeMark : a.name === 'codex' ? OpenAIMark : OpenCodeMark;
 
   const runs = a.stats.runs;
   const successRate = runs ? `${Math.round(a.stats.successRate * 100)}%` : 'no runs yet';
 
   return (
     <div className="relative overflow-hidden border border-line bg-surface p-5 transition-colors hover:border-line-strong">
-      {/* Top-left ambient glow spot on the card box matching user reference */}
-      <div
-        className="pointer-events-none absolute -top-12 -left-12 size-48 rounded-full blur-2xl opacity-25"
-        style={{ background: meta.color }}
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none absolute inset-0 opacity-100"
-        style={{
-          background: `radial-gradient(ellipse 70% 55% at 0% 0%, ${meta.color}25 0%, ${meta.color}0a 45%, transparent 75%)`,
-        }}
-        aria-hidden
-      />
-
       {/* Top row with agent brand mark and title */}
       <div className="relative z-10 flex items-center gap-3.5">
         <div className="shrink-0">
           <Mark className="size-8 shrink-0" color={meta.color} />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="font-display text-base font-semibold leading-tight text-white">
+          <h3 className="font-display text-base font-semibold leading-tight text-ink">
             {meta.label}
           </h3>
-          <p className="mt-0.5 text-[11px] leading-snug text-slate-400 first-letter:uppercase">
+          <p className="mt-0.5 text-[11px] leading-snug text-ink-2 first-letter:uppercase">
             {meta.roles?.toLowerCase()}
           </p>
         </div>
@@ -92,39 +74,31 @@ function AgentCard({ agent: a }: { agent: AgentProfile }) {
       {/* Metrics list matching Screenshot 3 */}
       <dl className="mt-5 space-y-2.5 font-mono text-xs">
         <div className="flex items-center justify-between border-b border-line/60 pb-2">
-          <dt className="text-slate-500">status</dt>
+          <dt className="text-ink-3">status</dt>
           <dd
             className={cn(
               'inline-flex items-center gap-1.5 font-medium',
-              a.busy > 0 ? 'text-emerald-400' : 'text-slate-400',
+              a.busy > 0 ? 'text-brand' : 'text-ink-2',
             )}
           >
-            {a.busy > 0 && <span className="size-1.5 animate-pulse-dot rounded-full bg-emerald-400" />}
             {a.busy > 0 ? `${a.busy} running` : 'idle'}
           </dd>
         </div>
         <div className="flex items-center justify-between border-b border-line/60 pb-2">
-          <dt className="text-slate-500">success rate</dt>
-          <dd className="font-semibold tabular-nums text-slate-200">{successRate}</dd>
+          <dt className="text-ink-3">success rate</dt>
+          <dd className="font-semibold tabular-nums text-ink">{successRate}</dd>
         </div>
         <div className="flex items-center justify-between border-b border-line/60 pb-2">
-          <dt className="text-slate-500">runs finished</dt>
-          <dd className="font-semibold tabular-nums text-slate-200">{runs}</dd>
+          <dt className="text-ink-3">runs finished</dt>
+          <dd className="font-semibold tabular-nums text-ink">{runs}</dd>
         </div>
         <div className="flex items-center justify-between pt-0.5">
-          <dt className="text-slate-500">instances</dt>
-          <dd className="flex items-center gap-1">
-            {Array.from({ length: a.instances }, (_, i) => (
-              <span
-                key={i}
-                className={cn('size-2 rounded-sm', i < a.busy ? 'bg-emerald-400' : 'bg-surface-3')}
-                style={i < a.busy ? { background: meta.color } : undefined}
-                title={i < a.busy ? 'Busy' : 'Available'}
-              />
-            ))}
-            <span className="ml-1 text-[11px] text-slate-400">
-              {a.busy}/{a.instances}
-            </span>
+          <dt className="text-ink-3">instances</dt>
+          <dd
+            className={cn('text-[11px] tabular-nums', a.busy > 0 ? 'text-brand' : 'text-ink-2')}
+            title={`${a.busy} of ${a.instances} busy`}
+          >
+            {a.busy}/{a.instances}
           </dd>
         </div>
       </dl>
@@ -132,7 +106,7 @@ function AgentCard({ agent: a }: { agent: AgentProfile }) {
       {/* What this agent has done in each module (Q28): the record that can outrank a declared strength */}
       {a.modules && a.modules.length > 0 && (
         <div className="mt-4">
-          <div className="mb-1.5 font-mono text-[10px] tracking-wider text-slate-500 uppercase">
+          <div className="mb-1.5 font-mono text-[10px] tracking-wider text-ink-3 uppercase">
             Knows
           </div>
           <ul className="flex flex-col gap-1">
@@ -142,14 +116,14 @@ function AgentCard({ agent: a }: { agent: AgentProfile }) {
                 className="flex items-center gap-2 font-mono text-[11px]"
                 title={`${m.wins} of ${m.runs} runs in the ${m.module} module succeeded`}
               >
-                <span className="w-24 truncate text-slate-300">{m.module}</span>
+                <span className="w-24 truncate text-ink">{m.module}</span>
                 <span className="h-1 flex-1 overflow-hidden bg-surface-3">
                   <span
-                    className="block h-full bg-emerald-400"
+                    className="block h-full bg-brand"
                     style={{ width: `${Math.round((m.wins / Math.max(m.runs, 1)) * 100)}%` }}
                   />
                 </span>
-                <span className="tabular-nums text-slate-400">
+                <span className="tabular-nums text-ink-2">
                   {m.wins}/{m.runs}
                 </span>
               </li>
@@ -164,7 +138,7 @@ function AgentCard({ agent: a }: { agent: AgentProfile }) {
           {a.strengths.map((s) => (
             <span
               key={s}
-              className="border border-line bg-surface-2 px-2 py-0.5 font-mono text-[10px] text-slate-400"
+              className="border border-line bg-surface-2 px-2 py-0.5 font-mono text-[10px] text-ink-2"
             >
               {s}
             </span>
@@ -186,7 +160,7 @@ function SavingsSection({ savings, mock }: { savings: Savings; mock: boolean }) 
               Mock numbers, not benchmark results
             </span>
           ) : (
-            <span className="border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-emerald-400">
+            <span className="border border-brand/25 bg-brand/10 px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-brand">
               Measured
             </span>
           )
@@ -195,7 +169,7 @@ function SavingsSection({ savings, mock }: { savings: Savings; mock: boolean }) 
         With Puff vs without · same {savings.tasks} tasks, same model
       </SectionTitle>
       {m && (
-        <p className="-mt-1 mb-3 font-mono text-xs text-slate-500">
+        <p className="-mt-1 mb-3 font-mono text-xs text-ink-3">
           {AGENT_META[m.agent as keyof typeof AGENT_META]?.label ?? m.agent} ({m.model}) ·{' '}
           {m.runsPerArm} run{m.runsPerArm === 1 ? '' : 's'} per task and arm · one attempt each ·{' '}
           {new Date(m.generatedAt).toLocaleDateString()}
@@ -211,8 +185,8 @@ function SavingsSection({ savings, mock }: { savings: Savings; mock: boolean }) 
         />
         {m && !m.filesReadReported ? (
           <div className="border border-line bg-surface p-5">
-            <div className="font-mono text-xs uppercase tracking-wider text-slate-400">Files read</div>
-            <p className="mt-3 text-xs leading-relaxed text-slate-500">
+            <div className="font-mono text-xs uppercase tracking-wider text-ink-2">Files read</div>
+            <p className="mt-3 text-xs leading-relaxed text-ink-3">
               Not reported by this agent. Only OpenCode prints its tool calls, so Puff does not
               guess.
             </p>
@@ -238,7 +212,7 @@ function SavingsSection({ savings, mock }: { savings: Savings; mock: boolean }) 
         <>
           <div className="mt-4 overflow-hidden border border-line bg-surface">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-line font-mono text-[10px] uppercase tracking-widest text-slate-500">
+              <thead className="border-b border-line font-mono text-[10px] uppercase tracking-wide text-ink-3">
                 <tr>
                   <th className="px-4 py-2.5 font-normal">Task</th>
                   <th className="px-4 py-2.5 font-normal">Without Puff</th>
@@ -248,7 +222,7 @@ function SavingsSection({ savings, mock }: { savings: Savings; mock: boolean }) 
               <tbody>
                 {m.perTask.map((t) => (
                   <tr key={t.id} className="border-b border-line/60 last:border-0">
-                    <td className="px-4 py-2.5 font-mono text-xs text-slate-200">{t.id}</td>
+                    <td className="px-4 py-2.5 font-mono text-xs text-ink">{t.id}</td>
                     <td className="px-4 py-2.5 tabular-nums">
                       <Result arm={t.plain} />
                     </td>
@@ -260,7 +234,7 @@ function SavingsSection({ savings, mock }: { savings: Savings; mock: boolean }) 
               </tbody>
             </table>
           </div>
-          <ul className="mt-3 flex list-disc flex-col gap-1 pl-5 font-mono text-[11px] text-slate-500">
+          <ul className="mt-3 flex list-disc flex-col gap-1 pl-5 font-mono text-[11px] text-ink-3">
             {m.notes.map((n) => (
               <li key={n}>{n}</li>
             ))}
@@ -274,10 +248,10 @@ function SavingsSection({ savings, mock }: { savings: Savings; mock: boolean }) 
 function Result({ arm }: { arm: { passed: number; runs: number; tokens: number } }) {
   return (
     <span className="font-mono text-xs">
-      <span className={arm.passed === arm.runs ? 'text-emerald-400' : 'text-rose-400'}>
+      <span className={arm.passed === arm.runs ? 'text-brand' : 'text-bad'}>
         {arm.passed}/{arm.runs} passed
       </span>
-      <span className="text-slate-500"> · {formatTokens(arm.tokens)} tokens</span>
+      <span className="text-ink-3"> · {formatTokens(arm.tokens)} tokens</span>
     </span>
   );
 }
@@ -301,15 +275,15 @@ function Meter({
   const Arrow = delta < 0 ? ArrowDown : ArrowUp;
   return (
     <div className="border border-line bg-surface p-5">
-      <div className="font-mono text-xs uppercase tracking-wider text-slate-400">{label}</div>
+      <div className="font-mono text-xs uppercase tracking-wider text-ink-2">{label}</div>
       <div className="mt-2 flex items-baseline gap-2">
-        <span className="font-display text-3xl font-bold tracking-tight tabular-nums text-white">
+        <span className="font-display text-3xl font-bold tracking-tight tabular-nums text-ink">
           {format(withPuff)}
         </span>
         <span
           className={cn(
             'inline-flex items-center gap-0.5 border px-1.5 py-0.5 font-mono text-xs font-semibold',
-            better ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' : 'border-rose-500/30 bg-rose-500/10 text-rose-400',
+            better ? 'border-brand/25 bg-brand/10 text-brand' : 'border-bad/25 bg-bad/10 text-bad',
           )}
         >
           <Arrow className="size-3" />
@@ -325,8 +299,8 @@ function Meter({
         ).map(([name, value, color]) => (
           <div key={name}>
             <div className="mb-1 flex justify-between font-mono text-[11px]">
-              <span className="text-slate-400">{name}</span>
-              <span className="text-slate-300 tabular-nums">{format(value)}</span>
+              <span className="text-ink-2">{name}</span>
+              <span className="text-ink tabular-nums">{format(value)}</span>
             </div>
             <div className="h-1.5 bg-surface-3">
               <div

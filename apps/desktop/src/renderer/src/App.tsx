@@ -367,23 +367,19 @@ export function App() {
       </div>
 
       {/* Status bar: what the app is connected to and the last thing that really happened */}
-      <footer className="flex h-7 shrink-0 items-center justify-between gap-4 border-t border-line bg-surface-2 px-4 text-[11px] text-slate-500 select-none">
+      <footer className="flex h-7 shrink-0 items-center justify-between gap-4 border-t border-line bg-surface-2 px-4 text-[11px] text-ink-3 select-none">
         <span
-          className="inline-flex shrink-0 items-center gap-1.5 text-slate-400"
+          className={cn('inline-flex shrink-0 items-center', live ? 'text-ink-2' : 'text-warn')}
           title={live ? `Connected to FalkorDB, graph ${info?.graphName ?? ''}` : info?.error}
         >
-          <span className={cn('size-1.5 rounded-full', live ? 'bg-emerald-400' : 'bg-amber-400')} />
           {live
             ? `FalkorDB · ${info?.graphName ?? info?.projectName}`
             : 'Not connected · sample data'}
         </span>
-        <span className="hidden min-w-0 flex-1 items-center gap-1.5 sm:flex">
-          {working && (
-            <span className="size-1.5 shrink-0 animate-pulse-dot rounded-full bg-sky-400" />
-          )}
-          <span className="truncate text-slate-300">{statusText}</span>
+        <span className="hidden min-w-0 flex-1 items-center sm:flex">
+          <span className="truncate text-ink">{statusText}</span>
         </span>
-        <span className="shrink-0 font-mono text-slate-500">v{VERSION}</span>
+        <span className="shrink-0 font-mono text-ink-3">v{VERSION}</span>
       </footer>
 
       {newTaskOpen && (

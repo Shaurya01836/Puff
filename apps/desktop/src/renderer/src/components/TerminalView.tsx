@@ -23,10 +23,10 @@ export function TerminalView({ id }: { id: string }) {
       scrollback: 5000,
       allowProposedApi: true,
       theme: {
-        background: '#0a0a0a',
-        foreground: '#e6e6e6',
-        cursor: '#e6e6e6',
-        selectionBackground: '#3a3a5c',
+        background: '#0a0a0c',
+        foreground: '#f2f2f4',
+        cursor: '#f2f2f4',
+        selectionBackground: '#232329',
       },
     });
     const fit = new FitAddon();
@@ -76,5 +76,5 @@ export function TerminalView({ id }: { id: string }) {
     };
   }, [id]);
 
-  return <div ref={host} className="h-full w-full overflow-hidden rounded-xl bg-[#0a0a0a] p-2" />;
+  return <div ref={host} className="h-full w-full overflow-hidden rounded-md bg-abyss p-2" />;
 }
