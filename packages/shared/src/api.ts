@@ -4,6 +4,7 @@ import type {
   BackendInfo,
   ChatInfo,
   ChatMessage,
+  ConnectMode,
   ContextPack,
   GraphData,
   GraphTrace,
@@ -40,6 +41,11 @@ export interface PuffApi {
   startDatabase(): Promise<SetupStatus>;
   /** Try to connect again, for example after the person started the database themselves */
   retrySetup(): Promise<SetupStatus>;
+  /**
+   * Connect to a specific FalkorDB URL (own cloud or demo), or fall back to docker when mode is 'docker'.
+   * Saves the URL in ~/.puff/.env and reconnects. Rejects with a readable reason.
+   */
+  connectToCloud(mode: ConnectMode, url?: string): Promise<SetupStatus>;
   /**
    * Start an agent's own sign-in: it opens the browser on the provider's login page. Puff never sees the
    * password. The result says where to go if the browser did not open; the end arrives as a `signin` event.
@@ -163,6 +169,7 @@ export const PUFF_INVOKE_METHODS = [
   'getSetupStatus',
   'startDatabase',
   'retrySetup',
+  'connectToCloud',
   'startSignIn',
   'submitSignInCode',
   'listProjects',

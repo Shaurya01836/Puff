@@ -25,6 +25,7 @@ export function Sidebar({
   onSwitchProject,
   onAddProject,
   onProjectSettings,
+  onConfigureDatabase,
   counts,
 }: {
   screen: Screen;
@@ -37,6 +38,7 @@ export function Sidebar({
   onSwitchProject: (id: string) => void;
   onAddProject: () => void;
   onProjectSettings: (project: ProjectSummary) => void;
+  onConfigureDatabase?: () => void;
   counts: Partial<Record<Screen, number>>;
 }) {
   return (
@@ -117,6 +119,7 @@ export function Sidebar({
           onSwitch={onSwitchProject}
           onAdd={onAddProject}
           onSettings={onProjectSettings}
+          onConfigureDatabase={onConfigureDatabase}
         />
       </div>
     </aside>

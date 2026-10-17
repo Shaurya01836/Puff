@@ -466,6 +466,9 @@ export interface ManualResult {
   message: string;
 }
 
+/** How the user chose to connect to FalkorDB */
+export type ConnectMode = 'docker' | 'own-cloud' | 'demo-cloud';
+
 /** What the first-run setup screen shows */
 export interface SetupStatus {
   databaseOk: boolean;
@@ -476,6 +479,8 @@ export interface SetupStatus {
   agents: AgentCliStatus[];
   /** Where Puff keeps its files (projects, settings) */
   homePath: string;
+  /** Which connection mode the user last selected */
+  connectMode?: ConnectMode;
 }
 
 export type ChatRole = 'user' | 'assistant' | 'system' | 'action' | 'approval';
