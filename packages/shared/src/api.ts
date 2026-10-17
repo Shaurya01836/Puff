@@ -85,7 +85,7 @@ export interface PuffApi {
   removeTask(taskId: string): Promise<void>;
   /** What a task changed: the commit that merged it, or its newest kept attempt. Undefined if it changed nothing yet. */
   getTaskDiff(taskId: string): Promise<TaskDiffInfo | undefined>;
-  getContextPack(sessionId: string): Promise<ContextPack>;
+  getContextPack(sessionId: string): Promise<ContextPack | undefined>;
   getWhy(taskId: string): Promise<WhyPath>;
   /** The queries behind each decision Puff made for this task (route, context, schedule, stale, locate), newest first */
   getTraces(taskId: string): Promise<GraphTrace[]>;

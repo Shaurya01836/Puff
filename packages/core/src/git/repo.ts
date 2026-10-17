@@ -254,11 +254,21 @@ export class GitRepo {
     }
   }
 
-  /** What the agent changed: stages everything (new files included) and reads the staged diff. */
-  async changes(wt: Worktree): Promise<{ files: string[]; diff: string }> {
+  /**
+   * What the agent changed: stages everything (new files included) and reads the staged diff. A person's
+   * folder may already hold commits (the agent's kept attempt, an earlier landing that failed), and what would
+   * land is everything since the main branch, so `sinceMain` compares with where the branch left it.
+   */
+  async changes(
+    wt: Worktree,
+    opts: { sinceMain?: boolean } = {},
+  ): Promise<{ files: string[]; diff: string }> {
     await must(['add', '-A'], wt.path);
-    const names = await must(['diff', '--cached', '--name-only', '--no-color'], wt.path);
-    const diff = await must(['diff', '--cached', '--no-color', '--no-ext-diff'], wt.path);
+    const base = opts.sinceMain
+      ? [(await must(['merge-base', 'HEAD', wt.branch], this.root)).trim()]
+      : [];
+    const names = await must(['diff', '--cached', '--name-only', '--no-color', ...base], wt.path);
+    const diff = await must(['diff', '--cached', '--no-color', '--no-ext-diff', ...base], wt.path);
     return {
       files: names
         .split(/\r?\n/)
@@ -387,14 +397,19 @@ export class GitRepo {
       .sort((x, y) => y.n - x.n);
     const newest = branches[0];
     if (!newest) return undefined;
-    const base = (await must(['merge-base', 'HEAD', newest.b], this.root)).trim();
-    return {
-      source: 'attempt',
-      ref: newest.b,
-      label: `Attempt ${newest.n}, not merged`,
-      files: names(await must(['diff', '--name-only', '--no-color', base, newest.b], this.root)),
-      diff: clip(await must(['diff', '--no-color', '--no-ext-diff', base, newest.b], this.root)),
-    };
+    try {
+      const base = (await must(['merge-base', 'HEAD', newest.b], this.root)).trim();
+      return {
+        source: 'attempt',
+        ref: newest.b,
+        label: `Attempt ${newest.n}, not merged`,
+        files: names(await must(['diff', '--name-only', '--no-color', base, newest.b], this.root)),
+        diff: clip(await must(['diff', '--no-color', '--no-ext-diff', base, newest.b], this.root)),
+      };
+    } catch {
+      // The attempt's branch was removed between listing it and reading it: nothing was kept
+      return undefined;
+    }
   }
 
   /** Remove the worktree. The branch is kept unless asked otherwise, so a failed attempt can be inspected. */

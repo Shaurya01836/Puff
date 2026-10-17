@@ -40,7 +40,7 @@ import {
 } from '../src/memory/tasks';
 import { ProjectController } from '../src/control/controller';
 import { Orchestrator } from '../src/orchestrator/orchestrator';
-import { readVerdict, runTask, type RunDeps } from '../src/orchestrator/run';
+import { measureBaseline, readVerdict, runTask, type RunDeps } from '../src/orchestrator/run';
 
 const rel = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 const DEMO = rel('../../../demo/shop-api');
@@ -1108,6 +1108,46 @@ describe.skipIf(!ready)('the run loop (fake agents, real git, real FalkorDB)', (
     // stop is only for a task that is being worked on
     await expect(controller.stopTask(b.id)).rejects.toThrow(/only a task being worked on/);
   }, 120_000);
+
+  it('a project whose check already fails: a change that adds nothing new passes, one that adds a failure does not (your own work too)', async () => {
+    // Two compiler errors exist before anyone touches anything (Next.js without its generated types, say);
+    // a file called bad.txt adds a third
+    const check = [
+      "const fs = require('fs');",
+      'console.log("legacy.ts(1,1): error TS2307: Cannot find module \'./a.svg\'");',
+      'console.log("legacy.ts(2,1): error TS2307: Cannot find module \'./b.svg\'");',
+      "if (fs.existsSync('bad.txt')) console.log(\"new.ts(5,2): error TS2322: Type 'a' is not assignable to type 'b'\");",
+      'process.exit(2);',
+    ].join('\n');
+    const cfg: PuffConfig = {
+      ...config,
+      limits: { ...config.limits, maxAttempts: 1 },
+      verify: { ...config.verify, testCommand: 'node check.cjs' },
+    };
+    const f = await fixture(cfg, {});
+    writeFileSync(join(f.repoPath, 'check.cjs'), check);
+    gitIn(f.repoPath, 'add', '-A');
+    gitIn(f.repoPath, 'commit', '-q', '-m', 'add check');
+    const controller = await controllerFor(f);
+
+    // measured on the untouched code, in a clean checkout
+    expect([...(await measureBaseline(f.deps))!]).toEqual([
+      "legacy.ts: error TS2307: Cannot find module './a.svg'",
+      "legacy.ts: error TS2307: Cannot find module './b.svg'",
+    ]);
+
+    const t = await f.task('Add the feature', { targets: ['taxFor'] });
+    const over = await controller.takeOver(t.id);
+    writeFileSync(join(over.cwd, 'bad.txt'), 'adds a failure\n');
+    expect((await controller.landManual(t.id)).status).toBe('failed');
+    expect(existsSync(join(f.repoPath, 'bad.txt'))).toBe(false);
+
+    rmSync(join(over.cwd, 'bad.txt'));
+    writeFileSync(join(over.cwd, 'feature.txt'), 'the feature\n');
+    const landed = await controller.landManual(t.id);
+    expect(landed).toMatchObject({ status: 'done' });
+    expect(existsSync(join(f.repoPath, 'feature.txt'))).toBe(true);
+  }, 240_000);
 
   it("taking a task over: the agent's last attempt becomes the person's folder, their fix is checked, merged and teaches the failure its fix", async () => {
     // The project's check fails while bad.txt exists

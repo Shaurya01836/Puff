@@ -19,7 +19,7 @@ import {
 } from '../memory/tasks';
 import { flushMemoryEvents, runTask, type RunDeps, type TaskRunResult } from './run';
 import { SlotPool, nearbyWork, overlapDetails, pathText } from './schedule';
-import { runVerification } from './verify';
+import { failureLines, runVerification } from './verify';
 
 export type OrchestratorDeps = Omit<RunDeps, 'signal' | 'unavailable' | 'slots'>;
 
@@ -42,6 +42,8 @@ export class Orchestrator {
   private readonly unavailable = new Map<AgentName, string>();
   private readonly owner = `puff-${process.pid}-${Date.now().toString(36)}`;
   private checked = false;
+  /** The failures the project's check had before any agent touched it */
+  private baseline?: Set<string>;
   /** One abort switch per task in flight, so a single task can be stopped without stopping the team */
   private readonly taskAborts = new Map<string, AbortController>();
   /** Finish what is running, start nothing new */
@@ -92,10 +94,14 @@ export class Orchestrator {
         /\s+/g,
         ' ',
       );
-    if (verdict.kind === 'tests-failed')
+    if (verdict.kind === 'tests-failed') {
+      this.baseline = failureLines(verdict.output);
       log?.(
-        'the project already fails its check before any agent touches it; agents will be judged against that',
+        this.baseline.size
+          ? `the project already fails its check (${this.baseline.size} failure(s)) before any agent touches it; a task passes if it adds no new failure`
+          : 'the project already fails its check before any agent touches it, in a format Puff cannot compare, so tasks must make it pass',
       );
+    }
     return undefined;
   }
 
@@ -150,6 +156,7 @@ export class Orchestrator {
           signal: AbortSignal.any([signal, own.signal]),
           userStopped: () => own.signal.aborted && !signal.aborted,
           unavailable: this.unavailable,
+          baseline: this.baseline,
           slots,
         },
         taskId,

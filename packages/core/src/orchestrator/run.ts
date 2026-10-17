@@ -31,7 +31,7 @@ import { saveTrace, traced } from '../db/trace';
 import { linkDerived, recordMerge, recordRevert, syncReverts } from '../memory/provenance';
 import { previewMerge, previewPlan, saveMergePreview } from '../queries/preview';
 import type { SlotPool } from './schedule';
-import { runVerification, type Verdict } from './verify';
+import { failureLines, runVerification, withinBaseline, type Verdict } from './verify';
 
 export interface RunDeps {
   graph: Graph;
@@ -48,6 +48,8 @@ export interface RunDeps {
   unavailable?: Map<AgentName, string>;
   /** True when the person stopped this one task (as opposed to stopping the whole team) */
   userStopped?: () => boolean;
+  /** The failures the project's check had before any agent touched it (see withinBaseline) */
+  baseline?: Set<string>;
 }
 
 export interface AttemptSummary {
@@ -657,7 +659,7 @@ async function runAttempt(
     return { summary: summary('success', summarize(res.output, 160)), tokens };
   }
 
-  const { files, diff } = await repo.changes(wt);
+  const { files, diff } = await repo.changes(wt, { sinceMain: Boolean(manual) });
 
   // 3. A writer that changed nothing would "pass" the existing tests. That is not a success, unless
   //    this task's work is already merged (then there really is nothing left to do).
@@ -693,11 +695,9 @@ async function runAttempt(
   // 4. Verify with the project's own tests.
   note('phase', `Running the tests: ${config.verify.testCommand}`);
   await emitTask(deps, await updateTask(graph, task.id, { status: 'verifying' }));
-  const verdict = await runVerification(
-    wt.path,
-    config.verify.testCommand,
-    config.limits.timeoutMs,
-    deps.signal,
+  const verdict = withinBaseline(
+    await runVerification(wt.path, config.verify.testCommand, config.limits.timeoutMs, deps.signal),
+    deps.baseline,
   );
   const tests = verdict.summary
     ? { passed: verdict.summary.passed, total: verdict.summary.total }
@@ -707,7 +707,9 @@ async function runAttempt(
   note(
     'phase',
     verdict.ok
-      ? `Tests passed${counts(tests)}`
+      ? verdict.alreadyFailing
+        ? `Nothing new failed: the ${verdict.alreadyFailing} failure(s) it still shows were there before the change`
+        : `Tests passed${counts(tests)}`
       : verdict.kind === 'error'
         ? `The tests could not run: ${verdict.message}`
         : `Tests failed${counts(tests)}`,
@@ -767,8 +769,16 @@ async function runAttempt(
       // holds every running task's worktree, and a test runner there would run their unfinished copies too.
       const combined: Verdict = await repo
         .withCleanCheckout(`combined-${task.id}`, config.worktrees.linkDirs, async (dir) => {
-          const retest = () =>
-            runVerification(dir, config.verify.testCommand, config.limits.timeoutMs, deps.signal);
+          const retest = async () =>
+            withinBaseline(
+              await runVerification(
+                dir,
+                config.verify.testCommand,
+                config.limits.timeoutMs,
+                deps.signal,
+              ),
+              deps.baseline,
+            );
           let result = await retest();
           if (result.kind === 'tests-failed') {
             note('phase', 'The combined tests failed. Running them once more to be sure', {
@@ -970,11 +980,38 @@ async function openFailures(graph: Graph, taskId: string): Promise<string[]> {
  * project's tests like an agent's work, merge them, re-test the combined result, and remember them.
  * If they fix what an agent got wrong earlier, that failure gets its fix.
  */
+/**
+ * The failures the project's check shows on the untouched main branch, found in a clean checkout, for a path
+ * that is not part of a team run (landing a person's work), where the preflight did not run. Undefined when the
+ * check passes, cannot run, or prints failures in a format that cannot be compared.
+ */
+export async function measureBaseline(
+  deps: Pick<RunDeps, 'repo' | 'config' | 'signal'>,
+): Promise<Set<string> | undefined> {
+  const verdict = await deps.repo
+    .withCleanCheckout('baseline', deps.config.worktrees.linkDirs, (dir) =>
+      runVerification(
+        dir,
+        deps.config.verify.testCommand,
+        deps.config.limits.timeoutMs,
+        deps.signal,
+      ),
+    )
+    .catch(() => undefined);
+  const failures = verdict?.kind === 'tests-failed' ? failureLines(verdict.output) : undefined;
+  return failures?.size ? failures : undefined;
+}
+
 export async function landManualWork(
-  deps: RunDeps,
+  rundeps: RunDeps,
   taskId: string,
   wt: Worktree,
 ): Promise<{ status: 'done' | 'failed'; message: string }> {
+  // A project whose check already fails must not fail the person's work for what was already broken
+  const deps: RunDeps = {
+    ...rundeps,
+    baseline: rundeps.baseline ?? (await measureBaseline(rundeps)),
+  };
   const { graph } = deps;
   const task = await getTask(graph, taskId);
   if (!task) throw new Error(`Unknown task ${taskId}`);

@@ -59,7 +59,7 @@ export async function getWhy(graph: Graph, taskId: string): Promise<WhyPath> {
     { id: taskId },
   );
   const run = latest[0];
-  let summary = `${taskId} has not been picked up yet.`;
+  let summary = 'No agent has picked this task up yet.';
 
   if (run) {
     const agentNode = addNode('Agent', { name: run.agent }, true);
@@ -89,7 +89,7 @@ export async function getWhy(graph: Graph, taskId: string): Promise<WhyPath> {
           )
           .join(', ')
       : 'no declared match (assigned manually)';
-    summary = `${taskId} went to ${run.agent}: ${why}.`;
+    summary = `This task went to ${run.agent}: ${why}.`;
     // The routing decision as it was made (Q19), when it was recorded
     const route = await read<{ reason: string }>(
       graph,

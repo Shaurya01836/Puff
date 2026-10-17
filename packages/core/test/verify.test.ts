@@ -3,8 +3,11 @@ import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
 import {
   explainTestError,
+  failureLines,
   looksLikeCodeFailure,
   runVerification,
+  withinBaseline,
+  type Verdict,
 } from '../src/orchestrator/verify';
 import { isLimitError } from '../src/agents/parse';
 
@@ -34,6 +37,56 @@ describe('verification verdicts', () => {
     expect(looksLikeCodeFailure('1 test failed')).toBe(true);
     expect(looksLikeCodeFailure('src/a.ts(1,1): error TS2304: Cannot find name x')).toBe(true);
     expect(looksLikeCodeFailure('npm error code ENOENT')).toBe(false);
+  });
+});
+
+describe('a project whose check already fails (judged against what failed before)', () => {
+  const failed = (output: string): Verdict => ({
+    ok: false,
+    kind: 'tests-failed',
+    output,
+    exitCode: 2,
+    durationMs: 1,
+    message: 'Tests failed',
+  });
+  const before = [
+    "my-app/src/assets/index.ts(1,18): error TS2307: Cannot find module './logo.svg'.",
+    "my-app/src/assets/index.ts(2,18): error TS2307: Cannot find module './dice.svg'.",
+  ].join('\n');
+
+  it('reads a compiler error without its position, and a failing test by name', () => {
+    expect([...failureLines(before)]).toEqual([
+      "my-app/src/assets/index.ts: error TS2307: Cannot find module './logo.svg'.",
+      "my-app/src/assets/index.ts: error TS2307: Cannot find module './dice.svg'.",
+    ]);
+    expect([...failureLines("src/a.ts:12:5 - error TS2322: Type 'x' is not assignable.")]).toEqual([
+      "src/a.ts: error TS2322: Type 'x' is not assignable.",
+    ]);
+    expect([...failureLines('\u001b[31m FAIL  test/a.spec.ts > adds 12ms\u001b[0m')]).toEqual([
+      'test/a.spec.ts > adds',
+    ]);
+    expect(failureLines('something went wrong somewhere').size).toBe(0);
+  });
+
+  it('the same failures, moved down by an added line, are nothing new: it passes and says so', () => {
+    const moved = before.replace('(1,18)', '(9,18)').replace('(2,18)', '(10,18)');
+    const v = withinBaseline(failed(moved), failureLines(before));
+    expect(v).toMatchObject({ ok: true, kind: 'passed', alreadyFailing: 2 });
+  });
+
+  it('fewer failures than before still passes; one new failure fails as before', () => {
+    const base = failureLines(before);
+    expect(withinBaseline(failed(before.split('\n')[0]!), base).ok).toBe(true);
+    const worse = `${before}\nmy-app/src/new.ts(3,1): error TS2322: Type 'a' is not assignable to type 'b'.`;
+    expect(withinBaseline(failed(worse), base)).toMatchObject({ ok: false, kind: 'tests-failed' });
+  });
+
+  it('is strict when there is nothing it can compare: no baseline, or output it cannot read', () => {
+    expect(withinBaseline(failed(before), undefined).ok).toBe(false);
+    expect(withinBaseline(failed(before), new Set()).ok).toBe(false);
+    expect(withinBaseline(failed('exploded'), failureLines(before)).ok).toBe(false);
+    const crashed: Verdict = { ...failed(before), kind: 'error' };
+    expect(withinBaseline(crashed, failureLines(before)).ok).toBe(false);
   });
 });
 

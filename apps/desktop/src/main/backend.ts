@@ -625,9 +625,8 @@ async function buildLive(
       return result;
     },
     async getContextPack(sessionId) {
-      const pack = await getContextPack(need().graph, sessionId);
-      if (!pack) throw new Error('No context was recorded for this session');
-      return pack;
+      // A session that is just starting has no context yet: that is an answer, not an error
+      return getContextPack(need().graph, sessionId);
     },
     async getWhy(taskId) {
       return getWhy(need().graph, taskId);

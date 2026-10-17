@@ -137,6 +137,22 @@ describe('GitRepo worktrees', { timeout: 30_000 }, () => {
     for (const w of [a, b, c]) await repo.remove(w, { deleteBranch: true });
   });
 
+  it("a person's folder that already holds commits still has changes to land: they are counted since main", async () => {
+    const w = await repo.createWorktree('task_9-manual');
+    writeFileSync(join(w.path, 'kept.txt'), 'committed by an earlier, failed landing');
+    await repo.changes(w);
+    await repo.commit(w, 'puff: failed attempt 1');
+    // against its own last commit there is nothing; against main there is the kept work
+    expect((await repo.changes(w)).files).toEqual([]);
+    expect((await repo.changes(w, { sinceMain: true })).files).toEqual(['kept.txt']);
+    writeFileSync(join(w.path, 'typed.txt'), 'typed since');
+    expect((await repo.changes(w, { sinceMain: true })).files.sort()).toEqual([
+      'kept.txt',
+      'typed.txt',
+    ]);
+    await repo.remove(w, { deleteBranch: true });
+  });
+
   it('returns nothing to commit when the agent changed nothing', async () => {
     const wt = await repo.createWorktree('task_9-a1');
     expect(await repo.changes(wt)).toEqual({ files: [], diff: '' });

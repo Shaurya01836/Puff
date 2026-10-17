@@ -62,6 +62,8 @@ export function explainTestError(exitCode: number | null, output: string): strin
 
 export interface Verdict {
   ok: boolean;
+  /** The check still fails, but only with failures that were there before the change: how many */
+  alreadyFailing?: number;
   /** `tests-failed`: the tests ran and some failed. `error`: the command crashed, timed out or never ran. */
   kind: 'passed' | 'tests-failed' | 'error';
   output: string;
@@ -69,6 +71,42 @@ export interface Verdict {
   summary?: TestSummary;
   durationMs: number;
   message?: string;
+}
+
+const ANSI = new RegExp(String.fromCharCode(27) + '\\[[0-9;]*m', 'g');
+
+/**
+ * The failures a check printed, one stable line each, so two runs can be compared: a compiler error as
+ * `file: error TSnnnn: message` (no line numbers, which move when code is added above), a failing test by name.
+ * Empty when the output is in a format this does not know, so nothing is ever excused by accident.
+ */
+export function failureLines(output: string): Set<string> {
+  const out = new Set<string>();
+  for (const raw of output.replace(ANSI, '').split('\n')) {
+    const line = raw.trim();
+    const ts =
+      /^(.+?)\(\d+,\d+\): (error TS\d+: .+)$/.exec(line) ??
+      /^(.+?):\d+:\d+ - (error TS\d+: .+)$/.exec(line);
+    if (ts) {
+      out.add(`${ts[1]}: ${ts[2]}`);
+      continue;
+    }
+    const test = /^(?:FAIL|✗|×|✖|●)\s+(.+?)(?:\s+\d+ms)?$/.exec(line);
+    if (test) out.add(test[1]!);
+  }
+  return out;
+}
+
+/**
+ * A project whose check already fails before an agent touches it cannot fail every task for that:
+ * a result that shows only failures the untouched code had counts as passed ("nothing new"), and the
+ * verdict says how many were already there. Any new failure, or output it cannot read, fails as before.
+ */
+export function withinBaseline(verdict: Verdict, baseline?: Set<string>): Verdict {
+  if (verdict.kind !== 'tests-failed' || !baseline?.size) return verdict;
+  const now = failureLines(verdict.output);
+  if (now.size === 0 || [...now].some((f) => !baseline.has(f))) return verdict;
+  return { ...verdict, ok: true, kind: 'passed', alreadyFailing: now.size };
 }
 
 /**
