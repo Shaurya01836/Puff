@@ -372,7 +372,14 @@ ORDER BY score DESC LIMIT $limit
 
 ## The graph data model
 
-One graph per project (`puff_<project>`). Nodes and what they hold:
+<div align="center">
+  <img src="assets/project-isolation.png" alt="One graph per project in FalkorDB" width="720" />
+  <p><em>Strict isolation: every project gets its own dedicated FalkorDB graph (<code>puff_&lt;project&gt;</code>). A lesson in one project is invisible in another.</em></p>
+</div>
+
+Every project gets its own FalkorDB graph, named `puff_<project>`. There is no tenant filter to forget in a query. A lesson in one project is invisible in another, even on an identically named function, and a test checks exactly that ([`isolation.test.ts`](packages/core/test/isolation.test.ts)).
+
+Nodes and what they hold:
 
 | Layer | Nodes | Holds |
 |---|---|---|
@@ -721,7 +728,21 @@ Setup, configuration and deployment details: **[docs/ARCHITECTURE.md](docs/ARCHI
 
 ### Lesson transfer (the main one)
 
-Does a lesson one agent learned stop the next agent from repeating the mistake on a different, related task? Five seeded traps (passwords written to the audit log, the session token returned in a response body, tax applied after the discount, stock reserved through the wrong function, rate limits per IP), each with a *learn* task and a different, related *transfer* task. Four arms: nothing, Puff, the same lessons in a flat `AGENTS.md`, and Puff with the graph off. One attempt per run, a fresh repository copy each time, one agent and model per arm.
+Does a lesson one agent learned stop the next agent from repeating the mistake on a different, related task?
+
+We ran a lesson-transfer benchmark on **five seeded traps**:
+1. Password written to the audit log (`login-request-log`)
+2. Session token returned in a response body (`token-in-body`)
+3. Tax applied after the discount (`cart-quote`)
+4. Stock reserved through the wrong function (`cart-reorder`)
+5. Rate limits keyed per IP (`login-lockout`)
+
+Each trap has a *learn* task and a different, related *transfer* task. We evaluated **four arms** using OpenAI Codex, with one attempt per run and a fresh repository copy each time (giving 15 judged runs per arm):
+
+<div align="center">
+  <img src="assets/benchmark-lesson-transfer.png" alt="Codex 15 judged runs per arm benchmark chart" width="760" />
+  <p><em>Codex transfer benchmark across 15 runs per arm: Puff drops repeated mistakes from 6 down to 2 while keeping pass rates high.</em></p>
+</div>
 
 **Codex, 3 runs per trap and arm (15 judged runs per arm):**
 
