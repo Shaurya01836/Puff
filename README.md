@@ -12,7 +12,7 @@
 [![Track 02](https://img.shields.io/badge/Track%2002-Agent%20Memory%20%26%20Coordination-ff9a3c)](#hackathon)
 [![FalkorDB](https://img.shields.io/badge/graph-FalkorDB-e3204d)](https://www.falkordb.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Node%2022-3178c6)](#tech-stack)
-[![Status](https://img.shields.io/badge/status-building-yellow)](#roadmap)
+[![Release](https://img.shields.io/badge/release-v0.1.7-34d399)](https://github.com/Shaurya01836/Puff/releases/latest)
 
 [For the judges](#for-the-judges) · [Problem](#the-problem) · [Solution](#the-solution) · [How it uses FalkorDB](#how-puff-uses-falkordb) · [The Cypher](#the-cypher-puff-depends-on) · [How agents use Puff](#how-agents-use-puff) · [Install](#install-the-windows-app) · [Quick start](#quick-start) · [Docs](#documentation)
 
@@ -38,7 +38,7 @@ Windows 10/11 · about 115 MB · [all releases](https://github.com/Shaurya01836/
 | README with setup instructions and the graph data model | Setup: [Install](#install-the-windows-app) and [Quick start](#quick-start). Model: [The graph data model](#the-graph-data-model) |
 | The Cypher queries and graph algorithms the product depends on | [The Cypher Puff depends on](#the-cypher-puff-depends-on): the key queries inline, and a table giving the source file and the test for each. All of them, with the reasoning, are in [docs/GRAPH_SCHEMA.md](docs/GRAPH_SCHEMA.md) (Q1 to Q32) |
 | Demo video | Linked above |
-| Live deployment, or complete local setup | Puff is a desktop app that drives agent CLIs on your own repository, so it is not a hosted service. Setup is complete two ways: the Windows installer, or `npm install` and `npm run db:up` from a checkout (both below) |
+| Live deployment, or complete local setup | Puff is a desktop app that drives agent CLIs on your own repository, so it is not a hosted service; its website is live at [puff-puce-one.vercel.app](https://puff-puce-one.vercel.app/). Setup is complete two ways: the Windows installer (memory in Docker on your machine, or in your own FalkorDB Cloud), or `npm install` and `npm run db:up` from a checkout (both below) |
 | The track | Track 02: Agent Memory and Coordination |
 
 ### Track 02: what it asks for, and where Puff does it
@@ -75,7 +75,8 @@ What this does and does not show:
 - **A flat file was nearly as good as Puff here** (3 repeats against 2, 11 passes against 10). With five lessons a flat file is enough. Where a flat file cannot follow is lessons that go stale after an edit or were learned in a reverted merge; we have tests for that behaviour ([trust.test.ts](packages/core/test/trust.test.ts)) but have **not measured it** against a flat file.
 - Codex fell into only three of the five traps in any arm. On those three (9 runs per arm) the repeats were 6, 2, 3 and 7 of 9, in the order of the table.
 - All five lessons were **replayed**: Codex did not fall into the trap on the learn tasks, so the recorded careless change was run through the real tests and the real failure locator instead.
-- One agent, one model, 15 runs per arm: read it as an indication, not proof. The OpenCode run (a slower free model) was still running when this was written. Method, per-trap numbers and raw runs: [docs/BENCHMARK.md](docs/BENCHMARK.md), [`bench/results-transfer-codex.json`](bench/results-transfer-codex.json).
+- One agent, one model, 15 runs per arm: read it as an indication, not proof.
+- **OpenCode** (a free model, 2 runs per trap and arm) points the same way. It fell into one trap: with no memory, with a flat file and with the graph off it repeated the mistake in both runs, with Puff in neither. Puff passed all 7 of its judged runs (the other arms 5 of 7) and averaged 209k tokens against 332k with no memory. 12 of the 40 runs were lost to the free model timing out or being unavailable and are left out, equally in every arm. Method, per-trap numbers and raw runs: [docs/BENCHMARK.md](docs/BENCHMARK.md), [`bench/results-transfer-codex.json`](bench/results-transfer-codex.json), [`bench/results-transfer-opencode.json`](bench/results-transfer-opencode.json).
 
 ### Limits, stated plainly
 
@@ -486,12 +487,12 @@ WHEN DONE: final block <puff-report>{"decisions":[...],"notes":"..."}</puff-repo
 | 🔌 | Puff MCP server | ✅ |
 | 📊 | Benchmark: tokens, files read, first-try pass rate, with vs without Puff | ✅ |
 | 🎯 | Risk from PageRank + betweenness drives routing and the context budget; lessons two calls away; failures found by wording | ✅ |
-| 🔎 | **Graph trace**: the Cypher, timing and rows behind every decision; `PUFF_GRAPH=off` ablation switch | ✅ |
+| 🔎 | **Traces in the Why tab**: the Cypher, timing and rows behind every decision; `PUFF_GRAPH=off` ablation switch | ✅ |
 | 🧩 | **Team intelligence**: modules, what each agent knows per module (routing uses it), choke points that do not run in parallel | ✅ |
 | 🔮 | **Previews on a `GRAPH.COPY`**: what a merge will change in the graph before it happens; a dry run of the plan | ✅ |
 | 🛡️ | **Trustworthy memory**: provenance for every lesson, repair on revert, a trust score that decides what the next agent is told | ✅ |
 | 🧬 | **Vector search over failures**: a vector index on `Failure.embedding`, a 30 MB static model that runs in TypeScript (no server), full-text as the fallback | ✅ |
-| 🖥️ | **Desktop app**: Tasks with a live panel per task and the graph's reason on each, Memory (every lesson with its state and trust), Agents (records, who did what), Ask Puff | ✅ |
+| 🖥️ | **Desktop app**: Tasks with a live panel per task and the graph's reason on each, Memory (every lesson with its state and trust), Agents (records, who did what), Ask Puff; archive and clear finished tasks | ✅ |
 | ✨ | Stretch: generic CLI adapter, Python support | 🔭 |
 
 ## Roadmap
@@ -511,11 +512,11 @@ Puff is built in **phases**. Each phase ends with a checkpoint: a working build 
 | **P8 Projects** ✅ | Add any repo from the app or CLI, switch between projects, per-project settings, import checks | Add a second repo, index it, switch back |
 | **P9 Command center** ✅ | Ask Puff chat with slash commands and a Claude Code orchestrator, task actions (retry, edit, remove, see changes) | "Add a /health endpoint and run it" typed in chat |
 | **P10 Installer** ✅ | Windows installer, first-run setup (database, agent CLIs) | Install, add a project, run a task without the source folder |
-| **P11 Watch agents** ✅ | Live view of what each agent does (Activity tab), re-test of the combined result after every merge | You see files read, edits and commands as they happen |
+| **P11 Watch agents** ✅ | Live view of what each agent does (the task's Live tab), re-test of the combined result after every merge | You see files read, edits and commands as they happen |
 | **P13 Foundations** ✅ | `PUFF_GRAPH=off` ablation switch, a trace of the queries behind every decision | The same task routes and gets context differently with the graph on and off |
-| **P14 Proof** 🔨 | Lesson-transfer benchmark: four arms (no memory, Puff, a flat AGENTS.md, Puff with the graph off), two agents | Codex results are in ([Benchmark](#benchmark)); the OpenCode run is still going |
-| **P15 The graph decides** ✅ | Risk from PageRank and betweenness in routing and the budget, lessons two calls away, failures found by wording, Graph trace tab, risk badge | Each decision shows its query in the app |
-| **P16 Trustworthy memory** ✅ | Provenance edges, repair on revert (Puff's or a person's), trust in context ranking and the Context tab | A revert downgrades the right lessons, end to end |
+| **P14 Proof** ✅ | Lesson-transfer benchmark: four arms (no memory, Puff, a flat AGENTS.md, Puff with the graph off), two agents | Codex and OpenCode results are in ([Benchmark](#benchmark)) |
+| **P15 The graph decides** ✅ | Risk from PageRank and betweenness in routing and the budget, lessons two calls away, failures found by wording, traces in the Why tab, risk badge | Each decision shows its query in the app |
+| **P16 Trustworthy memory** ✅ | Provenance edges, repair on revert (Puff's or a person's), trust in context ranking and in the Why tab | A revert downgrades the right lessons, end to end |
 | **P17 Team intelligence** ✅ | Modules from folders and `CALLS`, per-agent expertise in routing, choke points in scheduling, "Knows" on agent cards | The agent with the record in a module gets its tasks |
 | **P18 Previews** ✅ | Merge preview and plan dry run on a `GRAPH.COPY` | A branch's effect on the graph is known before it is merged |
 | **UI and graph features** ✅ | Tasks split view, Memory screen, plan lanes (`algo.WCC`), wait reasons by call path (`algo.SPpaths`), vector search over failures | The graph's reason on every task |
@@ -528,11 +529,11 @@ Details: [docs/ARCHITECTURE.md → Build phases](docs/ARCHITECTURE.md#build-phas
 
 ## Quick start
 
-> 🚧 Puff was built during Graph Hacks (15–18 Oct 2026). Roadmap phases P0 to P11 and P13 to P18 are in; P12 (a one-command demo) and the OpenCode half of P14 (the benchmark) are not finished. Claude Code, Codex and OpenCode run tasks in isolated git worktrees, Puff verifies with the project's own tests, records what went wrong, retries with the lesson and escalates. Tasks really run by agents were verified on the demo repository (OpenCode and Codex, both merged with tests passing). The sample data in this quick start is seeded, not real, and the UI says so.
+> 🚧 Puff was built during Graph Hacks (15–18 Oct 2026). Roadmap phases P0 to P11 and P13 to P18 are in; P12 (a one-command demo) is not finished. Claude Code, Codex and OpenCode run tasks in isolated git worktrees, Puff verifies with the project's own tests, records what went wrong, retries with the lesson and escalates. Tasks really run by agents were verified on the demo repository (OpenCode and Codex, both merged with tests passing) and on three of our own projects (Claude Code, Codex and OpenCode; the demo video shows one of them). The sample data in this quick start is seeded, not real, and the UI says so.
 
 **Just want to use it?** [Download the Windows app](#install-the-windows-app) (no source code, Node or npm needed). The rest of this section is for running from a checkout.
 
-**Prerequisites:** Node 22.12+, Docker (or [falkordblite](docs/ARCHITECTURE.md#option-b-no-docker-falkordblite)), git. Agent CLIs (`claude`, `codex`, `opencode`) are needed from phase P3.
+**Prerequisites:** Node 22.12+, git, and FalkorDB: Docker (or [falkordblite](docs/ARCHITECTURE.md#option-b-no-docker-falkordblite)), or your own FalkorDB Cloud instance (set `FALKORDB_URL`). At least one agent CLI (`claude`, `codex` or `opencode`), signed in, to run tasks.
 
 ```bash
 git clone https://github.com/Shaurya01836/Puff.git
@@ -824,7 +825,7 @@ We don't compete on orchestration breadth. Puff is the **memory and reasoning la
 
 - **Event:** Graph Hacks: Context for AI Agents (WeMakeDevs × FalkorDB), 15–18 Oct 2026
 - **Track:** **Track 02: Agent Memory and Coordination** (also relevant to Track 01, Agents That Act on Connected Data: a team of agents working through a codebase)
-- **Data:** the demo repository is our own synthetic project. No private or third-party data is used.
+- **Data:** the demo repository is our own synthetic project, and the demo video runs on one of our own apps. No private or third-party data is used.
 
 ## AI assistance
 
@@ -833,10 +834,10 @@ Puff was built with AI coding assistants, and a large share of the code was writ
 - **Claude Code (Anthropic)** wrote most of the implementation in `packages/` and `apps/desktop/`, one roadmap phase at a time: the indexer, the memory and graph queries, the context compiler, router and scheduler, the agent adapters, the orchestrator, the MCP server, the desktop screens and the tests.
 - **Codex** helped with some early scaffolding. **Codex and OpenCode** are also the product's agents: they ran the demo tasks and the benchmark.
 - **Dhruv Pancholi** directed the work: the idea and the architecture, the graph model, what each phase builds and in what order, and the rules the product keeps (Puff writes the facts itself; agents never write Cypher; every lesson is pinned to a function). He reviewed what was produced, ran real agents on real repositories, and turned what failed there into fixes and tests.
-- **How it was checked:** the test suite runs against a real FalkorDB, not mocks (more than 230 tests); tasks were run by real agents and merged only when the project's own tests passed; every benchmark task is first verified on the real demo project (the untouched repository fails, a correct change passes, the careless change trips its trap test); and the numbers above are reported with their limits.
+- **How it was checked:** about 290 tests, and the more than 110 that touch the graph run against a real FalkorDB, not mocks; tasks were run by real agents and merged only when the project's own tests passed; every benchmark task is first verified on the real demo project (the untouched repository fails, a correct change passes, the careless change trips its trap test); and the numbers above are reported with their limits.
 - **We can explain it:** the graph model, every query in [The Cypher Puff depends on](#the-cypher-puff-depends-on), and the architecture are described in this repository, and each of us can walk through them.
-- The website (`frontend/`) was built by Shaurya Upadhyay and the desktop dashboard's visual restyle by Nitin Jain.
-<!-- Confirm with Shaurya and Nitin which AI tools they used on their parts, and add it to the line above. -->
+- The website (`frontend/`) and the desktop app's control-room redesign were built by Shaurya Upadhyay; the dashboard's first restyle and archiving finished tasks by Nitin Jain; the FalkorDB Cloud setup option and the blog post by Gaurav Jain.
+<!-- Confirm with Shaurya, Nitin and Gaurav which AI tools they used on their parts, and add it to the line above. -->
 
 ## Credits
 
@@ -847,9 +848,9 @@ Ideas (not code) were drawn from [Orchestrator.inc](https://github.com/Orchestra
 | | |
 |---|---|
 | **Dhruv Pancholi** (team lead) | Graph model and queries, orchestrator, agent adapters, MCP server, desktop app (backend and screens), benchmarks, docs |
-| **Shaurya Upadhyay** | Website and repository |
-| **Nitin Jain** | Desktop dashboard design |
-| **Gaurav Jain** | |
+| **Shaurya Upadhyay** | Website and repository, the desktop app's control-room redesign |
+| **Nitin Jain** | Desktop dashboard design, archive and clear finished tasks |
+| **Gaurav Jain** | FalkorDB Cloud setup option, the launch blog post |
 
 <div align="center">
 <br/>

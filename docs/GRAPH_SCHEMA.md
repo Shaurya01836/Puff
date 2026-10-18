@@ -239,12 +239,12 @@ All queries use parameters (`$name`). Nothing is built by string concatenation.
 | Q16 | Graph and memory feed for the UI | Memory graph screen |
 | Q17 | Similar past failures: see Q22 (full-text); the vector version is still a stretch | context compiler |
 | Q18 | PageRank on calls: see Q20 | router |
-| Q19 | Trace: the queries behind each decision | every decision point, Graph trace tab |
+| Q19 | Trace: the queries behind each decision | every decision point, the task's Why tab |
 | Q20 | Risk: PageRank + betweenness per function | indexer → router, context budget, Board |
 | Q21 | Lessons two calls away | context compiler |
 | Q22 | Failures worded like the task (full-text) | context compiler |
 | Q23 | Repair on revert: downgrade what a reverted merge taught | after Puff's re-test revert, on every merge and on project open |
-| Q24 | Trust: how far to believe a lesson | context compiler, Context tab |
+| Q24 | Trust: how far to believe a lesson | context compiler, the task's Why tab |
 | Q25 | Merge preview: what a branch changes in the graph, on a `GRAPH.COPY` | run loop before each merge, Merge preview tab |
 | Q26 | Plan preview: a dry run of the scheduler on a `GRAPH.COPY` | planner, Dry run tab |
 | Q27 | Modules: which folder each function is in, and how modules depend on each other | indexer → expertise, choke points |
@@ -715,7 +715,7 @@ DETACH DELETE old                      // keep the last 5 per kind (the schedule
 | `stale` | `indexRepo` after a merge or a revert | Task | "2 memories marked possibly outdated because the code they are about changed" |
 | `locate` | `recordTestFailures` | Session | "\"never writes a password to the logs\" pinned to checkUser() by diff" |
 
-Read back with `listTraces` (both owners, newest first) and shown in the task's **Graph trace** tab. Tests: the run test (every kind after a fail-then-fix run, with `ms > 0`), the team test (`schedule`: "waits for", then "free to start"), `graph-decisions.test.ts` (Q19).
+Read back with `listTraces` (both owners, newest first) and shown in the task's **Why** tab. Tests: the run test (every kind after a fail-then-fix run, with `ms > 0`), the team test (`schedule`: "waits for", then "free to start"), `graph-decisions.test.ts` (Q19).
 
 ### Q20: Risk from PageRank and betweenness
 

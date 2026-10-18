@@ -93,7 +93,21 @@ Repeats by trap, of 3 runs per arm:
 
 #### OpenCode
 
-The OpenCode run (a free model, much slower: several runs hit the 600 s limit and were retried) was still running when this was written. Its results will be added here and to the README when it finishes.
+OpenCode with its default free model, 2 runs per trap and arm (40 runs), the same five traps and four arms. Raw runs: [`bench/results-transfer-opencode.json`](../bench/results-transfer-opencode.json).
+
+| What the agent is given | Repeated the mistake | Passed everything | Average tokens |
+|---|---|---|---|
+| Nothing (the task alone) | 2 of 7 | 5 of 7 | 332k |
+| **Puff** (context chosen by the graph) | **0 of 7** | **7 of 7** | 209k |
+| The same lessons in a flat `AGENTS.md` | 2 of 7 | 5 of 7 | 350k |
+| Puff with the graph off | 2 of 7 | 5 of 7 | 296k |
+
+**Reading it.**
+
+- **12 of the 40 runs produced no result** and are not judged: the free model's provider was unavailable or a run hit the 600 s limit. That took every run of trap 5 and the second run of trap 4, in every arm alike, leaving 7 judged runs per arm.
+- **Only trap 2 caught OpenCode** (a session token returned in the response body). With no memory, a flat file or the graph off it repeated the mistake in both runs; with Puff in neither, and those are Puff's two extra passes. One trap and two runs per arm: an indication that agrees with the Codex run, not proof.
+- **Tokens:** Puff's runs averaged 209k against 332k with no memory (about 37% fewer) and 350k with a flat file. Tokens vary by about 2x within an arm and Puff's runs were cheaper on the traps nobody fell into as well, so not all of the saving is the lesson itself.
+- **All five lessons were replayed**, as in the Codex run: OpenCode did not fall into the trap on any learn task.
 
 ## Token use (the first benchmark)
 
