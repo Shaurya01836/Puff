@@ -29,13 +29,13 @@ export function Team({
     return (
       <div
         className={cn(
-          'grid place-items-center text-center text-sm text-ink-3',
-          compact ? 'h-full p-6' : 'h-full p-10',
+          'flex h-full flex-col justify-center text-left text-sm text-ink-3',
+          compact ? 'py-4' : 'p-10',
         )}
       >
-        <div>
+        <div className="max-w-sm">
           <div className="font-display text-lg text-ink-2">Nothing has happened yet</div>
-          <p className="mt-2 max-w-sm">
+          <p className="mt-2">
             Add a goal or a task and press Run team. Every agent run, handoff, follow-up task and
             escalation shows up here, in order.
           </p>
@@ -120,7 +120,7 @@ function TaskLink({
 }
 
 function Body({ event: e, onOpenTask }: { event: TeamEvent; onOpenTask: (id: string) => void }) {
-  const when = <span className="shrink-0 text-[11px] text-ink-3">{timeAgo(e.at)}</span>;
+  const when = <span className="shrink-0 text-[0.6875rem] text-ink-3">{timeAgo(e.at)}</span>;
 
   if (e.kind === 'session') {
     const outcome = e.outcome ? OUTCOME[e.outcome] : undefined;
@@ -131,7 +131,7 @@ function Body({ event: e, onOpenTask }: { event: TeamEvent; onOpenTask: (id: str
           <span className="text-ink-3">as {e.role}</span>
           {outcome && (
             <span
-              className="rounded-sm px-2 py-0.5 text-[11px] font-medium"
+              className="rounded-sm px-2 py-0.5 text-[0.6875rem] font-medium"
               style={{
                 color: outcome.color,
                 background: `color-mix(in oklab, ${outcome.color} 14%, transparent)`,

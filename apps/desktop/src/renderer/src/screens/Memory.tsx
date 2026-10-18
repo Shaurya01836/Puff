@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ForceGraph2D, { type ForceGraphMethods, type NodeObject } from 'react-force-graph-2d';
-import { Search } from 'lucide-react';
+import { Bot, Braces, Crosshair, Search, Send, type LucideIcon } from 'lucide-react';
 import type {
   AgentName,
   GraphData,
@@ -30,6 +30,15 @@ const KIND_WORD: Record<LessonKind, string> = {
   Solution: 'Fix',
   Decision: 'Decision',
   Procedure: 'Procedure',
+};
+
+/** The order lessons are grouped in, and the heading each group gets. */
+const LESSON_KINDS: LessonKind[] = ['Failure', 'Solution', 'Decision', 'Procedure'];
+const KIND_PLURAL: Record<LessonKind, string> = {
+  Failure: 'Failures',
+  Solution: 'Fixes',
+  Decision: 'Decisions',
+  Procedure: 'Procedures',
 };
 
 const STATE_META: Record<MemoryState, { label: string; tone: string; why: string }> = {
@@ -96,15 +105,25 @@ export function Memory({
     i.state === 'outdated' ||
     i.state === 'downgraded' ||
     (i.trust !== undefined && i.trust < LOW_TRUST && i.state !== 'superseded');
-  const shown = (items ?? []).filter((i) => {
-    if (kind !== 'all' && i.kind !== kind) return false;
+  const matches = (i: MemoryItem) => {
     if (show === 'current' && i.state !== 'current') return false;
     if (show === 'look' && !needsLook(i)) return false;
     const q = query.trim().toLowerCase();
     if (q && !`${i.text} ${i.about.join(' ')}`.toLowerCase().includes(q)) return false;
     return true;
-  });
-  const selected = (items ?? []).find((i) => i.id === selectedId) ?? shown[0];
+  };
+  // What survives the state and search filters; the kind filter is applied on top of this.
+  const matching = (items ?? []).filter(matches);
+  const shown = matching.filter((i) => kind === 'all' || i.kind === kind);
+  // Group the lessons by what they are, with anything worth a look first inside each group, so the
+  // list reads as labelled sections rather than one long mixed stream.
+  const grouped = LESSON_KINDS.map((k) => ({
+    kind: k,
+    items: shown
+      .filter((i) => i.kind === k)
+      .sort((a, b) => Number(needsLook(b)) - Number(needsLook(a)) || b.at - a.at),
+  })).filter((g) => g.items.length > 0);
+  const selected = (items ?? []).find((i) => i.id === selectedId) ?? grouped[0]?.items[0];
   const lookCount = (items ?? []).filter(needsLook).length;
 
   const toggle = (
@@ -150,8 +169,8 @@ export function Memory({
           {KINDS.map((k) => {
             const n =
               k.id === 'all'
-                ? (items?.length ?? 0)
-                : (items ?? []).filter((i) => i.kind === k.id).length;
+                ? matching.length
+                : matching.filter((i) => i.kind === k.id).length;
             return (
               <button
                 key={k.id}
@@ -207,14 +226,39 @@ export function Memory({
       ) : (
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(17rem,26rem)_1fr]">
           <ul className="min-h-0 overflow-y-auto border-r border-line" aria-label="Lessons">
-            {shown.map((i) => (
-              <LessonRow
-                key={i.id}
-                item={i}
-                selected={i.id === selected?.id}
-                onSelect={() => setSelectedId(i.id)}
-              />
-            ))}
+            {grouped.map((group) => {
+              const color = NODE_COLORS[group.kind] ?? '#77777f';
+              return (
+                <li key={group.kind}>
+                  <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-line bg-surface-2/95 px-4 py-1.5 backdrop-blur">
+                    <span
+                      className="size-1.5 rounded-full"
+                      style={{ background: color }}
+                      aria-hidden
+                    />
+                    <span
+                      className="text-[0.6875rem] font-semibold tracking-wide uppercase"
+                      style={{ color }}
+                    >
+                      {KIND_PLURAL[group.kind]}
+                    </span>
+                    <span className="ml-auto font-mono text-[0.625rem] tabular-nums text-ink-3">
+                      {group.items.length}
+                    </span>
+                  </div>
+                  <ul>
+                    {group.items.map((i) => (
+                      <LessonRow
+                        key={i.id}
+                        item={i}
+                        selected={i.id === selected?.id}
+                        onSelect={() => setSelectedId(i.id)}
+                      />
+                    ))}
+                  </ul>
+                </li>
+              );
+            })}
             {items && shown.length === 0 && (
               <li className="py-12 text-center text-xs text-ink-3">No lessons match</li>
             )}
@@ -247,14 +291,80 @@ export function Memory({
 function StateBadge({ state }: { state: MemoryState }) {
   const m = STATE_META[state];
   return (
-    <span title={m.why} className={cn('rounded px-1.5 py-0.5 text-[10px] font-medium', m.tone)}>
+    <span title={m.why} className={cn('rounded px-1.5 py-0.5 text-[0.625rem] font-medium', m.tone)}>
       {m.label}
     </span>
   );
 }
 
+/**
+ * Trust reads in the accent, never in amber: solid for strong trust, the lighter tone for the middle
+ * band, and red below the line where a lesson is held back from agents.
+ */
 function trustTone(trust: number): string {
-  return trust >= 0.7 ? '#34d399' : trust >= LOW_TRUST ? '#d29922' : '#f85149';
+  if (trust >= 0.7) return 'var(--color-brand)';
+  if (trust >= LOW_TRUST) return 'var(--color-brand-soft)';
+  return 'var(--color-bad)';
+}
+
+/** The trust value, what it means, and the two lines where a lesson stops being trusted. */
+function TrustMeter({ trust }: { trust: number }) {
+  const tone = trustTone(trust);
+  const pct = Math.round(trust * 100);
+  const status =
+    trust < 0.35
+      ? 'left out of agent prompts'
+      : trust < LOW_TRUST
+        ? 'given to agents as low confidence'
+        : 'given to agents';
+  return (
+    <div className="max-w-md">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span
+          className="font-mono text-lg leading-none font-semibold tabular-nums"
+          style={{ color: tone }}
+        >
+          {trust.toFixed(2)}
+        </span>
+        <span className="text-xs text-ink-3">{status}</span>
+      </div>
+      <div
+        role="meter"
+        aria-valuemin={0}
+        aria-valuemax={1}
+        aria-valuenow={trust}
+        aria-label="Trust"
+        className="relative mt-2 h-2.5 rounded-full bg-surface-3 ring-1 ring-line ring-inset"
+      >
+        <div
+          className="h-full rounded-full transition-[width] duration-500 ease-out"
+          style={{
+            width: `${Math.max(pct, 3)}%`,
+            background: `linear-gradient(90deg, color-mix(in oklab, ${tone} 35%, transparent), ${tone})`,
+            boxShadow: `0 0 5px -3px color-mix(in oklab, ${tone} 55%, transparent)`,
+          }}
+        />
+        <span
+          className="pointer-events-none absolute inset-y-0 w-px bg-abyss/70"
+          style={{ left: '35%' }}
+        />
+        <span
+          className="pointer-events-none absolute inset-y-0 w-px bg-abyss/70"
+          style={{ left: '50%' }}
+        />
+      </div>
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[0.625rem] text-ink-3">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-px bg-ink-3" />
+          left out below 0.35
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-px bg-ink-3" />
+          low confidence below 0.50
+        </span>
+      </div>
+    </div>
+  );
 }
 
 function LessonRow({
@@ -282,7 +392,7 @@ function LessonRow({
           i.state === 'superseded' && !selected && 'opacity-60',
         )}
       >
-        <span className="flex items-center gap-2 text-[11px]">
+        <span className="flex items-center gap-2 text-[0.6875rem]">
           <span className="font-semibold" style={{ color }}>
             {KIND_WORD[i.kind]}
           </span>
@@ -297,7 +407,7 @@ function LessonRow({
         >
           {i.text}
         </span>
-        <span className="flex items-center gap-2 text-[11px] text-ink-2">
+        <span className="flex items-center gap-2 text-[0.6875rem] text-ink-2">
           <span className="min-w-0 truncate font-mono text-ink-3">
             {i.about.length ? i.about.slice(0, 2).map(fnName).join(', ') : (i.appliesTo ?? '')}
             {i.about.length > 2 ? ` +${i.about.length - 2}` : ''}
@@ -340,112 +450,134 @@ function LessonDetail({
           ? 'Replaces'
           : '';
   return (
-    <div className="flex flex-col gap-6 p-6">
-      <div>
-        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-semibold" style={{ color }}>
+    <div className="flex min-h-full flex-col">
+      <header className="sticky top-0 z-10 border-b border-line bg-abyss/95 px-6 py-4 backdrop-blur">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span
+            className="rounded px-1.5 py-0.5 text-[0.625rem] font-semibold"
+            style={{ color, background: `color-mix(in oklab, ${color} 16%, transparent)` }}
+          >
             {KIND_WORD[i.kind]}
           </span>
           <StateBadge state={i.state} />
           {i.seeded && (
-            <span className="rounded bg-warn/10 px-1.5 py-0.5 text-[10px] text-warn">sample</span>
+            <span className="rounded bg-warn/10 px-1.5 py-0.5 text-[0.625rem] text-warn">
+              sample
+            </span>
           )}
-          <span className="font-mono text-[11px] text-ink-3">{i.id}</span>
+          <span className="ml-auto font-mono text-[0.625rem] text-ink-3">{i.id}</span>
         </div>
-        <h2 className="font-display text-lg leading-snug font-semibold text-ink">{i.text}</h2>
-        <p className="mt-2 text-[13px] leading-relaxed text-ink-2">{STATE_META[i.state].why}</p>
-      </div>
+        <h2 className="mt-3 font-display text-lg leading-snug font-semibold text-ink">{i.text}</h2>
+      </header>
 
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm xl:grid-cols-4">
-        <Fact label={i.kind === 'Procedure' ? 'Applies to' : 'About'}>
-          {i.about.length ? (
-            <span className="flex flex-col gap-0.5 font-mono text-xs text-ink-3">
-              {i.about.map((a) => (
-                <span key={a} title={a} className="truncate">
-                  {fnName(a)}
+      <div className="flex flex-col gap-6 px-6 py-5">
+        <section>
+          <SectionTitle>What this means</SectionTitle>
+          <p className="text-[0.8125rem] leading-relaxed text-ink-2">{STATE_META[i.state].why}</p>
+        </section>
+
+        <section>
+          <SectionTitle>Details</SectionTitle>
+          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <Fact icon={Braces} label={i.kind === 'Procedure' ? 'Applies to' : 'About'}>
+              {i.about.length ? (
+                <span className="flex flex-wrap gap-1">
+                  {i.about.map((a) => (
+                    <span
+                      key={a}
+                      title={a}
+                      className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[0.6875rem] text-ink-2"
+                    >
+                      {fnName(a)}
+                    </span>
+                  ))}
                 </span>
-              ))}
-            </span>
-          ) : (
-            (i.appliesTo ?? 'nothing recorded')
-          )}
-        </Fact>
-        <Fact label="Learned">
-          <span className="flex flex-col gap-1">
-            {i.agent ? (
-              <AgentChip agent={i.agent as AgentName} />
-            ) : (
-              <span>by a person or seed</span>
+              ) : (
+                <span className="text-sm text-ink-2">{i.appliesTo ?? 'nothing recorded'}</span>
+              )}
+            </Fact>
+            <Fact icon={Bot} label="Learned">
+              <span className="flex flex-col gap-1.5">
+                {i.agent ? (
+                  <AgentChip agent={i.agent as AgentName} />
+                ) : (
+                  <span className="text-sm text-ink-2">by a person or seed</span>
+                )}
+                <span className="text-xs text-ink-3">{timeAgo(i.at)}</span>
+              </span>
+            </Fact>
+            <Fact icon={Send} label="Given to agents">
+              <Count n={i.usedIn} unit={i.usedIn === 1 ? 'time' : 'times'} />
+            </Fact>
+            {i.hits !== undefined && (
+              <Fact icon={Crosshair} label="Hit">
+                <Count n={i.hits} unit={i.hits === 1 ? 'time' : 'times'} />
+              </Fact>
             )}
-            <span className="text-xs text-ink-2">{timeAgo(i.at)}</span>
-          </span>
-        </Fact>
-        <Fact label="Given to agents">
-          {i.usedIn} {i.usedIn === 1 ? 'time' : 'times'}
-        </Fact>
-        {i.hits !== undefined && (
-          <Fact label="Hit">
-            {i.hits} {i.hits === 1 ? 'time' : 'times'}
-          </Fact>
+          </dl>
+        </section>
+
+        {i.trust !== undefined && (
+          <section>
+            <SectionTitle>How far it is trusted</SectionTitle>
+            <TrustMeter trust={i.trust} />
+            <ul className="mt-3 flex flex-col gap-0.5 text-[0.8125rem] text-ink-2">
+              <li>Starts at 0.60.</li>
+              {(i.trustWhy ?? []).map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          </section>
         )}
-      </dl>
 
-      {i.trust !== undefined && (
+        {i.related && related && (
+          <section>
+            <SectionTitle>{related}</SectionTitle>
+            <button
+              onClick={() => onOpen(i.related!.id)}
+              className="w-full rounded-md border border-line bg-surface-2 px-3 py-2.5 text-left text-sm text-ink hover:border-line-strong hover:bg-surface-3"
+            >
+              {i.related.text}
+            </button>
+          </section>
+        )}
+
         <section>
-          <SectionTitle>How far it is trusted</SectionTitle>
-          <div className="flex items-center gap-3">
-            <span className="h-1.5 w-40 overflow-hidden rounded-full bg-surface-3">
-              <span
-                className="block h-full rounded-full"
-                style={{ width: `${Math.round(i.trust * 100)}%`, background: trustTone(i.trust) }}
-              />
-            </span>
-            <span className="font-mono text-sm tabular-nums" style={{ color: trustTone(i.trust) }}>
-              {i.trust.toFixed(2)}
-            </span>
-            <span className="text-xs text-ink-3">
-              {i.trust < 0.35
-                ? 'left out of agent prompts'
-                : i.trust < LOW_TRUST
-                  ? 'given to agents as low confidence'
-                  : 'given to agents'}
-            </span>
-          </div>
-          <ul className="mt-2 flex flex-col gap-0.5 text-[13px] text-ink-2">
-            <li>Starts at 0.60.</li>
-            {(i.trustWhy ?? []).map((w) => (
-              <li key={w}>{w}</li>
-            ))}
-          </ul>
+          <SectionTitle>Where it sits in the graph</SectionTitle>
+          <FocusGraph projectId={projectId} focusId={i.id} />
         </section>
-      )}
-
-      {i.related && related && (
-        <section>
-          <SectionTitle>{related}</SectionTitle>
-          <button
-            onClick={() => onOpen(i.related!.id)}
-            className="w-full rounded-md border border-line bg-surface-2 px-3 py-2.5 text-left text-sm text-ink hover:border-line-strong hover:bg-surface-3"
-          >
-            {i.related.text}
-          </button>
-        </section>
-      )}
-
-      <section>
-        <SectionTitle>Where it sits in the graph</SectionTitle>
-        <FocusGraph projectId={projectId} focusId={i.id} />
-      </section>
+      </div>
     </div>
   );
 }
 
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+function Fact({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: LucideIcon;
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="min-w-0">
-      <dt className="mb-1 text-[11px] text-ink-3">{label}</dt>
-      <dd className="text-ink">{children}</dd>
+    <div className="flex flex-col gap-2 rounded-md border border-line bg-surface-2/50 p-3.5">
+      <dt className="flex items-center gap-1.5 text-[0.6875rem] font-medium tracking-wide text-ink-3 uppercase">
+        <Icon className="size-3" />
+        {label}
+      </dt>
+      <dd className="min-w-0 text-ink">{children}</dd>
     </div>
+  );
+}
+
+/** A count with its unit, the number given the weight */
+function Count({ n, unit }: { n: number; unit: string }) {
+  return (
+    <span className="flex items-baseline gap-1">
+      <span className="text-lg leading-none font-semibold tabular-nums">{n}</span>
+      <span className="text-xs text-ink-3">{unit}</span>
+    </span>
   );
 }
 
@@ -620,7 +752,7 @@ function FocusGraph({ projectId, focusId }: { projectId: string; focusId: string
           onEngineStop={() => fg.current?.zoomToFit(400, 40)}
         />
       )}
-      <div className="pointer-events-none absolute bottom-2 left-3 text-[10px] text-ink-3">
+      <div className="pointer-events-none absolute bottom-2 left-3 text-[0.625rem] text-ink-3">
         two steps around this lesson{hidden > 0 ? ` · ${hidden} more not drawn` : ''} · scroll to
         zoom
       </div>

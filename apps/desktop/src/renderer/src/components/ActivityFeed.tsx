@@ -27,12 +27,12 @@ function Step({ step, start }: { step: ActivityStep; start: number }) {
   return (
     <li
       className={cn(
-        'flex items-start gap-2.5 rounded-sm px-2.5 py-1.5 text-[13px] leading-snug',
+        'flex items-start gap-2.5 rounded-sm px-2.5 py-1.5 text-[0.8125rem] leading-snug',
         step.kind === 'phase' && 'bg-brand/8',
         failed && 'bg-bad/8',
       )}
     >
-      <span className="mt-0.5 w-12 shrink-0 font-mono text-[9px] tracking-wide text-ink-3 uppercase">
+      <span className="mt-0.5 w-12 shrink-0 font-mono text-[0.5625rem] tracking-wide text-ink-3 uppercase">
         {KIND_WORD[step.kind]}
       </span>
       <span
@@ -45,7 +45,7 @@ function Step({ step, start }: { step: ActivityStep; start: number }) {
       >
         {step.text}
       </span>
-      <span className="shrink-0 pt-0.5 font-mono text-[10px] text-ink-3 tabular-nums">
+      <span className="shrink-0 pt-0.5 font-mono text-[0.625rem] text-ink-3 tabular-nums">
         {elapsed(step.at - start)}
       </span>
     </li>
@@ -79,7 +79,7 @@ export function ActivityFeed({ groups, active }: { groups: ActivityGroup[]; acti
     <div
       role="group"
       aria-label="How to show the steps"
-      className="flex self-end rounded-sm border border-line bg-surface-2 p-0.5 text-[11px]"
+      className="flex self-end rounded-sm border border-line bg-surface-2 p-0.5 text-[0.6875rem]"
     >
       {(
         [
@@ -143,7 +143,7 @@ export function ActivityFeed({ groups, active }: { groups: ActivityGroup[]; acti
               ) : null}
             </div>
             {g.steps.length === 0 ? (
-              <p className="px-2.5 text-[12px] text-ink-3">
+              <p className="px-2.5 text-[0.75rem] text-ink-3">
                 No steps were recorded for this attempt.
               </p>
             ) : (
@@ -172,7 +172,7 @@ function ConsoleView({ groups }: { groups: ActivityGroup[] }) {
   return (
     <pre
       aria-label="Console"
-      className="max-h-[62vh] overflow-auto rounded-md border border-line bg-abyss p-3.5 font-mono text-[12px] leading-relaxed text-ink-2"
+      className="max-h-[62vh] overflow-auto rounded-md border border-line bg-abyss p-3.5 font-mono text-[0.75rem] leading-relaxed text-ink-2"
     >
       {groups.map((g, i) => (
         <div key={g.id} className="mb-3 last:mb-0">

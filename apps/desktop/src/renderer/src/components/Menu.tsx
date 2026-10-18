@@ -51,7 +51,7 @@ export function Menu({
         onClick={() => setOpen((o) => !o)}
         className={cn(
           'inline-flex items-center gap-1.5 rounded-sm border border-line-strong bg-surface-2 font-medium text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink',
-          compact ? 'px-2 py-1 text-[11px]' : 'px-2.5 py-1.5 text-xs',
+          compact ? 'px-2 py-1 text-[0.6875rem]' : 'px-2.5 py-1.5 text-xs',
         )}
       >
         {icon}
@@ -75,7 +75,7 @@ export function Menu({
                 className="flex w-full flex-col rounded-sm px-2.5 py-1.5 text-left text-xs text-ink hover:bg-surface-3 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {item.label}
-                {item.hint && <span className="text-[10px] text-ink-3">{item.hint}</span>}
+                {item.hint && <span className="text-[0.625rem] text-ink-3">{item.hint}</span>}
               </button>
             </li>
           ))}

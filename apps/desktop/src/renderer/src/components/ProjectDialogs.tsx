@@ -68,11 +68,11 @@ function Dialog({
 function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <div>
-      <div className="mb-1.5 text-[11px] font-semibold tracking-wide text-ink-3 uppercase">
+      <div className="mb-1.5 text-[0.6875rem] font-semibold tracking-wide text-ink-3 uppercase">
         {label}
       </div>
       {children}
-      {hint && <p className="mt-1.5 text-[11px] text-ink-3">{hint}</p>}
+      {hint && <p className="mt-1.5 text-[0.6875rem] text-ink-3">{hint}</p>}
     </div>
   );
 }
@@ -99,7 +99,7 @@ function Row({ tone, label, children }: { tone: Tone; label: string; children: R
       />
       <div className="min-w-0 text-sm">
         <div className="font-medium">{label}</div>
-        <div className="text-[13px] leading-snug text-ink-2">{children}</div>
+        <div className="text-[0.8125rem] leading-snug text-ink-2">{children}</div>
       </div>
     </li>
   );
@@ -266,7 +266,7 @@ export function ImportProjectDialog({
           </ul>
 
           {info.problems.length === 0 && info.runBlockers.length > 0 && (
-            <div className="rounded-md border border-warn/25 bg-warn/10 p-4 text-[13px] leading-snug text-ink-2">
+            <div className="rounded-md border border-warn/25 bg-warn/10 p-4 text-[0.8125rem] leading-snug text-ink-2">
               <div className="mb-1 font-medium text-warn">
                 You can add it and explore it, but agents can't run yet
               </div>
@@ -300,7 +300,7 @@ export function ImportProjectDialog({
           )}
 
           {info.warnings.length > 0 && info.problems.length === 0 && (
-            <ul className="flex list-disc flex-col gap-1 pl-5 text-[13px] leading-snug text-ink-3">
+            <ul className="flex list-disc flex-col gap-1 pl-5 text-[0.8125rem] leading-snug text-ink-3">
               {info.warnings.map((w) => (
                 <li key={w}>{w}</li>
               ))}
@@ -437,7 +437,7 @@ export function ProjectSettingsDialog({
 
       <div className="rounded-md border border-bad/25 bg-bad/5 p-4">
         <div className="text-sm font-medium">Remove this project</div>
-        <p className="mt-1 text-[13px] leading-snug text-ink-3">
+        <p className="mt-1 text-[0.8125rem] leading-snug text-ink-3">
           Puff forgets it. Your folder and files are never touched.
         </p>
         {!confirming ? (
@@ -450,7 +450,7 @@ export function ProjectSettingsDialog({
           </button>
         ) : (
           <div className="mt-3 flex flex-col gap-3">
-            <label className="flex cursor-pointer items-start gap-2.5 text-[13px] text-ink-2">
+            <label className="flex cursor-pointer items-start gap-2.5 text-[0.8125rem] text-ink-2">
               <input
                 type="checkbox"
                 checked={deleteMemory}

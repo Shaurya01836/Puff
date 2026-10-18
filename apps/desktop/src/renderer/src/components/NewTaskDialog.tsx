@@ -185,7 +185,7 @@ export function NewTaskDialog({
                 {targets.map((t) => (
                   <span
                     key={t.id}
-                    className="inline-flex items-center gap-1 rounded-sm bg-brand/15 px-2 py-0.5 font-mono text-[11px] text-brand-soft"
+                    className="inline-flex items-center gap-1 rounded-sm bg-brand/15 px-2 py-0.5 font-mono text-[0.6875rem] text-brand-soft"
                     title={t.id}
                   >
                     {t.name}
@@ -223,7 +223,7 @@ export function NewTaskDialog({
                         className="flex w-full items-baseline gap-2 rounded-sm px-2 py-1 text-left text-sm hover:bg-surface-3"
                       >
                         <span className="font-mono text-xs">{s.name}</span>
-                        <span className="truncate font-mono text-[11px] text-ink-3">{s.file}</span>
+                        <span className="truncate font-mono text-[0.6875rem] text-ink-3">{s.file}</span>
                       </button>
                     </li>
                   ))}
@@ -315,11 +315,11 @@ function Field({
 }) {
   return (
     <div>
-      <div className="mb-1.5 text-[11px] font-semibold tracking-wide text-ink-3 uppercase">
+      <div className="mb-1.5 text-[0.6875rem] font-semibold tracking-wide text-ink-3 uppercase">
         {label}
       </div>
       {children}
-      {hint && <p className="mt-1.5 text-[11px] text-ink-3">{hint}</p>}
+      {hint && <p className="mt-1.5 text-[0.6875rem] text-ink-3">{hint}</p>}
     </div>
   );
 }

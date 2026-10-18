@@ -36,5 +36,5 @@ export const DOCS_URL = {
 
 /** Public origin of the deployed site, used for metadata and the sitemap. */
 export const SITE_URL = (
-  process.env.NEXT_PUBLIC_SITE_URL ?? "https://puff-puce-one.vercel.app"
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://puffcode.vercel.app"
 ).replace(/\/+$/, "");

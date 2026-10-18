@@ -142,7 +142,7 @@ export function ChatPanel({
         </div>
         <div className="min-w-0 flex-1">
           <span className="font-display text-xs font-bold tracking-tight text-ink">Ask Puff</span>
-          <div className="flex items-center gap-1.5 truncate font-mono text-[10px] text-ink-2">
+          <div className="flex items-center gap-1.5 truncate font-mono text-[0.625rem] text-ink-2">
             <span>Talking to</span>
             {info?.choices && info.agent ? (
               <select
@@ -151,7 +151,7 @@ export function ChatPanel({
                 disabled={busy}
                 aria-label="Which agent answers"
                 title="Which agent answers in Ask Puff. Changing it starts a new conversation."
-                className="rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[10px] text-ink outline-none focus:border-brand/50 disabled:opacity-50"
+                className="rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[0.625rem] text-ink outline-none focus:border-brand/50 disabled:opacity-50"
               >
                 {info.choices.map((c) => (
                   <option key={c.id} value={c.id} disabled={!c.installed}>
@@ -190,7 +190,7 @@ export function ChatPanel({
       </header>
 
       {info && (!info.ready || info.needsSignIn) && (
-        <div className="border-b border-warn/20 bg-warn/10 px-4 py-2 font-mono text-[11px] leading-snug text-warn">
+        <div className="border-b border-warn/20 bg-warn/10 px-4 py-2 font-mono text-[0.6875rem] leading-snug text-warn">
           <p>{info.note ?? `${info.brain} is not available.`}</p>
           {info.needsSignIn && (
             <button
@@ -220,14 +220,14 @@ export function ChatPanel({
                   Tell Puff what you want in plain words. It coordinates Claude Code, Codex, and
                   OpenCode, writes goals, and reads the project's memory and code graph.
                 </p>
-                <p className="mt-2 font-mono text-[11px] text-ink-2">
+                <p className="mt-2 font-mono text-[0.6875rem] text-ink-2">
                   Start with <b className="font-semibold text-brand">/</b> for instant zero-token
                   commands.
                 </p>
               </div>
 
               <div className="space-y-2">
-                <div className="font-mono text-[10px] uppercase tracking-wide text-ink-2">
+                <div className="font-mono text-[0.625rem] uppercase tracking-wide text-ink-2">
                   Suggested prompts
                 </div>
                 <div className="grid grid-cols-1 gap-1.5">
@@ -289,11 +289,11 @@ export function ChatPanel({
                     )}
                   >
                     <span className="font-mono text-xs font-semibold text-brand">{c.usage}</span>
-                    <span className="min-w-0 flex-1 truncate text-[11px] text-ink">
+                    <span className="min-w-0 flex-1 truncate text-[0.6875rem] text-ink">
                       {c.summary}
                     </span>
                     {c.spends && (
-                      <span className="font-mono text-[9px] uppercase tracking-wider text-warn">
+                      <span className="font-mono text-[0.5625rem] uppercase tracking-wider text-warn">
                         tokens
                       </span>
                     )}
@@ -314,7 +314,7 @@ export function ChatPanel({
               className="max-h-32 min-h-10 w-full resize-none bg-transparent font-sans text-xs text-ink outline-none placeholder:text-ink-3"
             />
             <div className="mt-1 flex items-center justify-between border-t border-line/60 pt-2">
-              <div className="flex items-center gap-2 font-mono text-[10px] text-ink-3">
+              <div className="flex items-center gap-2 font-mono text-[0.625rem] text-ink-3">
                 <span>↵ to send</span>
                 <span>·</span>
                 <span>/ for commands</span>
@@ -350,7 +350,7 @@ function Bubble({
         <div className="rounded-md rounded-br-xs border border-line bg-surface-3 px-3.5 py-2.5 text-xs leading-relaxed text-ink whitespace-pre-wrap">
           {m.text}
         </div>
-        <span className="mt-1 font-mono text-[9px] uppercase tracking-wider text-ink-3">You</span>
+        <span className="mt-1 font-mono text-[0.5625rem] uppercase tracking-wider text-ink-3">You</span>
       </div>
     );
   }
@@ -358,14 +358,14 @@ function Bubble({
   if (m.role === 'assistant') {
     return (
       <div className="mr-6 flex flex-col items-start">
-        <div className="mb-1 font-mono text-[9px] uppercase tracking-wider text-ink-2">
+        <div className="mb-1 font-mono text-[0.5625rem] uppercase tracking-wider text-ink-2">
           Puff Orchestrator
         </div>
         <div className="rounded-md rounded-bl-xs border border-line-strong bg-surface-2 px-3.5 py-2.5 text-xs leading-relaxed text-ink whitespace-pre-wrap">
           {m.text}
         </div>
         {m.tokens && (
-          <div className="mt-1 font-mono text-[9px] text-ink-3 tabular-nums">
+          <div className="mt-1 font-mono text-[0.5625rem] text-ink-3 tabular-nums">
             {formatTokens(m.tokens.in + m.tokens.out)} tokens used
           </div>
         )}
@@ -410,7 +410,7 @@ function Bubble({
             </button>
           </div>
         ) : (
-          <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-ink-3">
+          <p className="mt-2 font-mono text-[0.625rem] uppercase tracking-wider text-ink-3">
             {a.state === 'approved' ? '✓ Run approved' : '✕ Run declined'}
           </p>
         )}

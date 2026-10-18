@@ -63,13 +63,13 @@ export function ProjectSwitcher({
           className="flex w-full items-start justify-between text-left"
         >
           <div className="min-w-0 flex-1">
-            <span className="block font-mono text-[10px] uppercase tracking-wide text-ink-3">
+            <span className="block font-mono text-[0.625rem] uppercase tracking-wide text-ink-3">
               WORKSPACE
             </span>
             <span className="mt-0.5 block truncate text-sm font-semibold text-ink">
               {noProject ? 'No project yet' : (info?.projectName ?? 'puff_demo')}
             </span>
-            <span className="mt-1 block font-mono text-[10px] text-ink-2">
+            <span className="mt-1 block font-mono text-[0.625rem] text-ink-2">
               {live ? 'falkordb · connected' : 'mock data · connected'}
             </span>
           </div>
@@ -77,7 +77,7 @@ export function ProjectSwitcher({
         </button>
 
         {!noProject && live && (
-          <div className="mt-2 flex items-center justify-between border-t border-line/60 pt-1.5 font-mono text-[10px] text-ink-3">
+          <div className="mt-2 flex items-center justify-between border-t border-line/60 pt-1.5 font-mono text-[0.625rem] text-ink-3">
             <span className="truncate">{info?.graphName ?? 'graph: connected'}</span>
             <button
               onClick={reindex}
@@ -90,9 +90,9 @@ export function ProjectSwitcher({
           </div>
         )}
 
-        {result && <div className="mt-1.5 font-mono text-[10px] text-brand">{result}</div>}
+        {result && <div className="mt-1.5 font-mono text-[0.625rem] text-brand">{result}</div>}
         {!live && info?.error && (
-          <div className="mt-1.5 line-clamp-2 font-mono text-[10px] text-warn">{info.error}</div>
+          <div className="mt-1.5 line-clamp-2 font-mono text-[0.625rem] text-warn">{info.error}</div>
         )}
       </div>
 
@@ -123,7 +123,7 @@ export function ProjectSwitcher({
                     <span className="block truncate text-sm">{p.name}</span>
                     <span
                       className={cn(
-                        'block truncate font-mono text-[10px]',
+                        'block truncate font-mono text-[0.625rem]',
                         p.missing ? 'text-bad' : 'text-ink-3',
                       )}
                       title={p.repoPath}
@@ -146,7 +146,7 @@ export function ProjectSwitcher({
               </li>
             ))}
             {projects?.length === 0 && (
-              <li className="px-2 py-2 text-[12px] text-ink-3">No projects yet.</li>
+              <li className="px-2 py-2 text-[0.75rem] text-ink-3">No projects yet.</li>
             )}
           </ul>
           <button

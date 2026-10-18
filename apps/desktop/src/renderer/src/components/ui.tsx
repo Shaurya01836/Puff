@@ -12,7 +12,7 @@ export function Panel({ className, children }: { className?: string; children: R
 export function SectionTitle({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
-      <h2 className="text-[11px] font-semibold tracking-wide text-ink-3 uppercase">{children}</h2>
+      <h2 className="text-[0.6875rem] font-semibold tracking-wide text-ink-3 uppercase">{children}</h2>
       {right}
     </div>
   );
@@ -71,7 +71,7 @@ export function AgentChip({ agent, sub }: { agent?: Actor; sub?: string }) {
         <span className="block truncate text-xs font-medium text-ink">
           {AGENT_META[agent].label}
         </span>
-        {sub && <span className="block truncate font-mono text-[10px] text-ink-3">{sub}</span>}
+        {sub && <span className="block truncate font-mono text-[0.625rem] text-ink-3">{sub}</span>}
       </span>
     </span>
   );
@@ -86,7 +86,7 @@ export function StatusPill({ status, byYou }: { status: TaskStatus; byYou?: bool
       : STATUS_META[status];
   const color = TONE_COLOR[meta.tone];
   return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-sm border border-line bg-surface-2/70 px-1.5 py-0.5 text-[11px] font-medium">
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-sm border border-line bg-surface-2/70 px-1.5 py-0.5 text-[0.6875rem] font-medium">
       <span style={{ color }}>{meta.label}</span>
       {meta.live && (
         <span
@@ -101,7 +101,7 @@ export function StatusPill({ status, byYou }: { status: TaskStatus; byYou?: bool
 
 export function WaitingChip({ on }: { on: string[] }) {
   return (
-    <span className="rounded-sm border border-warn/20 bg-warn/10 px-1.5 py-0.5 text-[11px] text-warn">
+    <span className="rounded-sm border border-warn/20 bg-warn/10 px-1.5 py-0.5 text-[0.6875rem] text-warn">
       Waiting on {on.join(', ')} · overlapping code
     </span>
   );
@@ -109,7 +109,7 @@ export function WaitingChip({ on }: { on: string[] }) {
 
 export function Kbd({ children }: { children: ReactNode }) {
   return (
-    <kbd className="rounded-sm border border-line bg-surface-3 px-1.5 py-0.5 font-mono text-[10px] text-ink-3">
+    <kbd className="rounded-sm border border-line bg-surface-3 px-1.5 py-0.5 font-mono text-[0.625rem] text-ink-3">
       {children}
     </kbd>
   );
@@ -118,7 +118,7 @@ export function Kbd({ children }: { children: ReactNode }) {
 export function MockBadge({ label = 'Mock data' }: { label?: string }) {
   return (
     <span
-      className="rounded-sm border border-warn/25 bg-warn/10 px-1.5 py-0.5 text-[11px] font-medium text-warn"
+      className="rounded-sm border border-warn/25 bg-warn/10 px-1.5 py-0.5 text-[0.6875rem] font-medium text-warn"
       title="Data comes from packages/shared/src/mocks until the backend lands"
     >
       {label}

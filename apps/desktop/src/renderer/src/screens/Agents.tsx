@@ -65,7 +65,7 @@ function AgentCard({ agent: a }: { agent: AgentProfile }) {
           <h3 className="font-display text-base font-semibold leading-tight text-ink">
             {meta.label}
           </h3>
-          <p className="mt-0.5 text-[11px] leading-snug text-ink-2 first-letter:uppercase">
+          <p className="mt-0.5 text-[0.6875rem] leading-snug text-ink-2 first-letter:uppercase">
             {meta.roles?.toLowerCase()}
           </p>
         </div>
@@ -95,7 +95,7 @@ function AgentCard({ agent: a }: { agent: AgentProfile }) {
         <div className="flex items-center justify-between pt-0.5">
           <dt className="text-ink-3">instances</dt>
           <dd
-            className={cn('text-[11px] tabular-nums', a.busy > 0 ? 'text-brand' : 'text-ink-2')}
+            className={cn('text-[0.6875rem] tabular-nums', a.busy > 0 ? 'text-brand' : 'text-ink-2')}
             title={`${a.busy} of ${a.instances} busy`}
           >
             {a.busy}/{a.instances}
@@ -106,14 +106,14 @@ function AgentCard({ agent: a }: { agent: AgentProfile }) {
       {/* What this agent has done in each module (Q28): the record that can outrank a declared strength */}
       {a.modules && a.modules.length > 0 && (
         <div className="mt-4">
-          <div className="mb-1.5 font-mono text-[10px] tracking-wider text-ink-3 uppercase">
+          <div className="mb-1.5 font-mono text-[0.625rem] tracking-wider text-ink-3 uppercase">
             Knows
           </div>
           <ul className="flex flex-col gap-1">
             {a.modules.slice(0, 4).map((m) => (
               <li
                 key={m.module}
-                className="flex items-center gap-2 font-mono text-[11px]"
+                className="flex items-center gap-2 font-mono text-[0.6875rem]"
                 title={`${m.wins} of ${m.runs} runs in the ${m.module} module succeeded`}
               >
                 <span className="w-24 truncate text-ink">{m.module}</span>
@@ -138,7 +138,7 @@ function AgentCard({ agent: a }: { agent: AgentProfile }) {
           {a.strengths.map((s) => (
             <span
               key={s}
-              className="border border-line bg-surface-2 px-2 py-0.5 font-mono text-[10px] text-ink-2"
+              className="border border-line bg-surface-2 px-2 py-0.5 font-mono text-[0.625rem] text-ink-2"
             >
               {s}
             </span>
@@ -156,11 +156,11 @@ function SavingsSection({ savings, mock }: { savings: Savings; mock: boolean }) 
       <SectionTitle
         right={
           mock ? (
-            <span className="border border-warn/30 bg-warn/10 px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-warn">
+            <span className="border border-warn/30 bg-warn/10 px-2.5 py-0.5 font-mono text-[0.625rem] uppercase tracking-wider text-warn">
               Mock numbers, not benchmark results
             </span>
           ) : (
-            <span className="border border-brand/25 bg-brand/10 px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-brand">
+            <span className="border border-brand/25 bg-brand/10 px-2.5 py-0.5 font-mono text-[0.625rem] uppercase tracking-wider text-brand">
               Measured
             </span>
           )
@@ -212,7 +212,7 @@ function SavingsSection({ savings, mock }: { savings: Savings; mock: boolean }) 
         <>
           <div className="mt-4 overflow-hidden border border-line bg-surface">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-line font-mono text-[10px] uppercase tracking-wide text-ink-3">
+              <thead className="border-b border-line font-mono text-[0.625rem] uppercase tracking-wide text-ink-3">
                 <tr>
                   <th className="px-4 py-2.5 font-normal">Task</th>
                   <th className="px-4 py-2.5 font-normal">Without Puff</th>
@@ -234,7 +234,7 @@ function SavingsSection({ savings, mock }: { savings: Savings; mock: boolean }) 
               </tbody>
             </table>
           </div>
-          <ul className="mt-3 flex list-disc flex-col gap-1 pl-5 font-mono text-[11px] text-ink-3">
+          <ul className="mt-3 flex list-disc flex-col gap-1 pl-5 font-mono text-[0.6875rem] text-ink-3">
             {m.notes.map((n) => (
               <li key={n}>{n}</li>
             ))}
@@ -298,7 +298,7 @@ function Meter({
           ] as const
         ).map(([name, value, color]) => (
           <div key={name}>
-            <div className="mb-1 flex justify-between font-mono text-[11px]">
+            <div className="mb-1 flex justify-between font-mono text-[0.6875rem]">
               <span className="text-ink-2">{name}</span>
               <span className="text-ink tabular-nums">{format(value)}</span>
             </div>

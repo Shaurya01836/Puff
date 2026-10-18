@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BackendInfo, GraphData, ProjectSummary, Task } from '@puff/shared';
 import { MOCK_PROJECT_ID } from '@puff/shared/mocks';
-import type { MascotState } from '@/components/Mascot';
 import { Sidebar, type Screen } from '@/components/Sidebar';
 import { TopBar } from '@/components/TopBar';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -9,6 +8,7 @@ import { Notice } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { puff } from '@/lib/api';
 import { useChat, useLoad, useTasks } from '@/lib/hooks';
+import { usePreferences } from '@/lib/preferences';
 import { NewTaskDialog, type SymbolOption } from '@/components/NewTaskDialog';
 import { ChatPanel } from '@/components/ChatPanel';
 import { ImportProjectDialog, ProjectSettingsDialog } from '@/components/ProjectDialogs';
@@ -16,6 +16,7 @@ import { Agents } from '@/screens/Agents';
 import { Board, type BoardAction } from '@/screens/Board';
 import { Memory } from '@/screens/Memory';
 import { Setup } from '@/screens/Setup';
+import { Settings } from '@/screens/Settings';
 import { Welcome } from '@/screens/Welcome';
 import pkg from '../../../package.json';
 
@@ -23,6 +24,7 @@ const TITLES: Record<Screen, { title: string; subtitle: string }> = {
   memory: { title: 'Memory', subtitle: 'What the team learned, and whether it still holds' },
   board: { title: 'Tasks', subtitle: 'What each agent is doing, and why the graph chose it' },
   agents: { title: 'Agents', subtitle: 'Strengths, records and who did what' },
+  settings: { title: 'Settings', subtitle: 'Themes, text size and preferences' },
 };
 
 /** The app's own version, shown in the status bar */
@@ -64,6 +66,9 @@ export function App() {
   const [projectTick, setProjectTick] = useState(0);
   /** Bumped when agents finish a session, so the agent pool and stats reload */
   const [agentsTick, setAgentsTick] = useState(0);
+
+  /** App-wide appearance: theme, accent, text size and motion */
+  const { prefs, update: updatePrefs, reset: resetPrefs } = usePreferences();
 
   const info = useLoad(() => puff.getBackendInfo(), [projectTick]);
   const projects = useLoad(() => puff.listProjects(), [projectTick]);
@@ -138,14 +143,6 @@ export function App() {
       clearTimeout(graphTimer.current);
     };
   }, [loadGraph]);
-
-  const mascot: MascotState = useMemo(() => {
-    const active = tasks.filter((t) => !t.archived);
-    if (active.some((t) => t.status === 'failed')) return 'worried';
-    if (running || active.some((t) => t.status === 'running')) return 'working';
-    if (active.length > 0 && active.every((t) => t.status === 'done')) return 'happy';
-    return 'idle';
-  }, [tasks, running]);
 
   const toggleRun = async () => {
     try {
@@ -301,7 +298,6 @@ export function App() {
         <Sidebar
           screen={screen}
           onScreen={setScreen}
-          mascot={mascot}
           agents={agents}
           info={info}
           projects={projects}
@@ -313,59 +309,70 @@ export function App() {
           counts={{ board: tasks.filter((t) => !t.archived && t.status !== 'done').length }}
         />
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <TopBar
-            {...TITLES[screen]}
-            running={running}
-            onToggleRun={toggleRun}
-            onPause={pauseTeam}
-            pausing={pausing}
-            onGoal={createGoal}
-            onNewTask={() => setNewTaskOpen(true)}
-            chatOpen={chatOpen}
-            onToggleChat={() => setChatOpen((open) => !open)}
-            badge={badgeFor(info)}
-            runBlockedReason={
-              info?.noProject ? 'Add a project first.' : live ? info.runBlocked : undefined
-            }
-          />
+          {!info?.noProject && (
+            <TopBar
+              {...TITLES[screen]}
+              running={running}
+              onToggleRun={toggleRun}
+              onPause={pauseTeam}
+              pausing={pausing}
+              onGoal={createGoal}
+              onNewTask={() => setNewTaskOpen(true)}
+              chatOpen={chatOpen}
+              onToggleChat={() => setChatOpen((open) => !open)}
+              badge={badgeFor(info)}
+              runBlockedReason={live ? info.runBlocked : undefined}
+            />
+          )}
           <div className="min-h-0 flex-1 overflow-auto">
             <ErrorBoundary resetKey={screen} label="This screen">
-              {info?.noProject && (
-                <Welcome
-                  onAdd={() => setImportOpen(true)}
-                  agents={setup?.agents}
-                  onRefresh={() => setSetupTick((t) => t + 1)}
-                />
-              )}
-              {!info?.noProject && screen === 'memory' && (
-                <Memory
-                  projectId={projectId}
-                  graph={graph}
-                  feedIsSample={!live || info.seeded === true}
-                />
-              )}
-              {!info?.noProject && screen === 'board' && (
-                <Board
-                  tasks={tasks}
-                  selectedId={selectedTask}
-                  onSelect={(id) => {
-                    setSelectedTask(id);
-                    if (id !== terminalFor) setTerminalFor(undefined);
-                  }}
-                  terminalFor={terminalFor}
-                  symbols={symbols}
-                  onAction={boardAction}
-                  onHint={(text) => setNotice({ tone: 'warn', text })}
-                />
-              )}
-              {!info?.noProject && screen === 'agents' && (
-                <Agents
-                  agents={agents}
-                  savings={savings}
-                  mock={savingsMocked}
-                  timeline={timeline}
-                  onOpenTask={openTask}
-                />
+              {info?.noProject ? (
+                // Without a project only two things make sense: add one, or change the app's settings.
+                screen === 'settings' ? (
+                  <Settings prefs={prefs} onChange={updatePrefs} onReset={resetPrefs} />
+                ) : (
+                  <Welcome
+                    onAdd={() => setImportOpen(true)}
+                    agents={setup?.agents}
+                    onRefresh={() => setSetupTick((t) => t + 1)}
+                  />
+                )
+              ) : (
+                <>
+                  {screen === 'memory' && (
+                    <Memory
+                      projectId={projectId}
+                      graph={graph}
+                      feedIsSample={!live || info.seeded === true}
+                    />
+                  )}
+                  {screen === 'board' && (
+                    <Board
+                      tasks={tasks}
+                      selectedId={selectedTask}
+                      onSelect={(id) => {
+                        setSelectedTask(id);
+                        if (id !== terminalFor) setTerminalFor(undefined);
+                      }}
+                      terminalFor={terminalFor}
+                      symbols={symbols}
+                      onAction={boardAction}
+                      onHint={(text) => setNotice({ tone: 'warn', text })}
+                    />
+                  )}
+                  {screen === 'agents' && (
+                    <Agents
+                      agents={agents}
+                      savings={savings}
+                      mock={savingsMocked}
+                      timeline={timeline}
+                      onOpenTask={openTask}
+                    />
+                  )}
+                  {screen === 'settings' && (
+                    <Settings prefs={prefs} onChange={updatePrefs} onReset={resetPrefs} />
+                  )}
+                </>
               )}
             </ErrorBoundary>
           </div>
@@ -387,7 +394,7 @@ export function App() {
       </div>
 
       {/* Status bar: what the app is connected to and the last thing that really happened */}
-      <footer className="flex h-7 shrink-0 items-center justify-between gap-4 border-t border-line bg-surface-2 px-4 text-[11px] text-ink-3 select-none">
+      <footer className="flex h-7 shrink-0 items-center justify-between gap-4 border-t border-line bg-surface-2 px-4 text-[0.6875rem] text-ink-3 select-none">
         <button
           type="button"
           onClick={() => setSetupOpen(true)}
@@ -405,7 +412,7 @@ export function App() {
           {live
             ? `FalkorDB · ${info?.graphName ?? info?.projectName}`
             : 'Not connected · sample data'}
-          <span className="text-[10px] text-ink-3 underline ml-1">Configure</span>
+          <span className="text-[0.625rem] text-ink-3 underline ml-1">Configure</span>
         </button>
         <span className="hidden min-w-0 flex-1 items-center sm:flex">
           <span className="truncate text-ink">{statusText}</span>

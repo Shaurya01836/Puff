@@ -54,26 +54,10 @@ export function TopBar({
         <h1 className="truncate font-display text-base font-bold tracking-tight text-ink">
           {title}
         </h1>
-        <p className="hidden truncate text-[11px] text-ink-2 xl:block">{subtitle}</p>
+        <p className="hidden truncate text-[0.6875rem] text-ink-2 xl:block">{subtitle}</p>
       </div>
 
-      <form
-        onSubmit={submit}
-        className="group mx-auto flex h-9 min-w-40 flex-1 items-center gap-2 border border-line bg-surface px-3 transition-colors focus-within:border-brand/50 xl:max-w-lg"
-      >
-        <input
-          value={goal}
-          onChange={(e) => setGoal(e.target.value)}
-          placeholder="Give the team a goal, e.g. “Add rate limiting to login and update docs”"
-          className="min-w-0 flex-1 bg-transparent font-sans text-xs text-ink outline-none placeholder:text-ink-3"
-          aria-label="New goal"
-        />
-        <Kbd>
-          <CornerDownLeft className="inline size-3" />
-        </Kbd>
-      </form>
-
-      <div className="flex shrink-0 items-center gap-2.5">
+      <div className="ml-auto flex shrink-0 items-center gap-2.5">
         {badge && (
           <span className="hidden xl:inline-flex">
             <MockBadge label={badge} />
