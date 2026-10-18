@@ -28,7 +28,7 @@ Windows 10/11 · about 115 MB · [all releases](https://github.com/Shaurya01836/
 
 **Puff is a team of real coding agents (Claude Code, Codex and OpenCode) that share one memory in FalkorDB.** A planner agent splits a goal into tasks; Puff routes each task to an agent, runs it in its own git worktree, checks it with the project's own tests, merges it, and records what went wrong. The next agent that touches the same code, from any vendor, starts with the lesson instead of repeating the mistake. **Track: Track 02, Agent Memory and Coordination.**
 
-**Demo video:** _the link goes here before the deadline_ · **Download:** [Puff-Setup.exe](https://github.com/Shaurya01836/Puff/releases/latest/download/Puff-Setup.exe) · **From source:** [Quick start](#quick-start)
+**Demo video:** [watch on YouTube](https://www.youtube.com/watch?v=H9KgO5SBVAE) (3 min) · **Blog:** [Your coding agents keep making the same mistake. We gave them a graph.](https://gauravjain0377.medium.com/your-coding-agents-keep-making-the-same-mistake-we-gave-them-a-graph-0f6b35e638e6) · **Website:** [puffcode.vercel.app](https://puffcode.vercel.app/) · **Download:** [Puff-Setup.exe](https://github.com/Shaurya01836/Puff/releases/latest/download/Puff-Setup.exe) · **From source:** [Quick start](#quick-start)
 
 ### What Rule 10 asks for, and where it is
 
@@ -37,8 +37,8 @@ Windows 10/11 · about 115 MB · [all releases](https://github.com/Shaurya01836/
 | Public source repository | This repository |
 | README with setup instructions and the graph data model | Setup: [Install](#install-the-windows-app) and [Quick start](#quick-start). Model: [The graph data model](#the-graph-data-model) |
 | The Cypher queries and graph algorithms the product depends on | [The Cypher Puff depends on](#the-cypher-puff-depends-on): the key queries inline, and a table giving the source file and the test for each. All of them, with the reasoning, are in [docs/GRAPH_SCHEMA.md](docs/GRAPH_SCHEMA.md) (Q1 to Q32) |
-| Demo video | Linked above |
-| Live deployment, or complete local setup | Puff is a desktop app that drives agent CLIs on your own repository, so it is not a hosted service; its website is live at [puff-puce-one.vercel.app](https://puff-puce-one.vercel.app/). Setup is complete two ways: the Windows installer (memory in Docker on your machine, or in your own FalkorDB Cloud), or `npm install` and `npm run db:up` from a checkout (both below) |
+| Demo video | [On YouTube](https://www.youtube.com/watch?v=H9KgO5SBVAE) (3 min) |
+| Live deployment, or complete local setup | Puff is a desktop app that drives agent CLIs on your own repository, so it is not a hosted service; its website is live at [puffcode.vercel.app](https://puffcode.vercel.app/). Setup is complete two ways: the Windows installer (memory in Docker on your machine, or in your own FalkorDB Cloud), or `npm install` and `npm run db:up` from a checkout (both below) |
 | The track | Track 02: Agent Memory and Coordination |
 
 ### Track 02: what it asks for, and where Puff does it

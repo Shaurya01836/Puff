@@ -4,7 +4,7 @@
 
 Puff is a Windows desktop app plus a TypeScript monorepo. Give it a goal and a planner agent splits it into tasks; Puff routes each task to the agent strongest at it (Claude Code, Codex or OpenCode), compiles a small ContextPack and stores the reason behind every item in it, runs independent tasks in parallel in separate git worktrees, re-runs the project's own check after every merge, and writes what happened back into the graph. A task that fails is retried with the lesson, then escalated.
 
-- Website: https://puff-puce-one.vercel.app
+- Website: https://puffcode.vercel.app
 - Source: https://github.com/Shaurya01836/Puff
 - Graph: FalkorDB (Redis-based graph database), one graph per project, queried with Cypher
 - Stack: TypeScript, Node 22, Electron + React + Tailwind, Docker Compose, MCP
