@@ -255,7 +255,7 @@ export function Board({
               <Archive className="size-3 text-ink-2" />
               <span>Clear finished</span>
               {clearableCount > 0 && (
-                <span className="rounded bg-surface-3 px-1 py-0.2 font-mono text-[10px] text-ink-2 tabular-nums">
+                <span className="rounded bg-surface-3 px-1 py-0.2 font-mono text-[0.625rem] text-ink-2 tabular-nums">
                   {clearableCount}
                 </span>
               )}
@@ -323,7 +323,7 @@ export function Board({
                 <span className="font-medium text-ink">
                   {showArchived ? 'Archived tasks' : 'Tasks'}
                 </span>
-                <span className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[10px] text-ink-2 tabular-nums">
+                <span className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[0.625rem] text-ink-2 tabular-nums">
                   {ordered.length}
                 </span>
               </div>
@@ -333,7 +333,7 @@ export function Board({
                     type="button"
                     onClick={handleClearFinished}
                     title="Archive all done, failed, and stopped tasks"
-                    className="inline-flex items-center gap-1 rounded border border-line bg-surface px-2 py-0.5 font-mono text-[11px] text-ink transition-colors hover:border-line-strong hover:bg-surface-2"
+                    className="inline-flex items-center gap-1 rounded border border-line bg-surface px-2 py-0.5 font-mono text-[0.6875rem] text-ink transition-colors hover:border-line-strong hover:bg-surface-2"
                   >
                     <Archive className="size-3 text-ink-2" />
                     Clear finished
@@ -343,7 +343,7 @@ export function Board({
                   <button
                     type="button"
                     onClick={() => setShowArchived(false)}
-                    className="inline-flex items-center gap-1 rounded border border-line bg-surface px-2 py-0.5 font-mono text-[11px] text-ink transition-colors hover:border-line-strong hover:bg-surface-2"
+                    className="inline-flex items-center gap-1 rounded border border-line bg-surface px-2 py-0.5 font-mono text-[0.6875rem] text-ink transition-colors hover:border-line-strong hover:bg-surface-2"
                   >
                     Exit archive
                   </button>
@@ -443,7 +443,7 @@ export function Board({
               >
                 <header className="flex items-center gap-2 border-b border-line px-3.5 py-2.5">
                   <h3 className="text-xs font-semibold text-ink">{col.title}</h3>
-                  <span className="ml-auto rounded border border-line bg-surface-2 px-1.5 font-mono text-[10px] text-ink-2 tabular-nums">
+                  <span className="ml-auto rounded border border-line bg-surface-2 px-1.5 font-mono text-[0.625rem] text-ink-2 tabular-nums">
                     {items.length}
                   </span>
                 </header>
@@ -519,7 +519,7 @@ function WhyLine({ task, wrap }: { task: Task; wrap?: boolean }) {
     <p
       title={why.text + (task.why?.graphOff ? ' (graph off)' : '')}
       className={cn(
-        'mt-1 text-[11px] leading-snug',
+        'mt-1 text-[0.6875rem] leading-snug',
         why.tone === 'wait' ? 'text-warn' : why.tone === 'risk' ? 'text-bad' : 'text-memory',
       )}
     >
@@ -569,7 +569,7 @@ function TaskRow({
           ) : (
             <span
               title="No agent yet"
-              className="grid size-[22px] place-items-center rounded-sm border border-line bg-surface-3 font-mono text-[11px] text-ink-3"
+              className="grid size-[22px] place-items-center rounded-sm border border-line bg-surface-3 font-mono text-[0.6875rem] text-ink-3"
             >
               —
             </span>
@@ -583,7 +583,7 @@ function TaskRow({
             <span className="flex shrink-0 items-center gap-1.5">
               <StatusPill status={task.status} byYou={takenOver(task)} />
               {task.archived && (
-                <span className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[10px] text-ink-3">
+                <span className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[0.625rem] text-ink-3">
                   archived
                 </span>
               )}
@@ -603,7 +603,7 @@ function TaskRow({
                       onAction({ kind: 'restore', id: task.id });
                     }
                   }}
-                  className="inline-flex items-center gap-1 rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[10px] text-ink transition-colors hover:border-brand/50 hover:bg-surface-3 hover:text-brand"
+                  className="inline-flex items-center gap-1 rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[0.625rem] text-ink transition-colors hover:border-brand/50 hover:bg-surface-3 hover:text-brand"
                 >
                   <ArchiveRestore className="size-3" />
                   Restore
@@ -612,7 +612,7 @@ function TaskRow({
             </span>
           </span>
           {task.targets.length > 0 && (
-            <span className="mt-0.5 block truncate font-mono text-[11px] text-ink-3">
+            <span className="mt-0.5 block truncate font-mono text-[0.6875rem] text-ink-3">
               {task.targets.slice(0, 2).map(fnName).join(', ')}
               {task.targets.length > 2 ? ` +${task.targets.length - 2}` : ''}
             </span>
@@ -620,7 +620,7 @@ function TaskRow({
           <WhyLine task={task} />
           {working && (since || task.stalledAt) && (
             <span
-              className={cn('mt-1 block text-[11px]', task.stalledAt ? 'text-warn' : 'text-ink-2')}
+              className={cn('mt-1 block text-[0.6875rem]', task.stalledAt ? 'text-warn' : 'text-ink-2')}
             >
               {task.stalledAt
                 ? `silent for ${duration(now - task.stalledAt)}: it may be stuck`
@@ -647,7 +647,7 @@ function Trail({ trail }: { trail: TrailEntry[] }) {
   const hidden = Math.max(0, trail.length - 4);
   return (
     <ol className="flex flex-wrap items-center gap-1" aria-label="Attempts so far">
-      {hidden > 0 && <li className="font-mono text-[10px] text-ink-3">+{hidden} earlier</li>}
+      {hidden > 0 && <li className="font-mono text-[0.625rem] text-ink-3">+{hidden} earlier</li>}
       {trail.slice(-4).map((e, i) => {
         const o = OUTCOME[e.outcome];
         return (
@@ -657,7 +657,7 @@ function Trail({ trail }: { trail: TrailEntry[] }) {
             className="inline-flex items-center gap-1.5 rounded border border-line bg-surface-3 py-0.5 pr-2 pl-1"
           >
             <AgentAvatar agent={e.agent} size={16} />
-            <span className="font-mono text-[10px]" style={{ color: o.color }}>
+            <span className="font-mono text-[0.625rem]" style={{ color: o.color }}>
               {o.word}
             </span>
           </li>
@@ -723,13 +723,13 @@ function TaskCard({
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
         <StatusPill status={task.status} byYou={takenOver(task)} />
         {working && since && (
-          <span className="font-mono text-[10px] text-ink-2">
+          <span className="font-mono text-[0.625rem] text-ink-2">
             working for {duration(now - since)}
           </span>
         )}
         {task.stalledAt && working && (
           <span
-            className="rounded bg-warn/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-warn"
+            className="rounded bg-warn/10 px-1.5 py-0.5 font-mono text-[0.625rem] font-medium text-warn"
             title="The agent has printed nothing for a while. It may be stuck: stop it or switch agent."
           >
             stalled for {duration(now - task.stalledAt)}
@@ -738,30 +738,30 @@ function TaskCard({
         {task.risk !== undefined && task.risk >= RISKY && (
           <span
             title="One of the functions this task changes is among the most depended-on in this code (PageRank and betweenness over the call graph). It goes to an agent that declares reasoning, with more room for what the team learned."
-            className="rounded bg-bad/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-bad"
+            className="rounded bg-bad/10 px-1.5 py-0.5 font-mono text-[0.625rem] font-medium text-bad"
           >
             load-bearing · top {Math.max(1, Math.round((1 - task.risk) * 100))}%
           </span>
         )}
         {task.doneByHand && (
-          <span className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[10px] text-ink">
+          <span className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[0.625rem] text-ink">
             done by you
           </span>
         )}
         {task.archived && (
-          <span className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[10px] text-ink-3">
+          <span className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[0.625rem] text-ink-3">
             archived
           </span>
         )}
         {mine && task.status !== 'done' && (
-          <span className="rounded bg-brand/10 px-1.5 py-0.5 font-mono text-[10px] text-brand">
+          <span className="rounded bg-brand/10 px-1.5 py-0.5 font-mono text-[0.625rem] text-brand">
             you are working on it
           </span>
         )}
         {task.note && (
           <span
             title={`Your note: ${task.note}`}
-            className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[10px] text-ink"
+            className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[0.625rem] text-ink"
           >
             note
           </span>
@@ -776,7 +776,7 @@ function TaskCard({
 
       {tests && (
         <div className="mt-3">
-          <div className="flex items-center justify-between font-mono text-[10px]">
+          <div className="flex items-center justify-between font-mono text-[0.625rem]">
             <span className="text-ink-2">Tests</span>
             <span className={cn('tabular-nums', pass === 1 ? 'text-brand' : 'text-bad')}>
               {tests.passed}/{tests.total}
@@ -789,7 +789,7 @@ function TaskCard({
         </div>
       )}
 
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] text-ink-2">
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[0.625rem] text-ink-2">
         <span className="border border-line bg-surface px-1.5 py-0.5 text-ink">{task.type}</span>
         {task.worktree && <span>{task.id}</span>}
         {task.tokens && (
@@ -896,7 +896,7 @@ function CardButton({
       type="button"
       title={title}
       onClick={onClick}
-      className="inline-flex items-center gap-1 rounded border border-line bg-surface px-2 py-1 font-mono text-[11px] text-ink transition-colors hover:border-line-strong hover:bg-surface-3 hover:text-ink"
+      className="inline-flex items-center gap-1 rounded border border-line bg-surface px-2 py-1 font-mono text-[0.6875rem] text-ink transition-colors hover:border-line-strong hover:bg-surface-3 hover:text-ink"
     >
       <Icon className="size-3" />
       {label}

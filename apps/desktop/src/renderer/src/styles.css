@@ -10,22 +10,26 @@
  * Colour is reserved for meaning: brand = live or actionable, warn = needs a
  * person, bad = failure. Agent identity comes from the official marks in
  * AGENT_META and from labels, never from painting the surrounding UI.
+ *
+ * The values below are the "Graphite" theme — the default. Other themes, and the
+ * accent and text-size choices, are written onto :root as inline CSS variables by
+ * lib/preferences.ts, so every utility that uses var(--color-*) follows them.
  */
 @theme {
-  /* surfaces: one hue, whisper-quiet steps */
-  --color-abyss: #0a0a0c; /* app canvas */
-  --color-surface: #101013; /* panels, cards */
-  --color-surface-2: #15151a; /* rows, inputs, popovers */
-  --color-surface-3: #1c1c22; /* hover, selected */
+  /* surfaces: one hue, whisper-quiet steps. Softened off pure black for readability. */
+  --color-abyss: #191a1e; /* app canvas */
+  --color-surface: #1f2025; /* panels, cards */
+  --color-surface-2: #25262c; /* rows, inputs, popovers */
+  --color-surface-3: #2d2f37; /* hover, selected */
 
   /* borders as light washes so they read the same on every surface */
-  --color-line: rgb(255 255 255 / 0.07);
-  --color-line-strong: rgb(255 255 255 / 0.13);
+  --color-line: rgb(255 255 255 / 0.08);
+  --color-line-strong: rgb(255 255 255 / 0.14);
 
   /* ink: exactly three levels */
-  --color-ink: #f2f2f4;
-  --color-ink-2: #a4a4ad;
-  --color-ink-3: #7e7e87;
+  --color-ink: #f3f4f6;
+  --color-ink-2: #b0b2ba;
+  --color-ink-3: #888a95;
 
   /* the single accent */
   --color-brand: #34d399;
@@ -89,6 +93,19 @@ body,
   height: 100%;
 }
 
+/* Text size scales the whole interface: every rem-based size follows this. */
+html {
+  font-size: calc(16px * var(--ui-scale, 1));
+}
+
+/* "Reduce motion" (Settings › Motion) stops animations and transitions. */
+html[data-motion='reduced'] *,
+html[data-motion='reduced'] *::before,
+html[data-motion='reduced'] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
 body {
   margin: 0;
   background: var(--color-abyss);
@@ -108,19 +125,32 @@ body {
   background: color-mix(in oklab, var(--color-brand) 30%, transparent);
 }
 
+/*
+ * Thin, theme-aware scrollbar. Chromium (the Electron renderer) honours the
+ * -webkit- pseudo-elements, so the thumb is drawn as an inset pill over a
+ * transparent track: the 2px transparent border keeps the visible thumb thin
+ * while the full 8px stays grabbable. The colour mixes from --color-ink so it
+ * follows whichever theme is active.
+ */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
-::-webkit-scrollbar-track {
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgb(255 255 255 / 0.12);
-  border-radius: 4px;
+  background-color: color-mix(in oklab, var(--color-ink) 16%, transparent);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgb(255 255 255 / 0.2);
+  background-color: color-mix(in oklab, var(--color-ink) 30%, transparent);
+}
+::-webkit-scrollbar-thumb:active {
+  background-color: color-mix(in oklab, var(--color-ink) 42%, transparent);
 }
 
 /* A panel: flat surface, hairline edge, no glow. */

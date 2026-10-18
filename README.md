@@ -848,9 +848,9 @@ Ideas (not code) were drawn from [Orchestrator.inc](https://github.com/Orchestra
 | | |
 |---|---|
 | **Dhruv Pancholi** (team lead) | Graph model and queries, orchestrator, agent adapters, MCP server, desktop app (backend and screens), benchmarks, docs |
-| **Shaurya Upadhyay** | Website and repository, the desktop app's control-room redesign |
-| **Nitin Jain** | Desktop dashboard design, archive and clear finished tasks |
-| **Gaurav Jain** | FalkorDB Cloud setup option, the launch blog post |
+| **Shaurya Upadhyay** | Website (landing page, animated product experience, navigation and discoverability), the desktop UI's control-room redesign and its Settings screen |
+| **Nitin Jain** | Desktop dashboard UI in the landing-page style; archive, restore and clear finished tasks on the Tasks board |
+| **Gaurav Jain** | FalkorDB connection options (Docker, FalkorDB Cloud, own URL), the setup flow behind them, and the blog post |
 
 <div align="center">
 <br/>

@@ -299,7 +299,7 @@ export function MemoryGraph({
               <div className="font-display text-lg font-bold leading-none tabular-nums text-ink">
                 {s.value}
               </div>
-              <div className="mt-1 font-mono text-[10px] tracking-wide text-ink-3 uppercase">
+              <div className="mt-1 font-mono text-[0.625rem] tracking-wide text-ink-3 uppercase">
                 {s.label}
               </div>
             </div>
@@ -362,7 +362,7 @@ export function MemoryGraph({
           ].map(({ k, label }) => (
             <span
               key={k}
-              className="inline-flex items-center gap-1.5 font-mono text-[10px] text-ink-2"
+              className="inline-flex items-center gap-1.5 font-mono text-[0.625rem] text-ink-2"
             >
               <span
                 className={cn('size-2', k === 'Symbol' ? 'rounded-[1px]' : 'rounded-full')}
@@ -378,7 +378,7 @@ export function MemoryGraph({
           <div className="absolute right-4 bottom-4 w-80 animate-fade-in border border-line-strong bg-surface p-4 shadow-[0_16px_40px_-16px_rgb(0_0_0/0.8)] backdrop-blur">
             <div className="flex items-center justify-between">
               <span
-                className="px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider"
+                className="px-2 py-0.5 font-mono text-[0.625rem] uppercase tracking-wider"
                 style={{
                   color: nodeColor(selected),
                   background: `color-mix(in oklab, ${nodeColor(selected)} 14%, transparent)`,
@@ -393,7 +393,7 @@ export function MemoryGraph({
             <div className="mt-2 font-display text-sm font-semibold text-ink">{selected.label}</div>
             {memoryStateOf(selected) && (
               <div
-                className="mt-1.5 inline-block border border-warn/25 bg-warn/10 px-1.5 py-0.5 font-mono text-[10px] text-warn"
+                className="mt-1.5 inline-block border border-warn/25 bg-warn/10 px-1.5 py-0.5 font-mono text-[0.625rem] text-warn"
                 title={
                   memoryStateOf(selected) === 'outdated'
                     ? 'The code this is about changed after it was recorded. It is shown to agents labelled "possibly outdated".'
@@ -403,7 +403,7 @@ export function MemoryGraph({
                 {memoryStateOf(selected) === 'outdated' ? 'possibly outdated' : 'superseded'}
               </div>
             )}
-            <div className="mt-1 font-mono text-[11px] break-all text-ink-3">{selected.id}</div>
+            <div className="mt-1 font-mono text-[0.6875rem] break-all text-ink-3">{selected.id}</div>
             <div className="mt-3 flex items-center justify-between font-mono text-xs text-ink-2">
               <span>{neighbours.get(selected.id)?.size ?? 0} connections</span>
               <button
@@ -422,11 +422,11 @@ export function MemoryGraph({
         <SectionTitle
           right={
             feedIsSample ? (
-              <span className="border border-warn/25 bg-warn/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-warn">
+              <span className="border border-warn/25 bg-warn/10 px-2 py-0.5 font-mono text-[0.625rem] uppercase tracking-wider text-warn">
                 sample
               </span>
             ) : (
-              <span className="font-mono text-[10px] uppercase tracking-wider text-brand">
+              <span className="font-mono text-[0.625rem] uppercase tracking-wider text-brand">
                 live
               </span>
             )
@@ -441,7 +441,7 @@ export function MemoryGraph({
               className="flex animate-fade-in gap-3 border-b border-line/50 p-2.5 transition-colors hover:bg-surface-2 last:border-b-0"
             >
               <div className="min-w-0">
-                <div className="flex items-baseline gap-2 font-mono text-[11px]">
+                <div className="flex items-baseline gap-2 font-mono text-[0.6875rem]">
                   <span
                     className="font-semibold"
                     style={{ color: MEMORY_EVENT_META[e.type].color }}

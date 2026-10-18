@@ -29,7 +29,7 @@ export function AgentChecklist({
       {agents.map((a) => {
         const signedOut = a.installed && a.signedIn === 'signed-out';
         return (
-          <li key={a.id} className="text-[13px] leading-snug">
+          <li key={a.id} className="text-[0.8125rem] leading-snug">
             <div className="flex items-start gap-3">
               {a.installed && !signedOut ? (
                 <Check className="mt-0.5 size-4 shrink-0 text-good" />
@@ -111,7 +111,7 @@ function SignIn({ agent, onChanged }: { agent: AgentCliStatus; onChanged?: () =>
         </button>
       )}
       {state === 'waiting' && (
-        <div className="flex flex-col gap-2 rounded-xl border border-line bg-surface-2/60 p-3 text-[12px] leading-snug text-ink-2">
+        <div className="flex flex-col gap-2 rounded-xl border border-line bg-surface-2/60 p-3 text-[0.75rem] leading-snug text-ink-2">
           <p className="flex items-center gap-2">
             <LoaderCircle className="size-3.5 shrink-0 animate-spin text-info" />
             Your browser opened. Approve the sign-in there.
@@ -143,7 +143,7 @@ function SignIn({ agent, onChanged }: { agent: AgentCliStatus; onChanged?: () =>
           </form>
         </div>
       )}
-      {problem && <p className="mt-1.5 text-[12px] text-bad">{problem}</p>}
+      {problem && <p className="mt-1.5 text-[0.75rem] text-bad">{problem}</p>}
     </div>
   );
 }
@@ -176,9 +176,9 @@ function ModeCard({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-ink">{title}</span>
-          {badge && <span className="rounded-full bg-brand/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand">{badge}</span>}
+          {badge && <span className="rounded-full bg-brand/20 px-2 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wide text-brand">{badge}</span>}
         </div>
-        <p className="mt-0.5 text-[12px] leading-snug text-ink-3">{description}</p>
+        <p className="mt-0.5 text-[0.75rem] leading-snug text-ink-3">{description}</p>
       </div>
       <div className={cn('mt-1 flex size-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors', selected ? 'border-brand bg-brand' : 'border-line-strong')}>
         {selected && <Check className="size-3 text-white" strokeWidth={3} />}
@@ -278,19 +278,19 @@ export function Setup({
             <div className="flex items-center gap-2 text-sm font-medium">
               <Database className="size-4 text-brand-soft" />
               Database
-              <span className="ml-auto font-mono text-[11px] text-ink-3">{status?.databaseUrl}</span>
+              <span className="ml-auto font-mono text-[0.6875rem] text-ink-3">{status?.databaseUrl}</span>
             </div>
-            {status?.databaseError && <p className="mt-2 text-[12px] leading-snug whitespace-pre-wrap text-ink-3">{status.databaseError}</p>}
-            {docker === 'ready' && <p className="mt-2 text-[13px] leading-snug text-ink-2">Docker is running. Puff will start FalkorDB in a container named <code className="font-mono text-xs">puff-falkordb</code>. The first time downloads the image (a few minutes).</p>}
-            {docker === 'stopped' && <p className="mt-2 text-[13px] leading-snug text-warn">Docker is installed but not running. Start Docker Desktop, wait until it says it is running, then press Try again.</p>}
-            {docker === 'missing' && <p className="mt-2 text-[13px] leading-snug text-warn">Docker was not found. <a href="https://www.docker.com/products/docker-desktop/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline">Install Docker Desktop <ExternalLink className="size-3" /></a> and start it, or choose another option above.</p>}
+            {status?.databaseError && <p className="mt-2 text-[0.75rem] leading-snug whitespace-pre-wrap text-ink-3">{status.databaseError}</p>}
+            {docker === 'ready' && <p className="mt-2 text-[0.8125rem] leading-snug text-ink-2">Docker is running. Puff will start FalkorDB in a container named <code className="font-mono text-xs">puff-falkordb</code>. The first time downloads the image (a few minutes).</p>}
+            {docker === 'stopped' && <p className="mt-2 text-[0.8125rem] leading-snug text-warn">Docker is installed but not running. Start Docker Desktop, wait until it says it is running, then press Try again.</p>}
+            {docker === 'missing' && <p className="mt-2 text-[0.8125rem] leading-snug text-warn">Docker was not found. <a href="https://www.docker.com/products/docker-desktop/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline">Install Docker Desktop <ExternalLink className="size-3" /></a> and start it, or choose another option above.</p>}
           </div>
         )}
 
         {mode === 'own-cloud' && (
           <div className="mt-4 w-full rounded-xl border border-line bg-surface p-4 text-left">
             <label htmlFor="cloud-url" className="text-sm font-medium text-ink">FalkorDB connection URL</label>
-            <p className="mt-0.5 text-[12px] text-ink-3">Format: <code className="font-mono">rediss://&lt;user&gt;:&lt;password&gt;@host:port</code></p>
+            <p className="mt-0.5 text-[0.75rem] text-ink-3">Format: <code className="font-mono">rediss://&lt;user&gt;:&lt;password&gt;@host:port</code></p>
             <input
               id="cloud-url"
               type="text"
@@ -301,16 +301,16 @@ export function Setup({
               autoComplete="off"
               className="mt-2.5 w-full rounded-lg border border-line bg-abyss px-3 py-2 font-mono text-xs text-ink outline-none focus:border-brand/60"
             />
-            <p className="mt-2 text-[11px] text-ink-3">
+            <p className="mt-2 text-[0.6875rem] text-ink-3">
               Find this in your <a href="https://app.falkordb.cloud" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline">FalkorDB Cloud dashboard <ExternalLink className="size-3" /></a>
             </p>
           </div>
         )}
 
         {mode === 'demo-cloud' && (
-          <div className="mt-4 w-full rounded-xl border border-brand/20 bg-brand/5 p-4 text-left text-[13px] leading-snug text-ink-2">
+          <div className="mt-4 w-full rounded-xl border border-brand/20 bg-brand/5 p-4 text-left text-[0.8125rem] leading-snug text-ink-2">
             <p>You will connect to a shared hosted FalkorDB instance maintained by the Puff team. Ideal for exploring without any local setup.</p>
-            <p className="mt-2 text-[12px] text-ink-3">Note: the demo instance is shared and resets periodically. For persistent memory, use your own cloud or local Docker.</p>
+            <p className="mt-2 text-[0.75rem] text-ink-3">Note: the demo instance is shared and resets periodically. For persistent memory, use your own cloud or local Docker.</p>
           </div>
         )}
 
@@ -335,13 +335,13 @@ export function Setup({
           </button>
         </div>
 
-        {error && <p role="alert" className="mt-3 w-full text-left text-[13px] leading-snug whitespace-pre-wrap text-bad">{error}</p>}
+        {error && <p role="alert" className="mt-3 w-full text-left text-[0.8125rem] leading-snug whitespace-pre-wrap text-bad">{error}</p>}
 
         {status && (
           <div className="mt-4 w-full rounded-lg border border-line bg-surface p-5">
             <div className="mb-3 text-sm font-medium">Agent tools</div>
             <AgentChecklist agents={status.agents} onChanged={onRefresh} />
-            <p className="mt-3 text-left text-[12px] leading-snug text-ink-3">
+            <p className="mt-3 text-left text-[0.75rem] leading-snug text-ink-3">
               Puff drives these command-line agents. You need at least one, signed in. You can explore the graph without any.
             </p>
           </div>

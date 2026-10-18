@@ -182,12 +182,12 @@ export function TaskPanel({
     <section className="flex h-full min-h-0 flex-col bg-surface" aria-label="Task">
       <header className="border-b border-line px-6 pt-5">
         <div className="mb-1.5 flex items-center gap-2">
-          <span className="font-mono text-[11px] text-ink-3">{taskId}</span>
+          <span className="font-mono text-[0.6875rem] text-ink-3">{taskId}</span>
           {detail && (
             <div className="flex items-center gap-1.5">
               <StatusPill status={detail.task.status} byYou={mine} />
               {detail.task.archived && (
-                <span className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[10px] text-ink-3">
+                <span className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[0.625rem] text-ink-3">
                   archived
                 </span>
               )}
@@ -344,7 +344,7 @@ export function TaskPanel({
           </form>
         )}
         {!noting && detail?.task.note && (
-          <p className="mt-3 rounded-md border border-line bg-surface-2/60 p-3 text-[13px] leading-snug text-ink-2">
+          <p className="mt-3 rounded-md border border-line bg-surface-2/60 p-3 text-[0.8125rem] leading-snug text-ink-2">
             <b className="font-medium text-ink">Your note: </b>
             {detail.task.note}
           </p>
@@ -352,7 +352,7 @@ export function TaskPanel({
         {mine && working && (
           <p
             role="alert"
-            className="mt-3 rounded-md border border-warn/40 bg-warn/10 p-3 text-[13px] leading-snug text-ink-2"
+            className="mt-3 rounded-md border border-warn/40 bg-warn/10 p-3 text-[0.8125rem] leading-snug text-ink-2"
           >
             <b className="font-medium text-warn">
               An agent is also running this task in the background.
@@ -363,7 +363,7 @@ export function TaskPanel({
           </p>
         )}
         {mine && !working && status !== 'done' && (
-          <p className="mt-3 rounded-md border border-brand/30 bg-brand/10 p-3 text-[13px] leading-snug text-ink-2">
+          <p className="mt-3 rounded-md border border-brand/30 bg-brand/10 p-3 text-[0.8125rem] leading-snug text-ink-2">
             <b className="font-medium text-ink">You took this task over.</b> Puff will not run it.
             Work in its terminal under Live, then press{' '}
             <b className="font-medium">Verify and merge my changes</b>.
@@ -387,7 +387,7 @@ export function TaskPanel({
             >
               {label}
               {count !== undefined && (
-                <span className="rounded bg-surface-3 px-1.5 font-mono text-[10px] text-ink-3">
+                <span className="rounded bg-surface-3 px-1.5 font-mono text-[0.625rem] text-ink-3">
                   {count}
                 </span>
               )}
@@ -518,19 +518,19 @@ function ChangesTab({ diff, status }: { diff?: TaskDiffInfo; status: Task['statu
     <div className="flex flex-col gap-4">
       <div>
         <div className="text-sm font-medium">{diff.label}</div>
-        <div className="mt-0.5 font-mono text-[11px] text-ink-3">{diff.ref}</div>
+        <div className="mt-0.5 font-mono text-[0.6875rem] text-ink-3">{diff.ref}</div>
         <ul className="mt-3 flex flex-wrap gap-1.5">
           {diff.files.map((f) => (
             <li
               key={f}
-              className="rounded-sm border border-line bg-surface-2 px-2 py-0.5 font-mono text-[11px] text-ink-2"
+              className="rounded-sm border border-line bg-surface-2 px-2 py-0.5 font-mono text-[0.6875rem] text-ink-2"
             >
               {f}
             </li>
           ))}
         </ul>
       </div>
-      <pre className="overflow-x-auto rounded-md border border-line bg-abyss/60 p-3 font-mono text-[11px] leading-relaxed">
+      <pre className="overflow-x-auto rounded-md border border-line bg-abyss/60 p-3 font-mono text-[0.6875rem] leading-relaxed">
         {diff.diff.split('\n').map((line, i) => (
           <div
             key={i}
@@ -610,7 +610,7 @@ function ContextTab({ task, pack }: { task: Task; pack?: ContextPack }) {
                     className="absolute inset-y-0 left-0 w-[3px]"
                     style={{ background: color }}
                   />
-                  <div className="flex items-center gap-2 text-[11px]">
+                  <div className="flex items-center gap-2 text-[0.6875rem]">
                     <span className="font-semibold" style={{ color }}>
                       {item.kind}
                     </span>
@@ -637,7 +637,7 @@ function ContextTab({ task, pack }: { task: Task; pack?: ContextPack }) {
           <summary className="cursor-pointer text-xs font-medium text-ink-2 hover:text-ink">
             The full prompt sent to the agent
           </summary>
-          <pre className="mt-3 overflow-x-auto rounded-md border border-line bg-abyss p-4 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-ink-2">
+          <pre className="mt-3 overflow-x-auto rounded-md border border-line bg-abyss p-4 font-mono text-[0.6875rem] leading-relaxed whitespace-pre-wrap text-ink-2">
             {pack.prompt}
           </pre>
         </details>
@@ -666,7 +666,7 @@ function WhyTab({ why }: { why: WhyPath }) {
                 className="flex flex-wrap items-center gap-2 rounded-md border border-line bg-surface-2/60 p-2"
               >
                 <PathNode kind={from.kind} label={from.label} />
-                <span className="inline-flex items-center gap-1 font-mono text-[11px] text-memory">
+                <span className="inline-flex items-center gap-1 font-mono text-[0.6875rem] text-memory">
                   {e.type}
                   <ArrowRight className="size-3" />
                 </span>
@@ -688,17 +688,17 @@ function TrustBar({ trust, why }: { trust: number; why?: string[] }) {
       className="mt-2 flex items-center gap-2"
       title={why?.join('\n') || 'No evidence either way yet'}
     >
-      <span className="font-mono text-[10px] text-ink-3">trust</span>
+      <span className="font-mono text-[0.625rem] text-ink-3">trust</span>
       <span className="h-1 w-24 overflow-hidden rounded-full bg-surface-3">
         <span
           className="block h-full rounded-full"
           style={{ width: `${Math.round(trust * 100)}%`, background: tone }}
         />
       </span>
-      <span className="font-mono text-[10px] tabular-nums" style={{ color: tone }}>
+      <span className="font-mono text-[0.625rem] tabular-nums" style={{ color: tone }}>
         {trust.toFixed(2)}
       </span>
-      {why?.[0] && <span className="truncate text-[11px] text-ink-3">{why.join(' · ')}</span>}
+      {why?.[0] && <span className="truncate text-[0.6875rem] text-ink-3">{why.join(' · ')}</span>}
     </div>
   );
 }
@@ -739,13 +739,13 @@ function PreviewTab({ merge, plan }: { merge?: MergePreview; plan?: PlanPreview 
               {plan.lanes.map((lane, i) => (
                 <li key={i} className="rounded-md border border-line bg-surface-2/60 p-3">
                   <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-[10px] tracking-wider text-ink-3 uppercase">
+                    <span className="font-mono text-[0.625rem] tracking-wider text-ink-3 uppercase">
                       Lane {i + 1}
                     </span>
                     {lane.ties.map((t) => (
                       <span
                         key={t}
-                        className="rounded bg-memory/12 px-1.5 py-0.5 font-mono text-[10px] text-memory"
+                        className="rounded bg-memory/12 px-1.5 py-0.5 font-mono text-[0.625rem] text-memory"
                       >
                         {t}
                       </span>
@@ -765,7 +765,7 @@ function PreviewTab({ merge, plan }: { merge?: MergePreview; plan?: PlanPreview 
         <ol className="flex flex-col gap-3">
           {plan.waves.map((w, i) => (
             <li key={i} className="rounded-md border border-line bg-surface-2/60 p-3">
-              <div className="mb-2 font-mono text-[10px] tracking-wider text-ink-3 uppercase">
+              <div className="mb-2 font-mono text-[0.625rem] tracking-wider text-ink-3 uppercase">
                 Wave {i + 1}
               </div>
               {w.start.map((id) => (
@@ -805,7 +805,7 @@ function PreviewTab({ merge, plan }: { merge?: MergePreview; plan?: PlanPreview 
         <SectionTitle>{title}</SectionTitle>
         <ul className="flex flex-wrap gap-1.5">
           {items.map((i) => (
-            <li key={i} className={cn('rounded-sm px-2 py-0.5 font-mono text-[11px]', tone)}>
+            <li key={i} className={cn('rounded-sm px-2 py-0.5 font-mono text-[0.6875rem]', tone)}>
               {i}
             </li>
           ))}
@@ -816,7 +816,7 @@ function PreviewTab({ merge, plan }: { merge?: MergePreview; plan?: PlanPreview 
     <div className="flex flex-col gap-5">
       <div className="rounded-md border border-brand/25 bg-brand/8 p-4 text-sm leading-relaxed text-ink-2">
         {merge.summary}
-        <div className="mt-1 font-mono text-[10px] text-ink-3">
+        <div className="mt-1 font-mono text-[0.625rem] text-ink-3">
           Made on a copy of the graph in {merge.ms} ms, before merging
         </div>
       </div>
@@ -839,7 +839,7 @@ function PreviewTab({ merge, plan }: { merge?: MergePreview; plan?: PlanPreview 
           <ul className="flex flex-col gap-1">
             {merge.wouldGoStale.map((m) => (
               <li key={m.id} className="text-sm text-warn">
-                <span className="mr-1.5 text-[11px] text-ink-3">{m.kind}</span>
+                <span className="mr-1.5 text-[0.6875rem] text-ink-3">{m.kind}</span>
                 {m.text}
               </li>
             ))}
@@ -885,37 +885,37 @@ function TraceTab({ traces }: { traces: GraphTrace[] }) {
             className="flex w-full flex-col gap-1.5 p-3 text-left"
           >
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded bg-memory/15 px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-memory">
+              <span className="rounded bg-memory/15 px-1.5 py-0.5 font-mono text-[0.625rem] font-medium uppercase tracking-wider text-memory">
                 {t.kind}
               </span>
               <span className="text-xs font-medium text-ink">{TRACE_KIND[t.kind]}</span>
               {t.graphOff && (
-                <span className="rounded bg-warn/10 px-1.5 py-0.5 font-mono text-[10px] text-warn">
+                <span className="rounded bg-warn/10 px-1.5 py-0.5 font-mono text-[0.625rem] text-warn">
                   graph off
                 </span>
               )}
-              <span className="ml-auto font-mono text-[10px] tabular-nums text-ink-3">
+              <span className="ml-auto font-mono text-[0.625rem] tabular-nums text-ink-3">
                 {t.queries} {t.queries === 1 ? 'query' : 'queries'} · {t.ms.toFixed(1)} ms ·{' '}
                 {t.rows} rows
               </span>
             </div>
-            <div className="text-[13px] leading-snug text-ink-2">{t.reason}</div>
+            <div className="text-[0.8125rem] leading-snug text-ink-2">{t.reason}</div>
           </button>
           {open === t.id && (
             <ol className="flex flex-col gap-2 border-t border-line p-3">
               {t.steps.map((s, i) => (
                 <li key={i}>
-                  <div className="mb-1 font-mono text-[10px] tabular-nums text-ink-3">
+                  <div className="mb-1 font-mono text-[0.625rem] tabular-nums text-ink-3">
                     {s.ms.toFixed(2)} ms · {s.rows} rows
                     {s.params.length ? ` · $${s.params.join(', $')}` : ''}
                   </div>
-                  <pre className="overflow-x-auto rounded-sm border border-line bg-surface p-2.5 font-mono text-[11px] leading-relaxed whitespace-pre text-ink-2">
+                  <pre className="overflow-x-auto rounded-sm border border-line bg-surface p-2.5 font-mono text-[0.6875rem] leading-relaxed whitespace-pre text-ink-2">
                     {s.cypher}
                   </pre>
                 </li>
               ))}
               {t.queries > t.steps.length && (
-                <li className="font-mono text-[10px] text-ink-3">
+                <li className="font-mono text-[0.625rem] text-ink-3">
                   …and {t.queries - t.steps.length} more
                 </li>
               )}
@@ -933,7 +933,7 @@ function PathNode({ kind, label }: { kind: string; label: string }) {
     agent && AGENT_META[agent] ? AGENT_META[agent].color : (NODE_COLORS[kind] ?? '#77777f');
   return (
     <span className="inline-flex items-center gap-2 rounded-sm border border-line bg-surface px-2.5 py-1 text-sm">
-      <span className="text-[11px]" style={{ color }}>
+      <span className="text-[0.6875rem]" style={{ color }}>
         {kind}
       </span>
       <span className="text-ink">{label}</span>
@@ -966,7 +966,7 @@ function SessionsTab({ sessions }: { sessions: SessionInfo[] }) {
                 </span>
               </div>
               {s.output && <p className="mt-2.5 text-sm text-ink-2">{s.output}</p>}
-              <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-3">
+              <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-[0.6875rem] text-ink-3">
                 {s.tokensIn !== undefined && (
                   <span>{formatTokens(s.tokensIn + (s.tokensOut ?? 0))} tokens</span>
                 )}
@@ -1106,7 +1106,7 @@ function TerminalTab({
           <FolderOpen className="size-4" /> Open folder
         </button>
         <span
-          className="min-w-0 truncate font-mono text-[11px] text-ink-3"
+          className="min-w-0 truncate font-mono text-[0.6875rem] text-ink-3"
           title={current.info.cwd}
         >
           {current.info.cwd} · started from {current.info.startedFrom}
@@ -1116,7 +1116,7 @@ function TerminalTab({
         <p
           role="status"
           className={cn(
-            'rounded-md border p-3 text-[13px] leading-snug',
+            'rounded-md border p-3 text-[0.8125rem] leading-snug',
             result.status === 'done'
               ? 'border-good/30 bg-good/10 text-good'
               : 'border-bad/30 bg-bad/10 text-bad',
