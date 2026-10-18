@@ -270,7 +270,7 @@ export function Setup({
         <div className="mt-6 flex w-full flex-col gap-2.5">
           <ModeCard id="docker" selected={mode === 'docker'} icon={Container} title="Run locally with Docker" description="Puff starts FalkorDB in a Docker container on your machine. Requires Docker Desktop." onSelect={setMode} />
           <ModeCard id="own-cloud" selected={mode === 'own-cloud'} icon={Cloud} title="Use your own FalkorDB Cloud" description="Connect to a FalkorDB Cloud instance you control. Paste your connection URL below." onSelect={setMode} />
-          <ModeCard id="demo-cloud" selected={mode === 'demo-cloud'} icon={Database} title="Use our hosted demo" description="Try Puff instantly with a shared cloud instance. No Docker needed." badge="Quickest" onSelect={setMode} />
+          {/* The hosted demo card returns once a real shared instance exists (PUFF_DEMO_CLOUD_URL) */}
         </div>
 
         {mode === 'docker' && (

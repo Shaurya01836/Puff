@@ -229,8 +229,10 @@ export async function connectToDatabase(url: string): Promise<void> {
   try {
     db = await connect(url);
   } catch (err) {
+    // a cloud URL carries the password: keep it out of the message the app shows
+    const shown = url.replace(/\/\/([^:@/]*):[^@/]*@/, '//$1:***@');
     throw new Error(
-      `Could not connect to FalkorDB at ${url}.\n${(err as Error).message}`,
+      `Could not connect to FalkorDB at ${shown}.\n${(err as Error).message.split(url).join(shown)}`,
     );
   }
   await db.close().catch(() => {});

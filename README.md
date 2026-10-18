@@ -89,9 +89,14 @@ What this does and does not show:
 ## Install the Windows app
 
 1. **Download** [`Puff-Setup.exe`](https://github.com/Shaurya01836/Puff/releases/latest/download/Puff-Setup.exe) and run it. Windows may warn about an unknown publisher (the installer is not code-signed yet): choose **More info**, then **Run anyway**.
-2. **Have Docker Desktop running.** On first start Puff shows a setup screen; press **Start the database** and it starts FalkorDB for you.
+2. **Choose where the memory lives.** On first start Puff shows a setup screen: **Run locally with Docker** (have Docker Desktop running; Puff starts FalkorDB for you) or **Use your own FalkorDB Cloud** (paste your instance URL; no Docker needed).
 3. **Have at least one agent CLI installed:** Claude Code, Codex or OpenCode. The same screen lists which are installed and signed in, and has a **Sign in** button for Claude Code and Codex. One is enough: Ask Puff, the chat that plans and runs the team, works with whichever you have (pick it in the panel header).
 4. **Press Add a project…**, choose a git repository (TypeScript or JavaScript), give the team a goal, and press **Run team**.
+
+**What is new in 0.1.7**
+
+- **No Docker needed if you have FalkorDB Cloud:** the setup screen connects to your own instance by URL and remembers it.
+- **Archive and Clear finished** on the Tasks screen: finished, failed or stopped tasks leave the board but stay in memory, and **Restore** brings them back.
 
 **What is new in 0.1.6**
 

@@ -85,7 +85,7 @@ export function DownloadSection() {
               <Laptop className="h-3.5 w-3.5" /> Windows 10 / 11
             </span>
             <span className="flex items-center gap-1.5">
-              <Monitor className="h-3.5 w-3.5" /> Docker Desktop (runs FalkorDB)
+              <Monitor className="h-3.5 w-3.5" /> Docker Desktop or FalkorDB Cloud
             </span>
             <span>Git</span>
             <span>Any one of Claude Code, Codex or OpenCode</span>

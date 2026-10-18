@@ -6,7 +6,7 @@ Puff installs like any desktop app. You do not need the source code, Node or npm
 
 | Need                                                                   | Why                                                                                               | Without it                                                                  |
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| **Docker Desktop**, running                                            | Puff's memory lives in FalkorDB, a graph database. Puff starts it in Docker for you (one button). | You can run FalkorDB yourself on port 6379 instead.                         |
+| **Docker Desktop**, running                                            | Puff's memory lives in FalkorDB, a graph database. Puff starts it in Docker for you (one button). | Use your own FalkorDB Cloud instance instead: choose it on the setup screen and paste its URL. |
 | **At least one agent CLI**, signed in: `claude`, `codex` or `opencode` | These are the agents Puff drives.                                                                 | You can still add a project and explore its graph.                          |
 | **git**                                                                | Agents work in separate git worktrees.                                                            | A folder that is not a git repository can be set up by Puff when you agree. |
 
@@ -49,7 +49,7 @@ Uninstalling removes the app. It leaves `~/.puff` and the database volume alone,
 
 ## Build the installer yourself
 
-Releases are built by GitHub Actions: pushing a tag such as `v0.1.6` runs `.github/workflows/release.yml`, which builds the installer on a Windows machine and attaches `Puff-Setup.exe` to the release. To build it on your own computer:
+Releases are built by GitHub Actions: pushing a tag such as `v0.1.7` runs `.github/workflows/release.yml`, which builds the installer on a Windows machine and attaches `Puff-Setup.exe` to the release. To build it on your own computer:
 
 ```bash
 npm install

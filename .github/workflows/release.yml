@@ -1,7 +1,7 @@
 name: Release installer
 
 # Builds the Windows installer on GitHub's own machines and attaches it to a release.
-#   - push a version tag (git tag v0.1.6 && git push origin v0.1.6) to publish a release
+#   - push a version tag (git tag v0.1.7 && git push origin v0.1.7) to publish a release
 #   - or run it by hand from the Actions tab to just build it (the installer is kept as a build artifact)
 # The file is always called Puff-Setup.exe, so one link always points at the newest release:
 #   https://github.com/Shaurya01836/Puff/releases/latest/download/Puff-Setup.exe
@@ -58,11 +58,13 @@ jobs:
           cat > notes.md <<'EOF'
           Windows installer for Puff. Run `Puff-Setup.exe`.
 
-          - Windows 10 or 11, 64-bit. Puff needs Docker Desktop (it starts the memory database for you) and at least one agent CLI: Claude Code, Codex or OpenCode.
+          - Windows 10 or 11, 64-bit. Puff needs Docker Desktop (it starts the memory database for you) or your own FalkorDB Cloud instance, and at least one agent CLI: Claude Code, Codex or OpenCode.
           - The installer is not code-signed yet, so Windows SmartScreen may say "unknown publisher". Choose **More info**, then **Run anyway**.
           - Already installed? Run it again: it updates your install in place and keeps your projects and memory.
 
-          What is new: a live Tasks view with the graph's reason for each task and one-click "Open in <agent>"; a Memory screen with every lesson's state and trust; plan lanes, call-path waiting reasons and a vector index for similar failures (a 30 MB model downloads once); and fixes found on real projects (a failing check no longer fails every task, landing your own work after a failed try works, the type-check works under Windows PowerShell).
+          New in 0.1.7: connect your own FalkorDB Cloud instead of Docker, and Archive / Clear finished on the Tasks screen (tasks leave the board, their memory stays).
+
+          Also: a live Tasks view with the graph's reason for each task and one-click "Open in <agent>"; a Memory screen with every lesson's state and trust; plan lanes, call-path waiting reasons and a vector index for similar failures (a 30 MB model downloads once); and fixes found on real projects (a failing check no longer fails every task, landing your own work after a failed try works, the type-check works under Windows PowerShell).
 
           See docs/INSTALL.md for the first-run steps.
           EOF
